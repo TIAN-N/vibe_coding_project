@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Claude Code 本地设置
+.claude/
+
+# 编辑器/系统
+.vscode/
+.idea/
+desktop.ini
+Thumbs.db
+.DS_Store
+
+# 说明：合成数据与算法产物默认纳入版本管理，便于复盘对照。
+# 如不希望提交大体量产物，可在此忽略各用例的产出目录：
+# data/*/output/

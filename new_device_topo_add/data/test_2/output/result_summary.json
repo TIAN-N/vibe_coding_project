@@ -1,0 +1,33 @@
+{
+  "case": "test_2",
+  "asg": 5,
+  "csg": 101,
+  "isolated": 40,
+  "existing_rings": 5,
+  "clusters": 22,
+  "method_count": {
+    "new_loop": 8,
+    "fiber_extension": 15,
+    "remediation": 5
+  },
+  "new_links": 68,
+  "spliced_removed": 0,
+  "total_cost_km": 155.648,
+  "ring_size_max": 20,
+  "ring_over_10": 5,
+  "preexisting_single_homed_before": 7,
+  "remediation_links": 5,
+  "valid_new_dualhome": true,
+  "valid_new_degree": true,
+  "valid_all_dualhome": true,
+  "all_pass": true,
+  "still_single_homed": [],
+  "params": {
+    "MAX_FIBER_CHAIN": 3,
+    "MAX_NEW_PER_DEVICE": 3,
+    "D_CLUSTER": 1200.0,
+    "D_FARNESS": 3000.0,
+    "RING_SOFT_MAX": 10,
+    "LAMBDA_RING": 800.0
+  }
+}
