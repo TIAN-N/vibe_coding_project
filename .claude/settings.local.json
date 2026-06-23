@@ -7,7 +7,11 @@
       "PowerShell(git config *)",
       "PowerShell($c = Test-NetConnection -ComputerName 127.0.0.1 -Port 1080 -WarningAction SilentlyContinue; \"Port 1080 listening: $\\($c.TcpTestSucceeded\\)\"; Write-Output \"=== direct connectivity test to github \\(no proxy\\) ===\"; try { $r = Invoke-WebRequest -Uri \"https://github.com\" -UseBasicParsing -TimeoutSec 15 -Proxy $null; \"github.com reachable directly: HTTP $\\($r.StatusCode\\)\" } catch { \"Direct github.com: $\\($_.Exception.Message\\)\" })",
       "PowerShell(git checkout *)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "PowerShell(git check-ignore *)",
+      "PowerShell(Move-Item *)",
+      "PowerShell($bk = \"C:\\\\Users\\\\TianyiFan\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--vibe-coding-project\\\\b068e50a-1521-4fe0-8721-c716290187d7\\\\scratchpad\\\\new_device_topo_add_inner_git_backup\"; Write-Output \"=== 备份目录大小/文件数 ===\"; \\(Get-ChildItem $bk -Recurse -Force | Measure-Object -Property Length -Sum\\) | Select-Object Count, Sum; Write-Output \"=== 原 .git 剩余内容 ===\"; \\(Get-ChildItem \"D:\\\\vibe_coding_project\\\\new_device_topo_add\\\\.git\" -Recurse -Force | Measure-Object\\).Count)",
+      "PowerShell(git add *)"
     ]
   }
 }
