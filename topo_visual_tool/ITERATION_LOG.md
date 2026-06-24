@@ -530,4 +530,31 @@
   - JS / CSS 不再包含 `drag-handle` 和节点规则拖拽函数。
   - JS 存在 `data-move-node-rule` 上移/下移按钮。
   - CSS 存在 `.rule-actions` 操作区。
-  - 节点规则卡片使用 `grid-template-columns: minmax(0, 1fr) 110px`，防止输入框溢出。
+- 节点规则卡片使用 `grid-template-columns: minmax(0, 1fr) 110px`，防止输入框溢出。
+
+## 2026-06-24 迭代 17
+
+### 目标
+
+新增链路点击详情能力：用户点击 GIS 或 Logic Topo 中任意一条链路时，右上角弹出链路信息卡片，交互和视觉位置参考现有网元详情卡片。
+
+### 设计更新
+
+- 复用 `#details` 详情卡片容器，链路卡片与网元卡片使用同一套右上角浮层样式。
+- 新增链路选中状态 `selectedLinkKey`，与网元选中状态互斥。
+- 链路详情按 `state.linkFields` 动态渲染，不绑定固定业务字段。
+- 选中链路继续复用当前 GIS / Logic 链路高优先级样式，便于用户识别当前查看对象。
+
+### 实现内容
+
+- GIS Topo：为链路业务线和白色底线同时绑定点击事件，提升细线点击命中率。
+- Logic Topo：为 SVG 链路线段绑定点击事件，并通过渲染时的 `data-link` 回查对应链路记录。
+- 新增 `showLinkDetails(link)`，展示 `Src NE Name - Sink NE Name` 标题和 link 表全部字段。
+- 点击网元或定位网元时自动清除链路选中态，点击链路时自动清除网元选中态。
+- 内置 Mock 链路数据补充 `Status`、`Media Type`、`Protection`、`Service Class`、`Utilization` 等属性。
+- 当前测试 `link.csv` 补充 `Link Type`、`Status`、`Capacity`、`Media Type`、`Protection`、`Service Class`、`Utilization` 字段，用于链路详情验证。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- `link.csv` 当前包含 3480 条链路记录，字段数从 2 个扩展为 9 个。

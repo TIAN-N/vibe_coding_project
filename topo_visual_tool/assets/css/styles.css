@@ -729,6 +729,7 @@ th.delete-cell {
   stroke: #8ba0ad;
   stroke-width: 1.6;
   opacity: .72;
+  cursor: pointer;
 }
 .logic-link.highlight {
   stroke: var(--accent);

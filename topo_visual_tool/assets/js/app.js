@@ -302,6 +302,7 @@ const state = {
   view: "gis",
   table: "nodes",
   selectedName: "",
+  selectedLinkKey: "",
   highlightRule: null,
   filterRule: null,
   bulkQuery: null,
@@ -1223,7 +1224,12 @@ function createMockTopology() {
       "Src NE Name": a,
       "Sink NE Name": b,
       "Link Type": type,
+      Status: type.includes("Uplink") && links.length % 5 === 0 ? "Maintenance" : links.length % 17 === 0 ? "Down" : "Up",
       Capacity: type === "PE-FullMesh" ? "100G" : type.includes("Uplink") ? "40G" : "10G",
+      "Media Type": type === "PE-FullMesh" ? "DWDM" : "Fiber",
+      Protection: type.includes("Ring") ? "Ring" : type.includes("Uplink") ? "Dual-Homed" : "Mesh",
+      "Service Class": type === "PE-FullMesh" ? "Core" : type.includes("ASG") ? "Aggregation" : "Access",
+      Utilization: `${35 + (links.length * 7) % 58}%`,
       ...extra
     });
   };
@@ -1298,6 +1304,7 @@ function setData(nodes, links) {
   pruneLinkStyleRules();
   rebuildIndexes();
   state.selectedName = "";
+  state.selectedLinkKey = "";
   state.highlightRule = null;
   state.filterRule = null;
   state.bulkQuery = null;
@@ -1582,6 +1589,9 @@ function getVisibleData() {
       }
     });
   }
+  if (state.selectedLinkKey) {
+    selectedLinkKeys.add(state.selectedLinkKey);
+  }
 
   return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, highlightNames, highlightLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
 }
@@ -1650,6 +1660,12 @@ function renderMap(data) {
     }).addTo(state.map);
 
     line.bindTooltip(`${link["Src NE Name"]} ⇄ ${link["Sink NE Name"]}`);
+    const onLinkClick = () => {
+      showLinkDetails(link);
+      renderTopologies();
+    };
+    base.on("click", onLinkClick);
+    line.on("click", onLinkClick);
     state.mapLayers.links.push(base, line);
   });
 
@@ -1779,6 +1795,16 @@ function renderLogic(data = getVisibleData()) {
       const node = data.nodeByName.get(group.getAttribute("data-node"));
       if (node) {
         showDetails(node);
+        renderTopologies();
+      }
+    });
+  });
+  svg.querySelectorAll(".logic-link").forEach(line => {
+    line.addEventListener("click", event => {
+      event.stopPropagation();
+      const link = data.links[Number(line.getAttribute("data-link"))];
+      if (link) {
+        showLinkDetails(link);
         renderTopologies();
       }
     });
@@ -2130,6 +2156,7 @@ function locateNode() {
   }
 
   state.selectedName = node["NE Name"];
+  state.selectedLinkKey = "";
   rememberSearchHistory("locate", rawKeyword || node["NE Name"]);
   setMessage(el.locateMessage, t("located", { name: node["NE Name"] }), "ok");
 
@@ -2177,8 +2204,19 @@ function fitMap() {
 
 function showDetails(node) {
   state.selectedName = node["NE Name"];
+  state.selectedLinkKey = "";
   el.details.innerHTML = `<h3>${escapeHtml(node["NE Name"] || t("unnamedDevice"))}</h3><div class="kv">${
     state.nodeFields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(node[field] ?? "")}</div>`).join("")
+  }</div>`;
+  el.details.classList.add("show");
+}
+
+function showLinkDetails(link) {
+  state.selectedName = "";
+  state.selectedLinkKey = linkKey(link);
+  const title = `${link["Src NE Name"] || ""} - ${link["Sink NE Name"] || ""}`;
+  el.details.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="kv">${
+    state.linkFields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(link[field] ?? "")}</div>`).join("")
   }</div>`;
   el.details.classList.add("show");
 }
