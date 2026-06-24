@@ -10,6 +10,10 @@ const DEFAULT_ROLE_STYLES = {
 };
 const DEFAULT_HIGHLIGHT_STYLE = { color: "#c99a3d", linkColor: "#c99a3d", size: 17, shape: "triangle" };
 const DEFAULT_LINK_STYLE = { color: "#2f6f86", lineStyle: "solid", width: "medium" };
+const DEFAULT_ROUTE_PATH_STYLE = { visible: true, color: "#7a5c2e", lineStyle: "dash", width: "thick", opacity: 0.86 };
+const ROUTE_WKT_FIELD = "Route WKT";
+const ROUTE_HIT_TOLERANCE_PX = 8;
+const ROUTE_POINTS_CACHE = new WeakMap();
 const LINK_STYLE_OPS = ["eq", "contains", "neq"];
 const LINE_STYLE_VALUES = ["solid", "dash", "dot"];
 const LINE_WIDTH_VALUES = ["thin", "medium", "thick"];
@@ -155,6 +159,9 @@ const I18N = {
     lineThin: "细线",
     lineMedium: "中线",
     lineThick: "粗线",
+    routePathStyle: "路网路径样式",
+    showRoutePath: "显示路网路径",
+    routePathOpacity: "透明度",
     noLinkStyleRule: "暂无链路样式规则",
     nodeRuleField: "字段",
     nodeRuleOp: "条件",
@@ -280,6 +287,9 @@ const I18N = {
     lineThin: "Thin",
     lineMedium: "Medium",
     lineThick: "Thick",
+    routePathStyle: "Route Path Style",
+    showRoutePath: "Show Route Paths",
+    routePathOpacity: "Opacity",
     noLinkStyleRule: "No link style rules",
     nodeRuleField: "Field",
     nodeRuleOp: "Condition",
@@ -303,6 +313,7 @@ const state = {
   table: "nodes",
   selectedName: "",
   selectedLinkKey: "",
+  selectedRouteKey: "",
   highlightRule: null,
   filterRule: null,
   bulkQuery: null,
@@ -311,6 +322,7 @@ const state = {
   appliedNodeStyleRules: [],
   highlightStyle: { ...DEFAULT_HIGHLIGHT_STYLE },
   linkStyleRules: [],
+  routePathStyle: { ...DEFAULT_ROUTE_PATH_STYLE },
   searchHistory: {
     locate: [],
     highlight: [],
@@ -333,7 +345,8 @@ const state = {
   mapRenderTimer: null,
   mapMoving: false,
   lightBasemap: false,
-  mapLayers: { nodes: [], links: [] },
+  mapLayers: { nodes: [], links: [], routes: [] },
+  routeHitEntries: [],
   logic: {
     positions: new Map(),
     layoutKey: "",
@@ -342,6 +355,7 @@ const state = {
     panY: 0,
     draggingCanvas: false,
     draggingNode: "",
+    dragMoved: false,
     lastX: 0,
     lastY: 0
   }
@@ -378,25 +392,27 @@ function initMap() {
   installOnlineTileLayer();
   state.map.on("movestart zoomstart", () => {
     state.mapMoving = true;
+    clearRouteLayers();
   });
   state.map.on("moveend zoomend", () => {
     state.mapMoving = false;
     scheduleMapRender();
   });
+  state.map.on("click", onMapClick);
 }
 
 function installOnlineTileLayer() {
   if (!state.map || !window.L) return;
 
   state.tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    maxNativeZoom: 18,
-    opacity: 0.64,
+    maxZoom: 20,
+    maxNativeZoom: 19,
+    opacity: 1,
     attribution: "&copy; OpenStreetMap",
-    updateWhenIdle: true,
-    updateWhenZooming: false,
+    updateWhenIdle: false,
+    updateWhenZooming: true,
     keepBuffer: 4,
-    detectRetina: false,
+    detectRetina: true,
     crossOrigin: true
   }).addTo(state.map);
   state.tileLayer.on("tileerror", onTileError);
@@ -437,6 +453,24 @@ function scheduleMapRender(delay = MAP_RENDER_DEBOUNCE_MS) {
       renderTopologies();
     }
   }, delay);
+}
+
+function clearRouteLayers() {
+  state.mapLayers.routes.forEach(layer => layer.remove());
+  state.mapLayers.routes = [];
+  state.routeHitEntries = [];
+}
+
+function onMapClick(event) {
+  const routeHit = findRouteHit(event.containerPoint);
+  if (routeHit) {
+    state.selectedRouteKey = routeHit.key;
+    showLinkDetails(routeHit.link, { route: true });
+    renderTopologies();
+    return;
+  }
+
+  if (clearSelection()) renderTopologies();
 }
 
 function bindEvents() {
@@ -524,6 +558,7 @@ function applyLanguage() {
     node.setAttribute("placeholder", t(node.getAttribute("data-i18n-placeholder")));
   });
   refreshShapeOptionLabels();
+  refreshRoutePathStyleControls();
   renderRoleStyleEditor();
   renderNodeStyleRules();
   renderLinkStyleRules();
@@ -676,10 +711,19 @@ function initStyleControls() {
   el.highlightColorInput.value = state.highlightStyle.color;
   el.highlightLinkColorInput.value = state.highlightStyle.linkColor;
   el.highlightShapeSelect.value = state.highlightStyle.shape;
+  el.routePathVisibleInput.checked = state.routePathStyle.visible;
+  el.routePathColorInput.value = state.routePathStyle.color;
+  el.routePathWidthSelect.innerHTML = lineWidthOptions(state.routePathStyle.width);
+  el.routePathLineStyleSelect.innerHTML = lineStyleOptions(state.routePathStyle.lineStyle);
+  el.routePathOpacityInput.value = state.routePathStyle.opacity;
 
   [el.highlightSizeInput, el.highlightColorInput, el.highlightLinkColorInput, el.highlightShapeSelect].forEach(input => {
     input.addEventListener("input", updateHighlightStyleFromControls);
     input.addEventListener("change", updateHighlightStyleFromControls);
+  });
+  [el.routePathVisibleInput, el.routePathColorInput, el.routePathWidthSelect, el.routePathLineStyleSelect, el.routePathOpacityInput].forEach(input => {
+    input.addEventListener("input", updateRoutePathStyleFromControls);
+    input.addEventListener("change", updateRoutePathStyleFromControls);
   });
   el.roleStyleEditor.addEventListener("input", updateRoleStyleFromControl);
   el.roleStyleEditor.addEventListener("change", updateRoleStyleFromControl);
@@ -708,6 +752,14 @@ function refreshShapeOptionLabels() {
   });
 }
 
+function refreshRoutePathStyleControls() {
+  if (!el.routePathWidthSelect || !el.routePathLineStyleSelect) return;
+  const width = el.routePathWidthSelect.value || state.routePathStyle.width;
+  const lineStyle = el.routePathLineStyleSelect.value || state.routePathStyle.lineStyle;
+  el.routePathWidthSelect.innerHTML = lineWidthOptions(width);
+  el.routePathLineStyleSelect.innerHTML = lineStyleOptions(lineStyle);
+}
+
 function shapeLabel(shape) {
   const key = `shape${shape.charAt(0).toUpperCase()}${shape.slice(1)}`;
   return t(key);
@@ -723,16 +775,33 @@ function updateHighlightStyleFromControls() {
   renderTopologies();
 }
 
+function updateRoutePathStyleFromControls() {
+  state.routePathStyle = {
+    visible: el.routePathVisibleInput.checked,
+    color: normalizeColor(el.routePathColorInput.value, DEFAULT_ROUTE_PATH_STYLE.color),
+    width: LINE_WIDTH_VALUES.includes(el.routePathWidthSelect.value) ? el.routePathWidthSelect.value : DEFAULT_ROUTE_PATH_STYLE.width,
+    lineStyle: LINE_STYLE_VALUES.includes(el.routePathLineStyleSelect.value) ? el.routePathLineStyleSelect.value : DEFAULT_ROUTE_PATH_STYLE.lineStyle,
+    opacity: clamp(Number(el.routePathOpacityInput.value) || DEFAULT_ROUTE_PATH_STYLE.opacity, 0.1, 1)
+  };
+  renderTopologies();
+}
+
 function resetStyleControls() {
   state.roleStyles = cloneStyles(DEFAULT_ROLE_STYLES);
   state.nodeStyleRules = [];
   state.appliedNodeStyleRules = [];
   state.highlightStyle = { ...DEFAULT_HIGHLIGHT_STYLE };
   state.linkStyleRules = [];
+  state.routePathStyle = { ...DEFAULT_ROUTE_PATH_STYLE };
   el.highlightSizeInput.value = state.highlightStyle.size;
   el.highlightColorInput.value = state.highlightStyle.color;
   el.highlightLinkColorInput.value = state.highlightStyle.linkColor;
   el.highlightShapeSelect.value = state.highlightStyle.shape;
+  el.routePathVisibleInput.checked = state.routePathStyle.visible;
+  el.routePathColorInput.value = state.routePathStyle.color;
+  el.routePathWidthSelect.innerHTML = lineWidthOptions(state.routePathStyle.width);
+  el.routePathLineStyleSelect.innerHTML = lineStyleOptions(state.routePathStyle.lineStyle);
+  el.routePathOpacityInput.value = state.routePathStyle.opacity;
   renderRoleStyleEditor();
   updateNodeLegend();
   renderNodeStyleRules();
@@ -1230,6 +1299,7 @@ function createMockTopology() {
       Protection: type.includes("Ring") ? "Ring" : type.includes("Uplink") ? "Dual-Homed" : "Mesh",
       "Service Class": type === "PE-FullMesh" ? "Core" : type.includes("ASG") ? "Aggregation" : "Access",
       Utilization: `${35 + (links.length * 7) % 58}%`,
+      [ROUTE_WKT_FIELD]: routeWktFromNodes(src, sink, links.length),
       ...extra
     });
   };
@@ -1290,6 +1360,28 @@ function createMockTopology() {
   return { nodes, links };
 }
 
+function routeWktFromNodes(src, sink, index = 0) {
+  if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return "";
+
+  const srcLng = Number(src.Longitude);
+  const srcLat = Number(src.Latitude);
+  const sinkLng = Number(sink.Longitude);
+  const sinkLat = Number(sink.Latitude);
+  const midLng = (srcLng + sinkLng) / 2;
+  const midLat = (srcLat + sinkLat) / 2;
+  const dx = sinkLng - srcLng;
+  const dy = sinkLat - srcLat;
+  const length = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+  const bend = Math.min(0.018, Math.max(0.0025, length * 0.18)) * (index % 2 ? -1 : 1);
+  const ctrlLng = midLng - (dy / length) * bend;
+  const ctrlLat = midLat + (dx / length) * bend;
+  return `LINESTRING(${formatCoord(srcLng)} ${formatCoord(srcLat)}, ${formatCoord(ctrlLng)} ${formatCoord(ctrlLat)}, ${formatCoord(sinkLng)} ${formatCoord(sinkLat)})`;
+}
+
+function formatCoord(value) {
+  return Number(value).toFixed(7).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function setData(nodes, links) {
   const normalizedNodes = nodes.map(normalizeRow);
   const normalizedLinks = links.map(normalizeRow);
@@ -1305,6 +1397,8 @@ function setData(nodes, links) {
   rebuildIndexes();
   state.selectedName = "";
   state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
+  state.routeHitEntries = [];
   state.highlightRule = null;
   state.filterRule = null;
   state.bulkQuery = null;
@@ -1599,6 +1693,11 @@ function getVisibleData() {
   }
   if (state.selectedLinkKey) {
     selectedLinkKeys.add(state.selectedLinkKey);
+    const selectedLink = links.find(link => linkKey(link) === state.selectedLinkKey);
+    if (selectedLink) {
+      selectedNeighborNames.add(selectedLink["Src NE Name"]);
+      selectedNeighborNames.add(selectedLink["Sink NE Name"]);
+    }
   }
 
   return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, highlightNames, highlightLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
@@ -1621,7 +1720,8 @@ function renderMap(data) {
 
   state.mapLayers.nodes.forEach(layer => layer.remove());
   state.mapLayers.links.forEach(layer => layer.remove());
-  state.mapLayers = { nodes: [], links: [] };
+  state.mapLayers.routes.forEach(layer => layer.remove());
+  state.mapLayers = { nodes: [], links: [], routes: [] };
 
   const hasHighlight = data.highlightNames.size > 0;
   const bounds = state.map.getBounds().pad(0.18);
@@ -1640,6 +1740,12 @@ function renderMap(data) {
     }).slice(0, PERF.mapLinkLimit)
     : data.links;
   const degreeMap = getNodeDegreeMap(mapLinks);
+
+  if (state.routePathStyle.visible) {
+    renderRouteCanvas(mapLinks, data);
+  } else {
+    state.routeHitEntries = [];
+  }
 
   mapLinks.forEach(link => {
     const src = data.nodeByName.get(link["Src NE Name"]);
@@ -1668,7 +1774,8 @@ function renderMap(data) {
     }).addTo(state.map);
 
     line.bindTooltip(`${link["Src NE Name"]} ⇄ ${link["Sink NE Name"]}`);
-    const onLinkClick = () => {
+    const onLinkClick = event => {
+      if (window.L && event) L.DomEvent.stop(event);
       showLinkDetails(link);
       renderTopologies();
     };
@@ -1697,12 +1804,148 @@ function renderMap(data) {
     }).addTo(state.map);
 
     marker.bindTooltip(name, { permanent: false, direction: "top", className: "node-tip" });
-    marker.on("click", () => {
+    marker.on("click", event => {
+      if (window.L && event) L.DomEvent.stop(event);
       showDetails(node);
       renderTopologies();
     });
     state.mapLayers.nodes.push(marker);
   });
+}
+
+function renderRouteCanvas(mapLinks, data) {
+  const entries = mapLinks
+    .map(link => ({ link, key: linkKey(link), points: routePointsForLink(link) }))
+    .filter(entry => entry.points.length > 1);
+  state.routeHitEntries = entries;
+  if (!entries.length) return;
+
+  const canvas = document.createElement("canvas");
+  const size = state.map.getSize();
+  const topLeft = state.map.containerPointToLayerPoint([0, 0]);
+  const pixelRatio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(size.x * pixelRatio);
+  canvas.height = Math.round(size.y * pixelRatio);
+  canvas.style.width = `${size.x}px`;
+  canvas.style.height = `${size.y}px`;
+  canvas.className = "route-canvas-layer";
+  canvas.style.pointerEvents = "none";
+  canvas.style.zIndex = "350";
+  L.DomUtil.setPosition(canvas, topLeft);
+  state.map.getPanes().overlayPane.appendChild(canvas);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    canvas.remove();
+    return;
+  }
+  ctx.scale(pixelRatio, pixelRatio);
+
+  const selectedKey = state.selectedRouteKey || state.selectedLinkKey;
+  const baseWidth = linkWeight(state.routePathStyle.width);
+  const routeOpacity = clamp(Number(state.routePathStyle.opacity) || DEFAULT_ROUTE_PATH_STYLE.opacity, 0.1, 1);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  applyCanvasDash(ctx, state.routePathStyle.lineStyle);
+  entries.forEach(entry => {
+    if (selectedKey && entry.key === selectedKey) return;
+    drawRoutePath(ctx, entry.points, topLeft, state.routePathStyle.color, baseWidth, selectedKey ? Math.max(0.08, routeOpacity * 0.28) : routeOpacity);
+  });
+
+  if (selectedKey) {
+    const selected = entries.find(entry => entry.key === selectedKey);
+    if (selected) {
+      applyCanvasDash(ctx, "solid");
+      drawRoutePath(ctx, selected.points, topLeft, "#245a6e", Math.max(baseWidth + 2, 5), 1);
+      drawRouteEndpointGuides(ctx, selected.link, selected.points, data.nodeByName, topLeft);
+    }
+  }
+
+  state.mapLayers.routes.push({ remove: () => canvas.remove() });
+}
+
+function drawRoutePath(ctx, points, topLeft, color, width, opacity) {
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const layerPoint = state.map.latLngToLayerPoint(point);
+    const x = layerPoint.x - topLeft.x;
+    const y = layerPoint.y - topLeft.y;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRouteEndpointGuides(ctx, link, routePoints, nodeByName, topLeft) {
+  const src = nodeByName.get(link["Src NE Name"]);
+  const sink = nodeByName.get(link["Sink NE Name"]);
+  if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return;
+
+  const guides = [
+    [routePoints[0], [Number(src.Latitude), Number(src.Longitude)]],
+    [routePoints[routePoints.length - 1], [Number(sink.Latitude), Number(sink.Longitude)]]
+  ];
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = "#245a6e";
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([4, 5]);
+  guides.forEach(([from, to]) => {
+    const a = state.map.latLngToLayerPoint(from);
+    const b = state.map.latLngToLayerPoint(to);
+    ctx.beginPath();
+    ctx.moveTo(a.x - topLeft.x, a.y - topLeft.y);
+    ctx.lineTo(b.x - topLeft.x, b.y - topLeft.y);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function applyCanvasDash(ctx, lineStyle) {
+  if (lineStyle === "dash") ctx.setLineDash([8, 6]);
+  else if (lineStyle === "dot") ctx.setLineDash([2, 5]);
+  else ctx.setLineDash([]);
+}
+
+function findRouteHit(containerPoint) {
+  if (!state.routePathStyle.visible || !state.routeHitEntries.length || !state.map) return null;
+
+  let best = null;
+  let bestDistance = ROUTE_HIT_TOLERANCE_PX;
+  state.routeHitEntries.forEach(entry => {
+    const distance = routeDistanceToContainerPoint(entry.points, containerPoint);
+    if (distance <= bestDistance) {
+      best = entry;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+
+function routeDistanceToContainerPoint(points, target) {
+  let min = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = state.map.latLngToContainerPoint(points[i - 1]);
+    const b = state.map.latLngToContainerPoint(points[i]);
+    min = Math.min(min, pointToSegmentDistance(target, a, b));
+  }
+  return min;
+}
+
+function pointToSegmentDistance(point, a, b) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) return Math.hypot(point.x - a.x, point.y - a.y);
+
+  const t = clamp(((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy), 0, 1);
+  const x = a.x + dx * t;
+  const y = a.y + dy * t;
+  return Math.hypot(point.x - x, point.y - y);
 }
 
 function createMapNodeLayer(point, radius, shape, options) {
@@ -1824,6 +2067,7 @@ function bindLogicEvents() {
 
   svg.addEventListener("mousedown", event => {
     state.logic.draggingCanvas = true;
+    state.logic.dragMoved = false;
     state.logic.lastX = event.clientX;
     state.logic.lastY = event.clientY;
   });
@@ -1842,6 +2086,7 @@ function bindLogicEvents() {
       state.logic.lastY = event.clientY;
       renderLogic(getVisibleData());
     } else if (state.logic.draggingCanvas) {
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) state.logic.dragMoved = true;
       state.logic.panX += dx;
       state.logic.panY += dy;
       state.logic.lastX = event.clientX;
@@ -1853,6 +2098,13 @@ function bindLogicEvents() {
   window.addEventListener("mouseup", () => {
     state.logic.draggingCanvas = false;
     state.logic.draggingNode = "";
+  });
+
+  svg.addEventListener("click", event => {
+    if (state.logic.dragMoved) return;
+    if (event.target === svg || event.target.id === "logicViewport") {
+      if (clearSelection()) renderTopologies();
+    }
   });
 
   svg.addEventListener("wheel", event => {
@@ -2165,6 +2417,7 @@ function locateNode() {
 
   state.selectedName = node["NE Name"];
   state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
   rememberSearchHistory("locate", rawKeyword || node["NE Name"]);
   setMessage(el.locateMessage, t("located", { name: node["NE Name"] }), "ok");
 
@@ -2213,20 +2466,32 @@ function fitMap() {
 function showDetails(node) {
   state.selectedName = node["NE Name"];
   state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
   el.details.innerHTML = `<h3>${escapeHtml(node["NE Name"] || t("unnamedDevice"))}</h3><div class="kv">${
     state.nodeFields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(node[field] ?? "")}</div>`).join("")
   }</div>`;
   el.details.classList.add("show");
 }
 
-function showLinkDetails(link) {
+function showLinkDetails(link, options = {}) {
   state.selectedName = "";
-  state.selectedLinkKey = linkKey(link);
+  const key = linkKey(link);
+  state.selectedLinkKey = key;
+  state.selectedRouteKey = options.route || routePointsForLink(link).length > 1 ? key : "";
   const title = `${link["Src NE Name"] || ""} - ${link["Sink NE Name"] || ""}`;
   el.details.innerHTML = `<h3>${escapeHtml(title)}</h3><div class="kv">${
     state.linkFields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(link[field] ?? "")}</div>`).join("")
   }</div>`;
   el.details.classList.add("show");
+}
+
+function clearSelection() {
+  const changed = Boolean(state.selectedName || state.selectedLinkKey || state.selectedRouteKey || el.details.classList.contains("show"));
+  state.selectedName = "";
+  state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
+  el.details.classList.remove("show");
+  return changed;
 }
 
 function updateStats(data) {
@@ -2482,6 +2747,30 @@ function updateNodeLegend() {
     const shape = normalizeShape(style.shape, DEFAULT_NODE_STYLE.shape);
     return `<span><i class="shape-${shape}" style="background:${escapeAttr(color)};color:${escapeAttr(color)}"></i><span>${escapeHtml(role)}</span></span>`;
   }).join("");
+}
+
+function parseRouteWkt(value) {
+  const text = String(value || "").trim();
+  if (!text) return [];
+
+  const match = text.match(/^LINESTRING\s*[\(\uff08]\s*(.*?)\s*[\)\uff09]$/i);
+  if (!match) return [];
+
+  return match[1]
+    .replaceAll("\uff0c", ",")
+    .split(",")
+    .map(pair => pair.trim().split(/\s+/).map(Number))
+    .filter(coords => coords.length >= 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1]))
+    .map(([lng, lat]) => [lat, lng]);
+}
+
+function routePointsForLink(link) {
+  if (!link || typeof link !== "object") return [];
+  if (ROUTE_POINTS_CACHE.has(link)) return ROUTE_POINTS_CACHE.get(link);
+
+  const points = parseRouteWkt(link[ROUTE_WKT_FIELD]);
+  ROUTE_POINTS_CACHE.set(link, points);
+  return points;
 }
 
 function hasCoord(node) {

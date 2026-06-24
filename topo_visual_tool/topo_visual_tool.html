@@ -93,6 +93,16 @@
               <button id="addLinkStyleRuleBtn" type="button" data-i18n="addLinkStyleRule">新增链路规则</button>
               <datalist id="linkStyleValueSuggestions"></datalist>
             </div>
+            <div class="style-group">
+              <div class="style-title" data-i18n="routePathStyle">路网路径样式</div>
+              <label class="check-row"><input id="routePathVisibleInput" type="checkbox" checked><span data-i18n="showRoutePath">显示路网路径</span></label>
+              <div class="style-row route-style-row">
+                <label><span data-i18n="styleColor">颜色</span><input id="routePathColorInput" type="color"></label>
+                <label><span data-i18n="linkRuleWidth">线宽</span><select id="routePathWidthSelect"></select></label>
+                <label><span data-i18n="linkRuleLineStyle">线型</span><select id="routePathLineStyleSelect"></select></label>
+                <label><span data-i18n="routePathOpacity">透明度</span><input id="routePathOpacityInput" type="range" min="0.1" max="1" step="0.05"></label>
+              </div>
+            </div>
             <button id="resetStyleBtn" type="button" data-i18n="resetStyle">重置样式</button>
           </div>
         </section>

@@ -233,6 +233,8 @@
 - 连接度校验：`maxCsg=1`，`minAsg=7`，`maxAsg=7`。
 - `node --check assets/js/app.js` 通过。
 
+
+
 ## 2026-06-22 迭代 9
 
 ### 目标
@@ -576,6 +578,107 @@
 - 调整 `getVisibleData()` 的过滤分支：存在 `filterRule` 时直接从全量链路中过滤两端都命中的链路。
 - 调整过滤后的可见网元集合：存在 `filterRule` 时只使用命中网元，不再从链路另一端补充上下文网元。
 - 保留仅批量查询场景的一跳链路和上下文节点展示逻辑。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-24 迭代 19
+
+### 目标
+
+新增 GIS 路网路径呈现能力：当 link 表存在 `Route WKT` 且行内有有效 `LINESTRING` 时，根据路网路由绘制 GIS 路径图层。
+
+### 设计更新
+
+- 路网路径作为 GIS 专属图层，位于现有链路直连线下方。
+- 左侧“样式设置”新增路网路径样式区域，支持显示开关、颜色、线宽和线型。
+- 默认勾选显示路网路径；取消勾选后清除该图层。
+- 无 `Route WKT` 字段或字段为空时不渲染路网路径。
+- WKT 解析兼容半角/全角括号、英文/中文逗号和多空格，经纬度顺序按 `lng lat` 处理。
+
+### 实现内容
+
+- 新增 `ROUTE_WKT_FIELD`、`DEFAULT_ROUTE_PATH_STYLE` 和 `routePathStyle` 状态。
+- 新增 `parseRouteWkt()`，将 `LINESTRING` 转换为 Leaflet polyline 坐标。
+- GIS `renderMap()` 中新增路网路径图层清理和绘制逻辑。
+- `topo_visual_tool.html` 新增路网路径样式控件，`styles.css` 补充控件布局。
+- 内置 Mock 链路和当前 `link.csv` 均新增 `Route WKT` 数据。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 当前 `link.csv` 包含 3480 条链路记录，`Route WKT` 非空记录 3480 条。
+
+## 2026-06-24 迭代 20
+
+### 目标
+
+优化路网路径交互与渲染性能：点击某条路网路径时突出显示对应路由和源宿网元；点击空白区域时清除节点、链路和路网路径选中态；降低大量 Route WKT 场景下的 GIS 渲染卡顿。
+
+### 设计更新
+
+- 路网路径从逐条 Leaflet polyline 改为单 Canvas 图层合批绘制，减少大量路径带来的图层和 DOM 开销。
+- GIS 路网路径点击使用像素级线段命中测试，命中后复用链路详情卡片展示 link 记录。
+- 选中路网路径时，同步高亮对应 Route WKT 折线、源宿直连链路、源宿网元。
+- 当路网路径首尾点与源宿网元经纬度不重合时，绘制端点引导线辅助识别对应关系。
+- GIS 地图空白点击、Logic Topo 空白点击均会清除当前选中态；画布拖动不会误触发清除。
+
+### 实现内容
+
+- 新增 `selectedRouteKey`、`routeHitEntries`、`ROUTE_HIT_TOLERANCE_PX` 和 `ROUTE_POINTS_CACHE`。
+- 新增 `renderRouteCanvas()`，将当前可见路由绘制到一个 Canvas overlay，并按选中态做二次高亮绘制。
+- Canvas 路网图层按 `devicePixelRatio` 设置实际绘制尺寸，降低高分屏下路径线条发虚的问题。
+- 新增 `findRouteHit()`、`routeDistanceToContainerPoint()` 和 `pointToSegmentDistance()`，支持点击路网路径定位对应链路。
+- 新增 `routePointsForLink()` 缓存 Route WKT 解析结果，避免频繁重解析。
+- 新增 `clearSelection()`，统一处理空白点击后的选中态和详情卡片清理。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-24 迭代 21
+
+### 目标
+
+修复 GIS 地图放大、缩小时路网 Canvas 图层残影问题，并为路网路径开放透明度样式配置，解决默认路网路径显示过淡的问题。
+
+### 设计更新
+
+- 路网 Canvas 不参与 Leaflet 缩放动画复用；地图开始平移或缩放时立即清理旧 Canvas，地图停止后重新按当前视口绘制。
+- 左侧“路网路径样式”新增透明度滑杆，范围为 0.1 到 1。
+- 路网路径默认透明度调整为 0.86，未选中状态更清晰；选中路由仍使用最高可见度，其他路由按比例降低透明度。
+
+### 实现内容
+
+- 新增 `clearRouteLayers()`，统一移除路网 Canvas 图层并清空路由点击命中缓存。
+- 在 Leaflet `movestart` / `zoomstart` 事件中调用 `clearRouteLayers()`，避免缩放过程中旧 Canvas 被拉伸形成残影。
+- `DEFAULT_ROUTE_PATH_STYLE` 新增 `opacity` 字段，渲染时由 `renderRouteCanvas()` 读取并应用。
+- `topo_visual_tool.html` 新增 `routePathOpacityInput` 滑杆，`styles.css` 调整路网样式控件列布局。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-24 迭代 22
+
+### 目标
+
+排查并修复 GIS 底层在线地图渲染发糊的问题。
+
+### 原因分析
+
+- 在线瓦片图层被设置为 `opacity: 0.64`，底图与背景混合后对比度不足，视觉上偏淡偏糊。
+- CSS 对 `.leaflet-tile-pane` 使用了 `filter: saturate(...) contrast(...) brightness(...)`，会触发浏览器对瓦片层二次栅格化，高分屏和缩放后更容易出现模糊。
+- Leaflet 瓦片 `detectRetina` 关闭，高 DPI 屏幕上仍使用普通瓦片，清晰度不足。
+- `updateWhenZooming` 关闭时，缩放过程中更容易看到被拉伸的旧瓦片。
+
+### 实现内容
+
+- 在线瓦片透明度调整为 `1`，恢复原始底图清晰度。
+- 移除 `.leaflet-tile-pane` 的 CSS filter，避免瓦片层被滤镜重采样。
+- 开启 `detectRetina`，高分屏设备使用更高分辨率瓦片。
+- 开启 `updateWhenZooming` 并关闭 `updateWhenIdle`，缩放过程中更积极更新瓦片。
 
 ### 测试记录
 
