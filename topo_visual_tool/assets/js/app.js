@@ -1539,25 +1539,33 @@ function getVisibleData() {
   const hasFiltering = Boolean(state.filterRule || state.bulkQuery);
   let links = state.links;
   if (hasFiltering) {
-    const seen = new Set();
-    links = [];
-    activeSeedNames.forEach(name => {
-      (state.indexes.linksByNode.get(name) || []).forEach(link => {
-        const key = linkKey(link);
-        if (!seen.has(key)) {
-          seen.add(key);
-          links.push(link);
-        }
+    if (state.filterRule) {
+      links = state.links.filter(link =>
+        activeSeedNames.has(link["Src NE Name"]) && activeSeedNames.has(link["Sink NE Name"])
+      );
+    } else {
+      const seen = new Set();
+      links = [];
+      activeSeedNames.forEach(name => {
+        (state.indexes.linksByNode.get(name) || []).forEach(link => {
+          const key = linkKey(link);
+          if (!seen.has(key)) {
+            seen.add(key);
+            links.push(link);
+          }
+        });
       });
-    });
+    }
   }
   const visibleNames = new Set();
   if (hasFiltering) {
     activeSeedNames.forEach(name => visibleNames.add(name));
-    links.forEach(link => {
-      visibleNames.add(link["Src NE Name"]);
-      visibleNames.add(link["Sink NE Name"]);
-    });
+    if (!state.filterRule) {
+      links.forEach(link => {
+        visibleNames.add(link["Src NE Name"]);
+        visibleNames.add(link["Sink NE Name"]);
+      });
+    }
   } else {
     state.nodes.forEach(node => visibleNames.add(node["NE Name"]));
   }
