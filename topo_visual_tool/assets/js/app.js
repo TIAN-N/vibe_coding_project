@@ -557,6 +557,7 @@ function bindEvents() {
   el.cancelConditionModalBtn.addEventListener("click", closeConditionModal);
   el.addConditionRuleBtn.addEventListener("click", addConditionDraftRule);
   el.applyConditionModalBtn.addEventListener("click", applyConditionModal);
+  el.conditionRuleList.addEventListener("change", updateConditionRowSuggestions);
   el.conditionRuleList.addEventListener("click", removeConditionDraftRule);
   el.conditionHistoryList.addEventListener("click", restoreConditionHistory);
   el.conditionModal.addEventListener("mousedown", event => {
@@ -1783,6 +1784,7 @@ function renderConditionModal() {
 
 function conditionRowMarkup(condition, index) {
   const fields = conditionFieldsForTarget(state.conditionModalType);
+  const valueListId = `conditionValueOptions${index}`;
   const fieldOptions = fields
     .map(field => `<option value="${escapeAttr(field)}" ${field === condition.field ? "selected" : ""}>${escapeHtml(field)}</option>`)
     .join("");
@@ -1792,9 +1794,48 @@ function conditionRowMarkup(condition, index) {
   return `<div class="condition-row" data-condition-index="${index}">
     <select data-condition-field>${fieldOptions}</select>
     <select data-condition-op>${opOptions}</select>
-    <input data-condition-value value="${escapeAttr(condition.value || "")}" placeholder="${escapeAttr(t("conditionValue"))}">
+    <input data-condition-value list="${valueListId}" value="${escapeAttr(condition.value || "")}" placeholder="${escapeAttr(t("conditionValue"))}">
+    <datalist id="${valueListId}">${conditionValueOptions(condition.field)}</datalist>
     <button type="button" data-remove-condition="${index}">${escapeHtml(t("removeCondition"))}</button>
   </div>`;
+}
+
+function conditionValueOptions(field) {
+  const type = state.conditionModalType;
+  const rows = type === "linkStyle" ? state.links : state.nodes;
+  const history = type === "filter"
+    ? state.searchHistory.filter
+    : type === "highlight"
+      ? state.searchHistory.highlight
+      : conditionValueHistory(type, field);
+  return mergeSuggestionValues(collectValueOptions(rows, field), history)
+    .map(value => `<option value="${escapeAttr(value)}"></option>`)
+    .join("");
+}
+
+function conditionValueHistory(type, field) {
+  const values = [];
+  state.conditionHistory
+    .filter(item => item.type === type)
+    .forEach(item => {
+      const group = normalizeRuleGroup(item.rule);
+      if (!group) return;
+      group.conditions.forEach(condition => {
+        if (condition.field === field && condition.value) values.push(condition.value);
+      });
+    });
+  return values;
+}
+
+function updateConditionRowSuggestions(event) {
+  if (!event.target.closest("[data-condition-field]")) return;
+
+  const row = event.target.closest(".condition-row");
+  const input = row && row.querySelector("[data-condition-value]");
+  const datalist = row && row.querySelector("datalist");
+  if (!row || !input || !datalist) return;
+  input.value = "";
+  datalist.innerHTML = conditionValueOptions(event.target.value);
 }
 
 function conditionModalTitle(type) {
