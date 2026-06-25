@@ -66,15 +66,6 @@
           <h2 data-i18n="sectionStyle">样式设置</h2>
           <div class="style-config">
             <div class="style-group">
-              <div class="style-title" data-i18n="highlightStyle">高亮节点样式</div>
-              <div class="style-row compact">
-                <label><span data-i18n="styleSize">大小</span><input id="highlightSizeInput" type="number" min="4" max="40" step="1"></label>
-                <label><span data-i18n="styleNodeColor">节点颜色</span><input id="highlightColorInput" type="color"></label>
-                <label><span data-i18n="styleLinkColor">链接颜色</span><input id="highlightLinkColorInput" type="color"></label>
-                <label><span data-i18n="styleShape">形状</span><select id="highlightShapeSelect"></select></label>
-              </div>
-            </div>
-            <div class="style-group">
               <div class="style-title" data-i18n="roleStyle">角色图例样式</div>
               <div id="roleStyleEditor" class="role-style-editor"></div>
             </div>
@@ -90,7 +81,10 @@
             <div class="style-group">
               <div class="style-title" data-i18n="linkStyleRules">链路样式规则</div>
               <div id="linkStyleRuleList" class="link-style-rule-list"></div>
-              <button id="addLinkStyleRuleBtn" type="button" data-i18n="addLinkStyleRule">新增链路规则</button>
+              <div class="row">
+                <button id="addLinkStyleRuleBtn" class="grow" type="button" data-i18n="addLinkStyleRule">新增链路规则</button>
+                <button id="applyLinkStyleRulesBtn" class="primary grow" type="button" data-i18n="applyLinkStyleRules">应用链路规则</button>
+              </div>
               <datalist id="linkStyleValueSuggestions"></datalist>
             </div>
             <div class="style-group">
@@ -128,8 +122,11 @@
             <datalist id="highlightHistory"></datalist>
             <div class="row">
               <button id="applyHighlightBtn" class="primary grow" type="button" data-i18n="applyHighlight">应用高亮</button>
+              <button id="advancedHighlightBtn" type="button" data-i18n="advancedCondition">复合条件</button>
               <button id="clearHighlightBtn" type="button" data-i18n="clear">清除</button>
             </div>
+            <label class="range-line"><span data-i18n="highlightContrast">对比度</span><input id="highlightContrastInput" type="range" min="0" max="1" step="0.05"></label>
+            <div id="highlightRuleSummary" class="condition-summary"></div>
           </div>
         </section>
 
@@ -144,8 +141,10 @@
             <datalist id="filterHistory"></datalist>
             <div class="row">
               <button id="applyFilterBtn" class="primary grow" type="button" data-i18n="applyFilter">应用过滤</button>
+              <button id="advancedFilterBtn" type="button" data-i18n="advancedCondition">复合条件</button>
               <button id="clearFilterBtn" type="button" data-i18n="clear">清除</button>
             </div>
+            <div id="filterRuleSummary" class="condition-summary"></div>
           </div>
         </section>
 
@@ -204,6 +203,29 @@
       <div id="dataSummary" class="data-summary"></div>
       <div class="table-wrap">
         <table id="dataTable"></table>
+      </div>
+    </div>
+
+    <div id="conditionModal" class="condition-modal hidden">
+      <div class="condition-card">
+        <div class="condition-head">
+          <h3 id="conditionModalTitle">复合条件</h3>
+          <button id="conditionModalClose" type="button" aria-label="Close">×</button>
+        </div>
+        <div id="conditionModeGroup" class="condition-mode">
+          <label><input type="radio" name="conditionMode" value="all"><span data-i18n="matchAll">全部满足</span></label>
+          <label><input type="radio" name="conditionMode" value="any"><span data-i18n="matchAny">任一满足</span></label>
+        </div>
+        <div id="conditionRuleList" class="condition-rule-list"></div>
+        <button id="addConditionRuleBtn" type="button" data-i18n="addCondition">新增条件</button>
+        <div class="condition-history">
+          <div class="condition-history-title" data-i18n="conditionHistory">历史条件</div>
+          <div id="conditionHistoryList" class="condition-history-list"></div>
+        </div>
+        <div class="condition-actions">
+          <button id="applyConditionModalBtn" class="primary grow" type="button" data-i18n="apply">应用</button>
+          <button id="cancelConditionModalBtn" type="button" data-i18n="cancel">取消</button>
+        </div>
       </div>
     </div>
   </div>

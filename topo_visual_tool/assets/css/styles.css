@@ -317,6 +317,18 @@ input[type="file"] {
   height: 15px;
   padding: 0;
 }
+.range-line {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.range-line input {
+  width: 100%;
+}
 .style-row label,
 .role-style-row label {
   display: grid;
@@ -407,18 +419,19 @@ input[type="file"] {
   font-size: 11px;
   color: var(--muted);
 }
-.link-style-rule label:first-child,
-.link-style-rule label:nth-child(3) {
-  grid-column: span 2;
-}
-.node-style-rule .rule-field {
-  grid-column: 1 / 2;
-}
-.node-style-rule .rule-op {
-  grid-column: 2 / 3;
-}
-.node-style-rule .rule-value {
+.rule-condition {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 6px;
+  align-items: center;
+  color: var(--text);
+  font-size: 12px;
+}
+.rule-condition span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .node-style-rule .rule-color {
   grid-column: 1 / 2;
@@ -448,7 +461,8 @@ input[type="file"] {
   gap: 6px;
 }
 .rule-actions button,
-.link-style-rule button {
+.link-style-rule button,
+.rule-condition button {
   height: 28px;
   font-size: 12px;
 }
@@ -456,7 +470,7 @@ input[type="file"] {
   padding: 0 8px;
 }
 .rule-actions button[data-remove-node-rule],
-.link-style-rule button {
+.link-style-rule button[data-remove-link-rule] {
   color: var(--danger);
   border-color: #efc6c6;
   background: #fff;
@@ -572,6 +586,104 @@ input[type="file"] {
 }
 .message.error { color: var(--danger); }
 .message.ok { color: var(--ok); }
+
+.condition-summary {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.condition-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 78px 20px 20px;
+  background: rgba(22, 35, 46, .24);
+}
+.condition-modal.hidden { display: none; }
+.condition-card {
+  width: min(720px, calc(100vw - 40px));
+  max-height: calc(100vh - 104px);
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: var(--shadow);
+}
+.condition-head,
+.condition-actions,
+.condition-mode,
+.condition-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.condition-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.condition-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.condition-mode {
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 12px;
+}
+.condition-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.condition-rule-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.condition-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) 112px minmax(140px, 1fr) 72px;
+  align-items: center;
+}
+.condition-row select,
+.condition-row input {
+  width: 100%;
+  min-width: 0;
+}
+.condition-actions {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+.condition-history {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.condition-history-title {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.condition-history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.condition-history-list button {
+  max-width: 100%;
+  height: 28px;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .history-menu {
   position: fixed;
@@ -749,17 +861,12 @@ th.delete-cell {
   opacity: .72;
   cursor: pointer;
 }
-.logic-link.highlight {
-  stroke: var(--accent);
-  stroke-width: 3.2;
-  opacity: 1;
-}
 .logic-link.selected {
   stroke: var(--primary-dark);
   stroke-width: 3.6;
   opacity: 1;
 }
-.logic-link.dim { opacity: .13; }
+.logic-link.dim { opacity: var(--logic-link-dim-opacity, .13); }
 .logic-node .core {
   stroke: #fff;
   stroke-width: 2;
@@ -772,11 +879,7 @@ th.delete-cell {
   fill: #1f2a37;
   pointer-events: none;
 }
-.logic-node.dim { opacity: .22; }
-.logic-node.highlight .core {
-  stroke: var(--node-highlight, var(--accent));
-  stroke-width: 3;
-}
+.logic-node.dim { opacity: var(--logic-node-dim-opacity, .22); }
 .logic-node.selected .core {
   stroke: var(--primary-dark);
   stroke-width: 3;

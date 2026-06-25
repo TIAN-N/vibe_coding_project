@@ -8,9 +8,9 @@ const DEFAULT_ROLE_STYLES = {
   PE: { color: "#c84d4d", size: 15, shape: "square" },
   OTHER: { color: "#718096", size: 10, shape: "circle" }
 };
-const DEFAULT_HIGHLIGHT_STYLE = { color: "#c99a3d", linkColor: "#c99a3d", size: 17, shape: "triangle" };
 const DEFAULT_LINK_STYLE = { color: "#2f6f86", lineStyle: "solid", width: "medium" };
 const DEFAULT_ROUTE_PATH_STYLE = { visible: true, color: "#7a5c2e", lineStyle: "dash", width: "thick", opacity: 0.86 };
+const DEFAULT_HIGHLIGHT_CONTRAST = 0.72;
 const ROUTE_WKT_FIELD = "Route WKT";
 const ROUTE_HIT_TOLERANCE_PX = 8;
 const ROUTE_POINTS_CACHE = new WeakMap();
@@ -31,7 +31,9 @@ const MAP_TILE_ERROR_LIMIT = 24;
 const MAP_TILE_ERROR_WINDOW_MS = 15000;
 const MAP_RENDER_DEBOUNCE_MS = 180;
 const SEARCH_HISTORY_KEY = "topo_visual_tool_search_history_v1";
+const CONDITION_HISTORY_KEY = "topo_visual_tool_condition_history_v1";
 const SEARCH_HISTORY_LIMIT = 12;
+const CONDITION_HISTORY_LIMIT = 8;
 const OPS = [
   ["contains", "opContains"],
   ["eq", "opEq"],
@@ -146,6 +148,8 @@ const I18N = {
     shapeTriangle: "三角形",
     linkStyleRules: "链路样式规则",
     addLinkStyleRule: "新增链路规则",
+    applyLinkStyleRules: "应用链路规则",
+    highlightContrast: "对比度",
     linkRuleField: "字段",
     linkRuleOp: "条件",
     linkRuleValue: "取值",
@@ -162,6 +166,20 @@ const I18N = {
     routePathStyle: "路网路径样式",
     showRoutePath: "显示路网路径",
     routePathOpacity: "透明度",
+    advancedCondition: "复合条件",
+    complexHighlightTitle: "复合高亮条件",
+    complexFilterTitle: "复合过滤条件",
+    matchAll: "全部满足",
+    matchAny: "任一满足",
+    addCondition: "新增条件",
+    apply: "应用",
+    cancel: "取消",
+    removeCondition: "删除",
+    noConditionRule: "未设置条件",
+    conditionSummaryAll: "全部满足 {count} 条条件",
+    conditionSummaryAny: "任一满足 {count} 条条件",
+    conditionHistory: "历史条件",
+    noConditionHistory: "暂无历史条件",
     noLinkStyleRule: "暂无链路样式规则",
     nodeRuleField: "字段",
     nodeRuleOp: "条件",
@@ -274,6 +292,8 @@ const I18N = {
     shapeTriangle: "Triangle",
     linkStyleRules: "Link Style Rules",
     addLinkStyleRule: "Add Link Rule",
+    applyLinkStyleRules: "Apply Link Rules",
+    highlightContrast: "Contrast",
     linkRuleField: "Field",
     linkRuleOp: "Condition",
     linkRuleValue: "Value",
@@ -290,6 +310,20 @@ const I18N = {
     routePathStyle: "Route Path Style",
     showRoutePath: "Show Route Paths",
     routePathOpacity: "Opacity",
+    advancedCondition: "Advanced",
+    complexHighlightTitle: "Advanced Highlight Conditions",
+    complexFilterTitle: "Advanced Filter Conditions",
+    matchAll: "Match all",
+    matchAny: "Match any",
+    addCondition: "Add condition",
+    apply: "Apply",
+    cancel: "Cancel",
+    removeCondition: "Remove",
+    noConditionRule: "No condition",
+    conditionSummaryAll: "Match all {count} conditions",
+    conditionSummaryAny: "Match any {count} conditions",
+    conditionHistory: "Condition history",
+    noConditionHistory: "No condition history",
     noLinkStyleRule: "No link style rules",
     nodeRuleField: "Field",
     nodeRuleOp: "Condition",
@@ -320,9 +354,14 @@ const state = {
   roleStyles: cloneStyles(DEFAULT_ROLE_STYLES),
   nodeStyleRules: [],
   appliedNodeStyleRules: [],
-  highlightStyle: { ...DEFAULT_HIGHLIGHT_STYLE },
   linkStyleRules: [],
+  appliedLinkStyleRules: [],
   routePathStyle: { ...DEFAULT_ROUTE_PATH_STYLE },
+  highlightContrast: DEFAULT_HIGHLIGHT_CONTRAST,
+  conditionModalType: "",
+  conditionModalTarget: null,
+  conditionDraft: null,
+  conditionHistory: [],
   searchHistory: {
     locate: [],
     highlight: [],
@@ -489,24 +528,39 @@ function bindEvents() {
   bindSearchHistoryInput(el.filterValue, "filter");
 
   el.applyHighlightBtn.addEventListener("click", () => {
-    state.highlightRule = readRule("highlight");
+    state.highlightRule = ruleGroupFromQuickControls("highlight");
     rememberSearchHistory("highlight", el.highlightValue.value);
+    updateRuleSummaries();
     renderTopologies();
   });
+  el.advancedHighlightBtn.addEventListener("click", () => openConditionModal("highlight"));
   el.clearHighlightBtn.addEventListener("click", () => {
     state.highlightRule = null;
     el.highlightValue.value = "";
+    updateRuleSummaries();
     renderTopologies();
   });
   el.applyFilterBtn.addEventListener("click", () => {
-    state.filterRule = readRule("filter");
+    state.filterRule = ruleGroupFromQuickControls("filter");
     rememberSearchHistory("filter", el.filterValue.value);
+    updateRuleSummaries();
     renderTopologies();
   });
+  el.advancedFilterBtn.addEventListener("click", () => openConditionModal("filter"));
   el.clearFilterBtn.addEventListener("click", () => {
     state.filterRule = null;
     el.filterValue.value = "";
+    updateRuleSummaries();
     renderTopologies();
+  });
+  el.conditionModalClose.addEventListener("click", closeConditionModal);
+  el.cancelConditionModalBtn.addEventListener("click", closeConditionModal);
+  el.addConditionRuleBtn.addEventListener("click", addConditionDraftRule);
+  el.applyConditionModalBtn.addEventListener("click", applyConditionModal);
+  el.conditionRuleList.addEventListener("click", removeConditionDraftRule);
+  el.conditionHistoryList.addEventListener("click", restoreConditionHistory);
+  el.conditionModal.addEventListener("mousedown", event => {
+    if (event.target === el.conditionModal) closeConditionModal();
   });
   el.applyBulkQueryBtn.addEventListener("click", applyBulkQuery);
   el.clearBulkQueryBtn.addEventListener("click", clearBulkQuery);
@@ -562,6 +616,8 @@ function applyLanguage() {
   renderRoleStyleEditor();
   renderNodeStyleRules();
   renderLinkStyleRules();
+  updateRuleSummaries();
+  if (!el.conditionModal.classList.contains("hidden")) renderConditionModal();
 }
 
 function t(key, params = {}) {
@@ -580,6 +636,11 @@ function loadSearchHistory() {
     state.searchHistory.filter = sanitizeHistory(parsed.filter);
   } catch (error) {
     state.searchHistory = { locate: [], highlight: [], filter: [] };
+  }
+  try {
+    state.conditionHistory = sanitizeConditionHistory(JSON.parse(localStorage.getItem(CONDITION_HISTORY_KEY) || "[]"));
+  } catch (error) {
+    state.conditionHistory = [];
   }
 }
 
@@ -613,6 +674,40 @@ function rememberSearchHistory(type, value) {
   state.searchHistory[type] = next.slice(0, SEARCH_HISTORY_LIMIT);
   saveSearchHistory();
   updateSearchHistoryOptions();
+}
+
+function saveConditionHistory() {
+  try {
+    localStorage.setItem(CONDITION_HISTORY_KEY, JSON.stringify(state.conditionHistory));
+  } catch (error) {
+    // localStorage may be disabled in strict browser privacy modes.
+  }
+}
+
+function sanitizeConditionHistory(items) {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set();
+  const result = [];
+  items.forEach(item => {
+    const group = normalizeRuleGroup(item && item.rule);
+    const type = item && item.type ? String(item.type) : "condition";
+    if (!group) return;
+    const key = `${type}:${JSON.stringify(group)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push({ type, rule: group, label: item.label || ruleSummary(group) });
+  });
+  return result.slice(0, CONDITION_HISTORY_LIMIT);
+}
+
+function rememberConditionHistory(type, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return;
+  state.conditionHistory = sanitizeConditionHistory([
+    { type, rule: group, label: ruleSummary(group) },
+    ...state.conditionHistory
+  ]);
+  saveConditionHistory();
 }
 
 function updateSearchHistoryOptions() {
@@ -702,25 +797,16 @@ function hideSearchHistoryMenu() {
 }
 
 function initStyleControls() {
-  if (!el.highlightShapeSelect || !el.highlightLinkColorInput || !el.roleStyleEditor || !el.nodeStyleRuleList) return;
+  if (!el.roleStyleEditor || !el.nodeStyleRuleList) return;
 
-  fillShapeOptions(el.highlightShapeSelect);
   renderRoleStyleEditor();
 
-  el.highlightSizeInput.value = state.highlightStyle.size;
-  el.highlightColorInput.value = state.highlightStyle.color;
-  el.highlightLinkColorInput.value = state.highlightStyle.linkColor;
-  el.highlightShapeSelect.value = state.highlightStyle.shape;
   el.routePathVisibleInput.checked = state.routePathStyle.visible;
   el.routePathColorInput.value = state.routePathStyle.color;
   el.routePathWidthSelect.innerHTML = lineWidthOptions(state.routePathStyle.width);
   el.routePathLineStyleSelect.innerHTML = lineStyleOptions(state.routePathStyle.lineStyle);
   el.routePathOpacityInput.value = state.routePathStyle.opacity;
 
-  [el.highlightSizeInput, el.highlightColorInput, el.highlightLinkColorInput, el.highlightShapeSelect].forEach(input => {
-    input.addEventListener("input", updateHighlightStyleFromControls);
-    input.addEventListener("change", updateHighlightStyleFromControls);
-  });
   [el.routePathVisibleInput, el.routePathColorInput, el.routePathWidthSelect, el.routePathLineStyleSelect, el.routePathOpacityInput].forEach(input => {
     input.addEventListener("input", updateRoutePathStyleFromControls);
     input.addEventListener("change", updateRoutePathStyleFromControls);
@@ -733,9 +819,13 @@ function initStyleControls() {
   el.nodeStyleRuleList.addEventListener("change", updateNodeStyleRuleFromControl);
   el.nodeStyleRuleList.addEventListener("click", removeNodeStyleRule);
   el.addLinkStyleRuleBtn.addEventListener("click", addLinkStyleRule);
+  el.applyLinkStyleRulesBtn.addEventListener("click", applyLinkStyleRules);
   el.linkStyleRuleList.addEventListener("input", updateLinkStyleRuleFromControl);
   el.linkStyleRuleList.addEventListener("change", updateLinkStyleRuleFromControl);
   el.linkStyleRuleList.addEventListener("click", removeLinkStyleRule);
+  el.highlightContrastInput.value = state.highlightContrast;
+  el.highlightContrastInput.addEventListener("input", updateHighlightContrastFromControl);
+  el.highlightContrastInput.addEventListener("change", updateHighlightContrastFromControl);
   el.resetStyleBtn.addEventListener("click", resetStyleControls);
   updateNodeLegend();
   renderNodeStyleRules();
@@ -765,16 +855,6 @@ function shapeLabel(shape) {
   return t(key);
 }
 
-function updateHighlightStyleFromControls() {
-  state.highlightStyle = {
-    color: normalizeColor(el.highlightColorInput.value, DEFAULT_HIGHLIGHT_STYLE.color),
-    linkColor: normalizeColor(el.highlightLinkColorInput.value, DEFAULT_HIGHLIGHT_STYLE.linkColor),
-    size: clamp(Number(el.highlightSizeInput.value) || DEFAULT_HIGHLIGHT_STYLE.size, 4, 40),
-    shape: normalizeShape(el.highlightShapeSelect.value, DEFAULT_HIGHLIGHT_STYLE.shape)
-  };
-  renderTopologies();
-}
-
 function updateRoutePathStyleFromControls() {
   state.routePathStyle = {
     visible: el.routePathVisibleInput.checked,
@@ -786,17 +866,21 @@ function updateRoutePathStyleFromControls() {
   renderTopologies();
 }
 
+function updateHighlightContrastFromControl() {
+  const value = Number(el.highlightContrastInput.value);
+  state.highlightContrast = clamp(Number.isFinite(value) ? value : DEFAULT_HIGHLIGHT_CONTRAST, 0, 1);
+  renderTopologies();
+}
+
 function resetStyleControls() {
   state.roleStyles = cloneStyles(DEFAULT_ROLE_STYLES);
   state.nodeStyleRules = [];
   state.appliedNodeStyleRules = [];
-  state.highlightStyle = { ...DEFAULT_HIGHLIGHT_STYLE };
   state.linkStyleRules = [];
+  state.appliedLinkStyleRules = [];
   state.routePathStyle = { ...DEFAULT_ROUTE_PATH_STYLE };
-  el.highlightSizeInput.value = state.highlightStyle.size;
-  el.highlightColorInput.value = state.highlightStyle.color;
-  el.highlightLinkColorInput.value = state.highlightStyle.linkColor;
-  el.highlightShapeSelect.value = state.highlightStyle.shape;
+  state.highlightContrast = DEFAULT_HIGHLIGHT_CONTRAST;
+  el.highlightContrastInput.value = state.highlightContrast;
   el.routePathVisibleInput.checked = state.routePathStyle.visible;
   el.routePathColorInput.value = state.routePathStyle.color;
   el.routePathWidthSelect.innerHTML = lineWidthOptions(state.routePathStyle.width);
@@ -854,6 +938,8 @@ function addNodeStyleRule() {
     field,
     op: "eq",
     value: "",
+    mode: "all",
+    conditions: [{ field, op: "eq", value: "" }],
     color: DEFAULT_NODE_STYLE.color,
     size: DEFAULT_NODE_STYLE.size,
     shape: DEFAULT_NODE_STYLE.shape,
@@ -863,6 +949,12 @@ function addNodeStyleRule() {
 }
 
 function removeNodeStyleRule(event) {
+  const editButton = event.target.closest("[data-edit-node-rule-condition]");
+  if (editButton) {
+    openConditionModal("nodeStyle", Number(editButton.getAttribute("data-edit-node-rule-condition")));
+    return;
+  }
+
   const moveButton = event.target.closest("[data-move-node-rule]");
   if (moveButton) {
     const [rawIndex, rawDelta] = moveButton.getAttribute("data-move-node-rule").split(":");
@@ -920,7 +1012,10 @@ function applyNodeStyleRules() {
 }
 
 function cloneRuleList(rules) {
-  return rules.map(rule => ({ ...rule }));
+  return rules.map(rule => ({
+    ...rule,
+    conditions: Array.isArray(rule.conditions) ? rule.conditions.map(condition => ({ ...condition })) : undefined
+  }));
 }
 
 function addLinkStyleRule() {
@@ -929,12 +1024,13 @@ function addLinkStyleRule() {
     field,
     op: "eq",
     value: "",
+    mode: "all",
+    conditions: [{ field, op: "eq", value: "" }],
     color: DEFAULT_LINK_STYLE.color,
     lineStyle: DEFAULT_LINK_STYLE.lineStyle,
     width: DEFAULT_LINK_STYLE.width
   });
   renderLinkStyleRules();
-  renderTopologies();
 }
 
 function renderNodeStyleRules() {
@@ -947,12 +1043,8 @@ function renderNodeStyleRules() {
   }
 
   el.nodeStyleRuleList.innerHTML = state.nodeStyleRules.map((rule, index) => {
-    const valueListId = `nodeStyleValues${index}`;
     return `<div class="node-style-rule" data-node-style-rule="${index}">
-      <label class="rule-field"><span>${escapeHtml(t("nodeRuleField"))}</span><select data-node-rule-index="${index}" data-node-rule-field="field">${nodeFieldOptions(rule.field)}</select></label>
-      <label class="rule-op"><span>${escapeHtml(t("nodeRuleOp"))}</span><select data-node-rule-index="${index}" data-node-rule-field="op">${nodeOpOptions(rule.op)}</select></label>
-      <label class="rule-value"><span>${escapeHtml(t("nodeRuleValue"))}</span><input list="${valueListId}" value="${escapeAttr(rule.value)}" data-node-rule-index="${index}" data-node-rule-field="value"></label>
-      <datalist id="${valueListId}">${nodeFieldValueOptions(rule.field)}</datalist>
+      <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-node-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
       <label class="rule-color"><span>${escapeHtml(t("nodeRuleColor"))}</span><input type="color" value="${escapeAttr(rule.color || DEFAULT_NODE_STYLE.color)}" data-node-rule-index="${index}" data-node-rule-field="color"></label>
       <label class="rule-size"><span>${escapeHtml(t("nodeRuleSize"))}</span><input type="number" min="4" max="40" step="1" value="${escapeAttr(rule.size || DEFAULT_NODE_STYLE.size)}" data-node-rule-index="${index}" data-node-rule-field="size"></label>
       <label class="rule-shape"><span>${escapeHtml(t("nodeRuleShape"))}</span><select data-node-rule-index="${index}" data-node-rule-field="shape">${nodeShapeOptions(rule.shape)}</select></label>
@@ -978,6 +1070,7 @@ function pruneNodeStyleRules() {
       rule.value = "";
       rule.label = "";
     }
+    pruneRuleGroupFields(rule, available, fallback);
   });
 }
 
@@ -1007,6 +1100,12 @@ function nodeFieldValueOptions(field) {
 }
 
 function removeLinkStyleRule(event) {
+  const editButton = event.target.closest("[data-edit-link-rule-condition]");
+  if (editButton) {
+    openConditionModal("linkStyle", Number(editButton.getAttribute("data-edit-link-rule-condition")));
+    return;
+  }
+
   const button = event.target.closest("[data-remove-link-rule]");
   if (!button) return;
 
@@ -1014,7 +1113,6 @@ function removeLinkStyleRule(event) {
   if (!Number.isInteger(index)) return;
   state.linkStyleRules.splice(index, 1);
   renderLinkStyleRules();
-  renderTopologies();
 }
 
 function updateLinkStyleRuleFromControl(event) {
@@ -1039,6 +1137,10 @@ function updateLinkStyleRuleFromControl(event) {
   } else if (field === "width") {
     rule.width = LINE_WIDTH_VALUES.includes(input.value) ? input.value : DEFAULT_LINK_STYLE.width;
   }
+}
+
+function applyLinkStyleRules() {
+  state.appliedLinkStyleRules = cloneRuleList(state.linkStyleRules);
   renderTopologies();
 }
 
@@ -1051,12 +1153,8 @@ function renderLinkStyleRules() {
   }
 
   el.linkStyleRuleList.innerHTML = state.linkStyleRules.map((rule, index) => {
-    const valueListId = `linkStyleValues${index}`;
     return `<div class="link-style-rule" data-link-style-rule="${index}">
-      <label><span>${escapeHtml(t("linkRuleField"))}</span><select data-link-rule-index="${index}" data-link-rule-field="field">${linkFieldOptions(rule.field)}</select></label>
-      <label><span>${escapeHtml(t("linkRuleOp"))}</span><select data-link-rule-index="${index}" data-link-rule-field="op">${linkOpOptions(rule.op)}</select></label>
-      <label><span>${escapeHtml(t("linkRuleValue"))}</span><input list="${valueListId}" value="${escapeAttr(rule.value)}" data-link-rule-index="${index}" data-link-rule-field="value"></label>
-      <datalist id="${valueListId}">${linkFieldValueOptions(rule.field)}</datalist>
+      <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-link-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
       <label><span>${escapeHtml(t("linkRuleColor"))}</span><input type="color" value="${escapeAttr(rule.color || DEFAULT_LINK_STYLE.color)}" data-link-rule-index="${index}" data-link-rule-field="color"></label>
       <label><span>${escapeHtml(t("linkRuleLineStyle"))}</span><select data-link-rule-index="${index}" data-link-rule-field="lineStyle">${lineStyleOptions(rule.lineStyle)}</select></label>
       <label><span>${escapeHtml(t("linkRuleWidth"))}</span><select data-link-rule-index="${index}" data-link-rule-field="width">${lineWidthOptions(rule.width)}</select></label>
@@ -1072,11 +1170,12 @@ function firstConfigurableLinkField() {
 function pruneLinkStyleRules() {
   const available = new Set(state.linkFields);
   const fallback = firstConfigurableLinkField();
-  state.linkStyleRules.forEach(rule => {
+  [...state.linkStyleRules, ...state.appliedLinkStyleRules].forEach(rule => {
     if (!available.has(rule.field)) {
       rule.field = fallback;
       rule.value = "";
     }
+    pruneRuleGroupFields(rule, available, fallback);
   });
 }
 
@@ -1479,6 +1578,7 @@ function collectValueOptions(rows, field, limit = 120) {
 function refreshAll() {
   updateFieldSelectors();
   updateSuggestions();
+  updateRuleSummaries();
   renderTopologies();
   updateTable();
 }
@@ -1492,6 +1592,27 @@ function updateFieldSelectors() {
   renderLinkStyleRules();
   updateConditionValueSuggestions("highlight");
   updateConditionValueSuggestions("filter");
+  updateRuleSummaries();
+}
+
+function updateRuleSummaries() {
+  if (el.highlightRuleSummary) el.highlightRuleSummary.textContent = ruleSummary(state.highlightRule);
+  if (el.filterRuleSummary) el.filterRuleSummary.textContent = ruleSummary(state.filterRule);
+}
+
+function ruleSummary(rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return t("noConditionRule");
+  if (group.conditions.length === 1) {
+    const condition = group.conditions[0];
+    return `${condition.field} ${operatorLabel(condition.op)} ${condition.value || ""}`.trim();
+  }
+  return t(group.mode === "any" ? "conditionSummaryAny" : "conditionSummaryAll", { count: group.conditions.length });
+}
+
+function operatorLabel(op) {
+  const found = OPS.find(([value]) => value === op);
+  return found ? t(found[1]) : op;
 }
 
 function updateTableFieldSelector() {
@@ -1533,7 +1654,59 @@ function readRule(prefix) {
   };
 }
 
+function ruleGroupFromQuickControls(prefix) {
+  return normalizeRuleGroup({
+    mode: "all",
+    conditions: [readRule(prefix)]
+  });
+}
+
+function normalizeRuleGroup(rule) {
+  if (!rule) return null;
+
+  const conditions = Array.isArray(rule.conditions)
+    ? rule.conditions
+    : [rule];
+  const normalized = conditions
+    .map(condition => ({
+      field: condition.field || "",
+      op: condition.op || "contains",
+      value: condition.value || ""
+    }))
+    .filter(condition => condition.field);
+
+  if (!normalized.length) return null;
+  return {
+    mode: rule.mode === "any" ? "any" : "all",
+    conditions: normalized
+  };
+}
+
+function pruneRuleGroupFields(rule, available, fallback) {
+  if (!Array.isArray(rule.conditions)) return;
+  rule.conditions.forEach(condition => {
+    if (!available.has(condition.field)) {
+      condition.field = fallback;
+      condition.value = "";
+    }
+  });
+  const first = rule.conditions[0];
+  if (first) {
+    rule.field = first.field;
+    rule.op = first.op;
+    rule.value = first.value;
+  }
+}
+
 function matchesRule(row, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return true;
+
+  const checks = group.conditions.map(condition => matchesCondition(row, condition));
+  return group.mode === "any" ? checks.some(Boolean) : checks.every(Boolean);
+}
+
+function matchesCondition(row, rule) {
   if (!rule || !rule.field) return true;
 
   const value = String(row[rule.field] ?? "").trim();
@@ -1552,6 +1725,176 @@ function matchesRule(row, rule) {
   if (rule.op === "notEmpty") return value !== "";
 
   return true;
+}
+
+function openConditionModal(type, index = null) {
+  state.conditionModalType = type;
+  state.conditionModalTarget = { type, index };
+  state.conditionDraft = cloneRuleGroup(conditionTargetRule(type, index)) || quickRuleGroupForTarget(type) || emptyRuleGroup(conditionFieldsForTarget(type)[0]);
+  renderConditionModal();
+  el.conditionModal.classList.remove("hidden");
+}
+
+function closeConditionModal() {
+  el.conditionModal.classList.add("hidden");
+  state.conditionModalType = "";
+  state.conditionModalTarget = null;
+  state.conditionDraft = null;
+}
+
+function conditionTargetRule(type, index = null) {
+  if (type === "highlight" || type === "filter") return state[`${type}Rule`];
+  if (type === "nodeStyle") return state.nodeStyleRules[index];
+  if (type === "linkStyle") return state.linkStyleRules[index];
+  return null;
+}
+
+function quickRuleGroupForTarget(type) {
+  if (type === "highlight" || type === "filter") return ruleGroupFromQuickControls(type);
+  return null;
+}
+
+function conditionFieldsForTarget(type) {
+  return type === "linkStyle" ? state.linkFields : state.nodeFields;
+}
+
+function emptyRuleGroup(field = "") {
+  return {
+    mode: "all",
+    conditions: [{ field, op: "contains", value: "" }]
+  };
+}
+
+function cloneRuleGroup(rule) {
+  const group = normalizeRuleGroup(rule);
+  return group ? { mode: group.mode, conditions: group.conditions.map(condition => ({ ...condition })) } : null;
+}
+
+function renderConditionModal() {
+  const type = state.conditionModalType;
+  const draft = state.conditionDraft || emptyRuleGroup(conditionFieldsForTarget(type)[0]);
+  el.conditionModalTitle.textContent = conditionModalTitle(type);
+  el.conditionModeGroup.querySelectorAll("input[name='conditionMode']").forEach(input => {
+    input.checked = input.value === draft.mode;
+  });
+  el.conditionRuleList.innerHTML = draft.conditions.map((condition, index) => conditionRowMarkup(condition, index)).join("");
+  renderConditionHistory();
+}
+
+function conditionRowMarkup(condition, index) {
+  const fields = conditionFieldsForTarget(state.conditionModalType);
+  const fieldOptions = fields
+    .map(field => `<option value="${escapeAttr(field)}" ${field === condition.field ? "selected" : ""}>${escapeHtml(field)}</option>`)
+    .join("");
+  const opOptions = OPS
+    .map(([value, key]) => `<option value="${value}" ${value === condition.op ? "selected" : ""}>${escapeHtml(t(key))}</option>`)
+    .join("");
+  return `<div class="condition-row" data-condition-index="${index}">
+    <select data-condition-field>${fieldOptions}</select>
+    <select data-condition-op>${opOptions}</select>
+    <input data-condition-value value="${escapeAttr(condition.value || "")}" placeholder="${escapeAttr(t("conditionValue"))}">
+    <button type="button" data-remove-condition="${index}">${escapeHtml(t("removeCondition"))}</button>
+  </div>`;
+}
+
+function conditionModalTitle(type) {
+  if (type === "filter") return t("complexFilterTitle");
+  if (type === "nodeStyle") return t("nodeStyleRules");
+  if (type === "linkStyle") return t("linkStyleRules");
+  return t("complexHighlightTitle");
+}
+
+function applyRuleGroupToTarget(target, group) {
+  if (!target) return;
+  if (target.type === "highlight" || target.type === "filter") {
+    state[`${target.type}Rule`] = group;
+    return;
+  }
+
+  const rules = target.type === "nodeStyle" ? state.nodeStyleRules : state.linkStyleRules;
+  const rule = rules[target.index];
+  if (!rule || !group) return;
+
+  rule.mode = group.mode;
+  rule.conditions = group.conditions.map(condition => ({ ...condition }));
+  const first = group.conditions[0];
+  rule.field = first.field;
+  rule.op = first.op;
+  rule.value = first.value;
+  if (target.type === "nodeStyle") rule.label = rule.label || rule.value;
+}
+
+function renderConditionHistory() {
+  const type = state.conditionModalType;
+  const history = state.conditionHistory.filter(item => item.type === type);
+  if (!history.length) {
+    el.conditionHistoryList.innerHTML = `<span class="notice">${escapeHtml(t("noConditionHistory"))}</span>`;
+    return;
+  }
+
+  el.conditionHistoryList.innerHTML = history
+    .map((item, index) => `<button type="button" data-restore-condition="${index}" title="${escapeAttr(item.label)}">${escapeHtml(item.label)}</button>`)
+    .join("");
+}
+
+function restoreConditionHistory(event) {
+  const button = event.target.closest("[data-restore-condition]");
+  if (!button) return;
+
+  const history = state.conditionHistory.filter(item => item.type === state.conditionModalType);
+  const item = history[Number(button.getAttribute("data-restore-condition"))];
+  if (!item) return;
+  state.conditionDraft = cloneRuleGroup(item.rule);
+  renderConditionModal();
+}
+
+function syncConditionDraftFromModal() {
+  if (!state.conditionDraft) state.conditionDraft = emptyRuleGroup();
+  const checkedMode = el.conditionModeGroup.querySelector("input[name='conditionMode']:checked");
+  state.conditionDraft.mode = checkedMode ? checkedMode.value : "all";
+  state.conditionDraft.conditions = [...el.conditionRuleList.querySelectorAll(".condition-row")].map(row => ({
+    field: row.querySelector("[data-condition-field]").value,
+    op: row.querySelector("[data-condition-op]").value,
+    value: row.querySelector("[data-condition-value]").value
+  }));
+}
+
+function addConditionDraftRule() {
+  syncConditionDraftFromModal();
+  state.conditionDraft.conditions.push({ field: conditionFieldsForTarget(state.conditionModalType)[0] || "", op: "contains", value: "" });
+  renderConditionModal();
+}
+
+function removeConditionDraftRule(event) {
+  const button = event.target.closest("[data-remove-condition]");
+  if (!button) return;
+
+  syncConditionDraftFromModal();
+  const index = Number(button.getAttribute("data-remove-condition"));
+  state.conditionDraft.conditions.splice(index, 1);
+  if (!state.conditionDraft.conditions.length) state.conditionDraft.conditions.push({ field: conditionFieldsForTarget(state.conditionModalType)[0] || "", op: "contains", value: "" });
+  renderConditionModal();
+}
+
+function applyConditionModal() {
+  syncConditionDraftFromModal();
+  const target = state.conditionModalTarget || { type: state.conditionModalType, index: null };
+  const type = target.type;
+  const group = normalizeRuleGroup(state.conditionDraft);
+  applyRuleGroupToTarget(target, group);
+  if (group && (type === "highlight" || type === "filter")) {
+    const first = group.conditions[0];
+    el[`${type}Field`].value = first.field;
+    el[`${type}Op`].value = first.op;
+    el[`${type}Value`].value = first.value || "";
+    group.conditions.forEach(condition => rememberSearchHistory(type, condition.value));
+  }
+  if (group) rememberConditionHistory(type, group);
+  updateRuleSummaries();
+  renderNodeStyleRules();
+  renderLinkStyleRules();
+  closeConditionModal();
+  renderTopologies();
 }
 
 function applyBulkQuery() {
@@ -1703,6 +2046,18 @@ function getVisibleData() {
   return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, highlightNames, highlightLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
 }
 
+function highlightDimOpacity(kind) {
+  const value = Number(state.highlightContrast);
+  const contrast = clamp(Number.isFinite(value) ? value : DEFAULT_HIGHLIGHT_CONTRAST, 0, 1);
+  const baseOpacity = {
+    linkBase: 0.82,
+    linkLine: 0.86,
+    nodeFill: 0.95,
+    node: 1
+  };
+  return (baseOpacity[kind] ?? 1) * (1 - contrast);
+}
+
 function renderTopologies() {
   const data = getVisibleData();
   el.emptyState.classList.toggle("hidden", state.nodes.length > 0);
@@ -1724,6 +2079,10 @@ function renderMap(data) {
   state.mapLayers = { nodes: [], links: [], routes: [] };
 
   const hasHighlight = data.highlightNames.size > 0;
+  const dimLinkBaseOpacity = highlightDimOpacity("linkBase");
+  const dimLinkLineOpacity = highlightDimOpacity("linkLine");
+  const dimNodeFillOpacity = highlightDimOpacity("nodeFill");
+  const dimNodeOpacity = highlightDimOpacity("node");
   const bounds = state.map.getBounds().pad(0.18);
   const shouldClip = data.nodes.length > PERF.mapNodeLimit || data.links.length > PERF.mapLinkLimit;
   const mapNodes = shouldClip
@@ -1757,20 +2116,18 @@ function renderMap(data) {
     const userStyle = resolveLinkStyle(link);
     const visualStyle = selectedLink
       ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
-      : related
-        ? { ...userStyle, color: state.highlightStyle.linkColor, weight: Math.max(userStyle.weight + 1.2, 4.2) }
-        : userStyle;
+      : userStyle;
     const points = [[Number(src.Latitude), Number(src.Longitude)], [Number(sink.Latitude), Number(sink.Longitude)]];
     const base = L.polyline(points, {
       color: "#ffffff",
       weight: visualStyle.weight + 3,
-      opacity: hasHighlight && !related ? 0.20 : 0.82
+      opacity: hasHighlight && !related ? dimLinkBaseOpacity : 0.82
     }).addTo(state.map);
     const line = L.polyline(points, {
       color: visualStyle.color,
       weight: visualStyle.weight,
       dashArray: visualStyle.dashArray,
-      opacity: hasHighlight && !related ? 0.22 : 0.86
+      opacity: hasHighlight && !related ? dimLinkLineOpacity : 0.86
     }).addTo(state.map);
 
     line.bindTooltip(`${link["Src NE Name"]} ⇄ ${link["Sink NE Name"]}`);
@@ -1791,16 +2148,16 @@ function renderMap(data) {
     const selected = state.selectedName === name;
     const neighbor = data.selectedNeighborNames.has(name);
     const highlighted = data.highlightNames.has(name);
-    const active = selected || highlighted || neighbor;
-    const dim = hasHighlight && !active;
-    const radius = mapNodeRadius(degreeMap.get(name) || 0, node, highlighted, active);
+    const active = selected || neighbor;
+    const dim = hasHighlight && !highlighted && !active;
+    const radius = mapNodeRadius(degreeMap.get(name) || 0, node, active);
     const point = [Number(node.Latitude), Number(node.Longitude)];
-    const marker = createMapNodeLayer(point, radius, nodeShape(node, highlighted), {
-      fillColor: nodeFill(node, highlighted),
-      color: selected ? "#245a6e" : neighbor ? "#2f6f86" : highlighted ? state.highlightStyle.color : "#ffffff",
+    const marker = createMapNodeLayer(point, radius, nodeShape(node), {
+      fillColor: nodeFill(node),
+      color: selected ? "#245a6e" : neighbor ? "#2f6f86" : "#ffffff",
       weight: active ? 3 : 2.4,
-      fillOpacity: dim ? 0.30 : 0.95,
-      opacity: dim ? 0.36 : 1
+      fillOpacity: dim ? dimNodeFillOpacity : 0.95,
+      opacity: dim ? dimNodeOpacity : 1
     }).addTo(state.map);
 
     marker.bindTooltip(name, { permanent: false, direction: "top", className: "node-tip" });
@@ -1985,6 +2342,8 @@ function renderLogic(data = getVisibleData()) {
   }
 
   const hasHighlight = data.highlightNames.size > 0;
+  svg.style.setProperty("--logic-link-dim-opacity", String(highlightDimOpacity("linkLine")));
+  svg.style.setProperty("--logic-node-dim-opacity", String(highlightDimOpacity("node")));
   const degreeMap = getNodeDegreeMap(data.links);
   const connectedNodes = data.nodes.filter(node => (degreeMap.get(node["NE Name"]) || 0) > 0);
   const isolatedNodes = data.nodes.filter(node => (degreeMap.get(node["NE Name"]) || 0) === 0);
@@ -2007,9 +2366,7 @@ function renderLogic(data = getVisibleData()) {
     const userStyle = resolveLinkStyle(link);
     const visualStyle = selectedLink
       ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
-      : related
-        ? { ...userStyle, color: state.highlightStyle.linkColor, weight: Math.max(userStyle.weight + 1.2, 3.2) }
-        : userStyle;
+      : userStyle;
     const style = ` style="stroke:${escapeAttr(visualStyle.color)};stroke-width:${visualStyle.weight};${visualStyle.dashArray ? `stroke-dasharray:${escapeAttr(visualStyle.dashArray)};` : ""}"`;
     return `<line class="${cls}"${style} x1="${src.x}" y1="${src.y}" x2="${sink.x}" y2="${sink.y}" data-link="${index}"></line>`;
   }).join("");
@@ -2022,10 +2379,10 @@ function renderLogic(data = getVisibleData()) {
     const selected = state.selectedName === name;
     const neighbor = data.selectedNeighborNames.has(name);
     const highlighted = data.highlightNames.has(name);
-    const radius = logicNodeRadius(degreeMap.get(name) || 0, node, highlighted);
+    const radius = logicNodeRadius(degreeMap.get(name) || 0, node);
     const cls = `logic-node ${selected ? "selected" : ""} ${neighbor ? "neighbor" : ""} ${highlighted ? "highlight" : ""} ${hasHighlight && !highlighted && !selected && !neighbor ? "dim" : ""}`;
-    const shapeMarkup = svgShapeMarkup(nodeShape(node, highlighted), radius, nodeFill(node, highlighted));
-    const style = highlighted && !selected && !neighbor ? ` style="--node-highlight:${escapeAttr(state.highlightStyle.color)}"` : "";
+    const shapeMarkup = svgShapeMarkup(nodeShape(node), radius, nodeFill(node));
+    const style = "";
     return `<g class="${cls}"${style} data-node="${escapeAttr(name)}" transform="translate(${position.x},${position.y})">
       ${shapeMarkup}
       <text x="${radius + 7}" y="4">${escapeHtml(name)}</text>
@@ -2669,8 +3026,8 @@ function getNodeDegreeMap(links) {
 
 function resolveLinkStyle(link) {
   const style = { ...DEFAULT_LINK_STYLE };
-  state.linkStyleRules.forEach(rule => {
-    if (!rule.field || !matchesRule(link, rule)) return;
+  state.appliedLinkStyleRules.forEach(rule => {
+    if (!normalizeRuleGroup(rule) || !matchesRule(link, rule)) return;
     style.color = normalizeColor(rule.color, style.color);
     style.lineStyle = LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : style.lineStyle;
     style.width = LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : style.width;
@@ -2695,13 +3052,13 @@ function linkDashArray(lineStyle) {
   return "";
 }
 
-function logicNodeRadius(degree, node, highlighted) {
-  const base = highlighted ? state.highlightStyle.size : resolveNodeStyle(node).size;
+function logicNodeRadius(degree, node) {
+  const base = resolveNodeStyle(node).size;
   return clamp(base / 2 + Math.sqrt(degree) * 1.4, 4, 22);
 }
 
-function mapNodeRadius(degree, node, highlighted, active) {
-  const base = highlighted ? state.highlightStyle.size : resolveNodeStyle(node).size;
+function mapNodeRadius(degree, node, active) {
+  const base = resolveNodeStyle(node).size;
   return clamp(base / 2 + Math.sqrt(degree) * 0.9 + (active ? 1.5 : 0), 4, 22);
 }
 
@@ -2709,7 +3066,7 @@ function resolveNodeStyle(node) {
   const roleKey = String(node.Role || "").trim().toUpperCase();
   const style = { ...(state.roleStyles[roleKey] || state.roleStyles.OTHER || DEFAULT_NODE_STYLE) };
   state.appliedNodeStyleRules.forEach(rule => {
-    if (!rule.field || !matchesRule(node, rule)) return;
+    if (!normalizeRuleGroup(rule) || !matchesRule(node, rule)) return;
     style.color = normalizeColor(rule.color, style.color);
     style.size = clamp(Number(rule.size) || style.size, 4, 40);
     style.shape = normalizeShape(rule.shape, style.shape);
@@ -2718,12 +3075,12 @@ function resolveNodeStyle(node) {
   return style;
 }
 
-function nodeShape(node, highlighted) {
-  return highlighted ? state.highlightStyle.shape : resolveNodeStyle(node).shape;
+function nodeShape(node) {
+  return resolveNodeStyle(node).shape;
 }
 
-function nodeFill(node, highlighted) {
-  return highlighted ? state.highlightStyle.color : resolveNodeStyle(node).color;
+function nodeFill(node) {
+  return resolveNodeStyle(node).color;
 }
 
 function cloneStyles(styles) {
