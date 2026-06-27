@@ -2060,7 +2060,7 @@ function getVisibleData() {
       if (matchesRule(node, state.highlightRule)) highlightNames.add(node["NE Name"]);
     });
     links.forEach(link => {
-      if (highlightNames.has(link["Src NE Name"]) || highlightNames.has(link["Sink NE Name"])) {
+      if (highlightNames.has(link["Src NE Name"]) && highlightNames.has(link["Sink NE Name"])) {
         highlightLinkKeys.add(linkKey(link));
       }
     });
@@ -2242,12 +2242,17 @@ function renderRouteCanvas(mapLinks, data) {
   const selectedKey = state.selectedRouteKey || state.selectedLinkKey;
   const baseWidth = linkWeight(state.routePathStyle.width);
   const routeOpacity = clamp(Number(state.routePathStyle.opacity) || DEFAULT_ROUTE_PATH_STYLE.opacity, 0.1, 1);
+  const hasHighlight = data.highlightNames.size > 0;
+  const highlightContrast = Number(state.highlightContrast);
+  const dimRouteOpacity = routeOpacity * (1 - clamp(Number.isFinite(highlightContrast) ? highlightContrast : DEFAULT_HIGHLIGHT_CONTRAST, 0, 1));
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   applyCanvasDash(ctx, state.routePathStyle.lineStyle);
   entries.forEach(entry => {
     if (selectedKey && entry.key === selectedKey) return;
-    drawRoutePath(ctx, entry.points, topLeft, state.routePathStyle.color, baseWidth, selectedKey ? Math.max(0.08, routeOpacity * 0.28) : routeOpacity);
+    const related = data.highlightLinkKeys.has(entry.key);
+    const opacity = hasHighlight && !related ? dimRouteOpacity : selectedKey ? Math.max(0.08, routeOpacity * 0.28) : routeOpacity;
+    drawRoutePath(ctx, entry.points, topLeft, state.routePathStyle.color, baseWidth, opacity);
   });
 
   if (selectedKey) {
