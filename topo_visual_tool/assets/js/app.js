@@ -1,5 +1,7 @@
 const REQUIRED_NE = ["NE Name", "Role", "Longitude", "Latitude"];
 const REQUIRED_LINK = ["Src NE Name", "Sink NE Name"];
+const REQUIRED_RING_CHAIN = ["Category", "Name", "Root1", "Root2", "Label", "Member_num", "Member_path", "Uplink_pair", "Belong_agg"];
+const CONDITION_SOURCES = { NODES: "nodes", RING_CHAINS: "ringChains" };
 const ROLE_ORDER = ["CSG", "ASG", "PE"];
 const SHAPES = ["circle", "square", "diamond", "triangle"];
 const DEFAULT_ROLE_STYLES = {
@@ -55,12 +57,15 @@ const I18N = {
     sectionUpload: "数据上传",
     deviceTable: "网元表",
     linkTable: "链路表",
+    ringChainTable: "环链表",
     parseUpload: "解析上传数据",
     loadMock: "加载 Mock",
     requiredFields: "必选字段：NE Name、Role、Longitude、Latitude、Src NE Name、Sink NE Name。",
     sectionStats: "统计",
     devices: "网元",
     links: "链路",
+    rings: "环",
+    chains: "链",
     visibleDevices: "当前显示网元",
     visibleLinks: "当前显示链路",
     sectionLegend: "节点图例",
@@ -106,6 +111,8 @@ const I18N = {
     leafletMissing: "Leaflet 未加载，GIS 地图不可用；可使用 Logic Topo。",
     chooseBoth: "请同时选择网元表和链路表。",
     uploadDone: "上传数据解析完成。",
+    uploadDoneWithRingChain: "上传数据解析完成，环链表已缓存：{rings} 个环，{chains} 条链。",
+    ringChainMissingMembers: "环链表有 {count} 个 Member_path 网元未在网元表中找到，已忽略。",
     fileReadFail: "读取文件失败。",
     xlsxMissing: "XLSX 解析库未加载，请确认网络可访问 CDN。",
     unsupportedFile: "仅支持 csv、xlsx、xls 文件。",
@@ -118,6 +125,7 @@ const I18N = {
     viewStatus: "显示 {visibleDevices}/{devices} 网元，{visibleLinks}/{links} 链路",
     invalidCoord: "{count} 个网元坐标无效",
     brokenLinks: "{count} 条链路端点缺失",
+    ringChainMemberMissing: "{count} 个环链成员缺失",
     noData: "暂无数据。",
     operation: "操作",
     delete: "删除",
@@ -181,6 +189,13 @@ const I18N = {
     conditionHistory: "历史条件",
     noConditionHistory: "暂无历史条件",
     noLinkStyleRule: "暂无链路样式规则",
+    ringChainStyleRules: "环链样式规则",
+    addRingChainStyleRule: "新增环链规则",
+    applyRingChainStyleRules: "应用环链规则",
+    noRingChainStyleRule: "暂无环链样式规则",
+    conditionSource: "条件来源",
+    conditionSourceNodes: "网元字段",
+    conditionSourceRingChains: "环链字段",
     nodeRuleField: "字段",
     nodeRuleOp: "条件",
     nodeRuleValue: "取值",
@@ -199,12 +214,15 @@ const I18N = {
     sectionUpload: "Data Upload",
     deviceTable: "Device Table",
     linkTable: "Link Table",
+    ringChainTable: "Ring/Chain Table",
     parseUpload: "Parse Upload",
     loadMock: "Load Mock",
     requiredFields: "Required fields: NE Name, Role, Longitude, Latitude, Src NE Name, Sink NE Name.",
     sectionStats: "Statistics",
     devices: "Devices",
     links: "Links",
+    rings: "Rings",
+    chains: "Chains",
     visibleDevices: "Visible Devices",
     visibleLinks: "Visible Links",
     sectionLegend: "Node Legend",
@@ -250,6 +268,8 @@ const I18N = {
     leafletMissing: "Leaflet is not loaded. GIS map is unavailable; Logic Topo is still available.",
     chooseBoth: "Please choose both device and link tables.",
     uploadDone: "Uploaded data parsed.",
+    uploadDoneWithRingChain: "Uploaded data parsed. Ring/chain table cached: {rings} rings, {chains} chains.",
+    ringChainMissingMembers: "{count} Member_path devices in the ring/chain table were not found in the device table and were ignored.",
     fileReadFail: "Failed to read file.",
     xlsxMissing: "XLSX parser is not loaded. Please check CDN network access.",
     unsupportedFile: "Only csv, xlsx and xls files are supported.",
@@ -262,6 +282,7 @@ const I18N = {
     viewStatus: "Showing {visibleDevices}/{devices} devices, {visibleLinks}/{links} links",
     invalidCoord: "{count} devices have invalid coordinates",
     brokenLinks: "{count} links have missing endpoints",
+    ringChainMemberMissing: "{count} ring/chain members missing",
     noData: "No data.",
     operation: "Action",
     delete: "Delete",
@@ -325,6 +346,13 @@ const I18N = {
     conditionHistory: "Condition history",
     noConditionHistory: "No condition history",
     noLinkStyleRule: "No link style rules",
+    ringChainStyleRules: "Ring/Chain Style Rules",
+    addRingChainStyleRule: "Add Ring/Chain Rule",
+    applyRingChainStyleRules: "Apply Ring/Chain Rules",
+    noRingChainStyleRule: "No ring/chain style rules",
+    conditionSource: "Condition Source",
+    conditionSourceNodes: "Device Fields",
+    conditionSourceRingChains: "Ring/Chain Fields",
     nodeRuleField: "Field",
     nodeRuleOp: "Condition",
     nodeRuleValue: "Value",
@@ -341,8 +369,10 @@ const state = {
   lang: "zh",
   nodes: [],
   links: [],
+  ringChains: [],
   nodeFields: [...REQUIRED_NE],
   linkFields: [...REQUIRED_LINK],
+  ringChainFields: [...REQUIRED_RING_CHAIN],
   view: "gis",
   table: "nodes",
   selectedName: "",
@@ -356,6 +386,8 @@ const state = {
   appliedNodeStyleRules: [],
   linkStyleRules: [],
   appliedLinkStyleRules: [],
+  ringChainStyleRules: [],
+  appliedRingChainStyleRules: [],
   routePathStyle: { ...DEFAULT_ROUTE_PATH_STYLE },
   highlightContrast: DEFAULT_HIGHLIGHT_CONTRAST,
   conditionModalType: "",
@@ -371,11 +403,14 @@ const state = {
   indexes: {
     nodeByName: new Map(),
     upperNameToName: new Map(),
-    linksByNode: new Map()
+    linksByNode: new Map(),
+    ringChainMembersByName: new Map(),
+    ringChainSegmentsByName: new Map()
   },
   quality: {
     missingCoord: 0,
-    brokenLinks: 0
+    brokenLinks: 0,
+    missingRingChainMembers: 0
   },
   map: null,
   tileLayer: null,
@@ -386,6 +421,10 @@ const state = {
   lightBasemap: false,
   mapLayers: { nodes: [], links: [], routes: [] },
   routeHitEntries: [],
+  ringChainStyleCache: {
+    key: "",
+    styles: new Map()
+  },
   logic: {
     positions: new Map(),
     layoutKey: "",
@@ -557,6 +596,7 @@ function bindEvents() {
   el.cancelConditionModalBtn.addEventListener("click", closeConditionModal);
   el.addConditionRuleBtn.addEventListener("click", addConditionDraftRule);
   el.applyConditionModalBtn.addEventListener("click", applyConditionModal);
+  el.conditionSourceSelect.addEventListener("change", updateConditionSourceFromControl);
   el.conditionRuleList.addEventListener("change", updateConditionRowSuggestions);
   el.conditionRuleList.addEventListener("click", removeConditionDraftRule);
   el.conditionHistoryList.addEventListener("click", restoreConditionHistory);
@@ -617,6 +657,7 @@ function applyLanguage() {
   renderRoleStyleEditor();
   renderNodeStyleRules();
   renderLinkStyleRules();
+  renderRingChainStyleRules();
   updateRuleSummaries();
   if (!el.conditionModal.classList.contains("hidden")) renderConditionModal();
 }
@@ -824,6 +865,11 @@ function initStyleControls() {
   el.linkStyleRuleList.addEventListener("input", updateLinkStyleRuleFromControl);
   el.linkStyleRuleList.addEventListener("change", updateLinkStyleRuleFromControl);
   el.linkStyleRuleList.addEventListener("click", removeLinkStyleRule);
+  el.addRingChainStyleRuleBtn.addEventListener("click", addRingChainStyleRule);
+  el.applyRingChainStyleRulesBtn.addEventListener("click", applyRingChainStyleRules);
+  el.ringChainStyleRuleList.addEventListener("input", updateRingChainStyleRuleFromControl);
+  el.ringChainStyleRuleList.addEventListener("change", updateRingChainStyleRuleFromControl);
+  el.ringChainStyleRuleList.addEventListener("click", removeRingChainStyleRule);
   el.highlightContrastInput.value = state.highlightContrast;
   el.highlightContrastInput.addEventListener("input", updateHighlightContrastFromControl);
   el.highlightContrastInput.addEventListener("change", updateHighlightContrastFromControl);
@@ -879,6 +925,8 @@ function resetStyleControls() {
   state.appliedNodeStyleRules = [];
   state.linkStyleRules = [];
   state.appliedLinkStyleRules = [];
+  state.ringChainStyleRules = [];
+  state.appliedRingChainStyleRules = [];
   state.routePathStyle = { ...DEFAULT_ROUTE_PATH_STYLE };
   state.highlightContrast = DEFAULT_HIGHLIGHT_CONTRAST;
   el.highlightContrastInput.value = state.highlightContrast;
@@ -891,6 +939,7 @@ function resetStyleControls() {
   updateNodeLegend();
   renderNodeStyleRules();
   renderLinkStyleRules();
+  renderRingChainStyleRules();
   renderTopologies();
 }
 
@@ -1145,6 +1194,61 @@ function applyLinkStyleRules() {
   renderTopologies();
 }
 
+function addRingChainStyleRule() {
+  if (!state.ringChains.length) return;
+  const field = firstConfigurableRingChainField();
+  state.ringChainStyleRules.push({
+    source: CONDITION_SOURCES.RING_CHAINS,
+    field,
+    op: "eq",
+    value: "",
+    mode: "all",
+    conditions: [{ field, op: "eq", value: "" }],
+    color: DEFAULT_LINK_STYLE.color,
+    lineStyle: DEFAULT_LINK_STYLE.lineStyle,
+    width: DEFAULT_LINK_STYLE.width
+  });
+  renderRingChainStyleRules();
+}
+
+function removeRingChainStyleRule(event) {
+  const editButton = event.target.closest("[data-edit-ring-chain-rule-condition]");
+  if (editButton) {
+    openConditionModal("ringChainStyle", Number(editButton.getAttribute("data-edit-ring-chain-rule-condition")));
+    return;
+  }
+
+  const button = event.target.closest("[data-remove-ring-chain-rule]");
+  if (!button) return;
+
+  const index = Number(button.getAttribute("data-remove-ring-chain-rule"));
+  if (!Number.isInteger(index)) return;
+  state.ringChainStyleRules.splice(index, 1);
+  renderRingChainStyleRules();
+}
+
+function updateRingChainStyleRuleFromControl(event) {
+  const input = event.target;
+  const index = Number(input.getAttribute("data-ring-chain-rule-index"));
+  const field = input.getAttribute("data-ring-chain-rule-field");
+  if (!Number.isInteger(index) || !field || !state.ringChainStyleRules[index]) return;
+
+  const rule = state.ringChainStyleRules[index];
+  if (field === "color") {
+    rule.color = normalizeColor(input.value, DEFAULT_LINK_STYLE.color);
+  } else if (field === "lineStyle") {
+    rule.lineStyle = LINE_STYLE_VALUES.includes(input.value) ? input.value : DEFAULT_LINK_STYLE.lineStyle;
+  } else if (field === "width") {
+    rule.width = LINE_WIDTH_VALUES.includes(input.value) ? input.value : DEFAULT_LINK_STYLE.width;
+  }
+}
+
+function applyRingChainStyleRules() {
+  state.appliedRingChainStyleRules = cloneRuleList(state.ringChainStyleRules);
+  clearRingChainStyleCache();
+  renderTopologies();
+}
+
 function renderLinkStyleRules() {
   if (!el.linkStyleRuleList) return;
 
@@ -1164,14 +1268,54 @@ function renderLinkStyleRules() {
   }).join("");
 }
 
+function renderRingChainStyleRules() {
+  if (!el.ringChainStyleGroup || !el.ringChainStyleRuleList) return;
+
+  const available = state.ringChains.length > 0;
+  el.ringChainStyleGroup.classList.toggle("hidden", !available);
+  if (!available) return;
+
+  if (!state.ringChainStyleRules.length) {
+    el.ringChainStyleRuleList.innerHTML = `<div class="empty-rule">${escapeHtml(t("noRingChainStyleRule"))}</div>`;
+    return;
+  }
+
+  el.ringChainStyleRuleList.innerHTML = state.ringChainStyleRules.map((rule, index) => {
+    return `<div class="link-style-rule" data-ring-chain-style-rule="${index}">
+      <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-ring-chain-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
+      <label><span>${escapeHtml(t("linkRuleColor"))}</span><input type="color" value="${escapeAttr(rule.color || DEFAULT_LINK_STYLE.color)}" data-ring-chain-rule-index="${index}" data-ring-chain-rule-field="color"></label>
+      <label><span>${escapeHtml(t("linkRuleLineStyle"))}</span><select data-ring-chain-rule-index="${index}" data-ring-chain-rule-field="lineStyle">${lineStyleOptions(rule.lineStyle)}</select></label>
+      <label><span>${escapeHtml(t("linkRuleWidth"))}</span><select data-ring-chain-rule-index="${index}" data-ring-chain-rule-field="width">${lineWidthOptions(rule.width)}</select></label>
+      <button type="button" data-remove-ring-chain-rule="${index}" title="${escapeAttr(t("removeRule"))}">${escapeHtml(t("removeRule"))}</button>
+    </div>`;
+  }).join("");
+}
+
 function firstConfigurableLinkField() {
   return state.linkFields.find(field => !REQUIRED_LINK.includes(field)) || state.linkFields[0] || REQUIRED_LINK[0];
+}
+
+function firstConfigurableRingChainField() {
+  return state.ringChainFields.find(field => !["Member_path"].includes(field)) || state.ringChainFields[0] || REQUIRED_RING_CHAIN[0];
 }
 
 function pruneLinkStyleRules() {
   const available = new Set(state.linkFields);
   const fallback = firstConfigurableLinkField();
   [...state.linkStyleRules, ...state.appliedLinkStyleRules].forEach(rule => {
+    if (!available.has(rule.field)) {
+      rule.field = fallback;
+      rule.value = "";
+    }
+    pruneRuleGroupFields(rule, available, fallback);
+  });
+}
+
+function pruneRingChainStyleRules() {
+  const available = new Set(state.ringChainFields);
+  const fallback = firstConfigurableRingChainField();
+  [...state.ringChainStyleRules, ...state.appliedRingChainStyleRules].forEach(rule => {
+    rule.source = CONDITION_SOURCES.RING_CHAINS;
     if (!available.has(rule.field)) {
       rule.field = fallback;
       rule.value = "";
@@ -1250,6 +1394,7 @@ function switchTopoView(view) {
 async function loadUploadedFiles() {
   const neFile = el.neFile.files[0];
   const linkFile = el.linkFile.files[0];
+  const ringChainFile = el.ringChainFile && el.ringChainFile.files[0];
 
   if (!neFile || !linkFile) {
     setMessage(el.uploadMessage, t("chooseBoth"), "error");
@@ -1257,9 +1402,18 @@ async function loadUploadedFiles() {
   }
 
   try {
-    const [nodes, links] = await Promise.all([readDataFile(neFile), readDataFile(linkFile)]);
-    setData(nodes, links);
-    setMessage(el.uploadMessage, t("uploadDone"), "ok");
+    const reads = [readDataFile(neFile), readDataFile(linkFile)];
+    if (ringChainFile) reads.push(readDataFile(ringChainFile));
+    const [nodes, links, ringChains = []] = await Promise.all(reads);
+    setData(nodes, links, ringChainFile ? ringChains : []);
+    const stats = ringChainStats();
+    const message = ringChainFile
+      ? [
+        t("uploadDoneWithRingChain", { rings: stats.rings, chains: stats.chains }),
+        state.quality.missingRingChainMembers ? t("ringChainMissingMembers", { count: state.quality.missingRingChainMembers }) : ""
+      ].filter(Boolean).join(state.lang === "zh" ? "；" : "; ")
+      : t("uploadDone");
+    setMessage(el.uploadMessage, message, state.quality.missingRingChainMembers ? "warning" : "ok");
   } catch (error) {
     setMessage(el.uploadMessage, error.message || String(error), "error");
   }
@@ -1482,18 +1636,23 @@ function formatCoord(value) {
   return Number(value).toFixed(7).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function setData(nodes, links) {
+function setData(nodes, links, ringChains = []) {
   const normalizedNodes = nodes.map(normalizeRow);
   const normalizedLinks = links.map(normalizeRow);
+  const normalizedRingChains = ringChains.map(normalizeRow);
   validateRows(normalizedNodes, REQUIRED_NE, t("deviceTable"));
   validateRows(normalizedLinks, REQUIRED_LINK, t("linkTable"));
+  if (normalizedRingChains.length) validateRows(normalizedRingChains, REQUIRED_RING_CHAIN, t("ringChainTable"));
 
   state.nodes = normalizedNodes;
   state.links = normalizedLinks;
+  state.ringChains = normalizedRingChains;
   state.nodeFields = collectFields(state.nodes, REQUIRED_NE);
   state.linkFields = collectFields(state.links, REQUIRED_LINK);
+  state.ringChainFields = collectFields(state.ringChains, REQUIRED_RING_CHAIN);
   pruneNodeStyleRules();
   pruneLinkStyleRules();
+  pruneRingChainStyleRules();
   rebuildIndexes();
   state.selectedName = "";
   state.selectedLinkKey = "";
@@ -1502,6 +1661,9 @@ function setData(nodes, links) {
   state.highlightRule = null;
   state.filterRule = null;
   state.bulkQuery = null;
+  state.ringChainStyleRules = state.ringChains.length ? state.ringChainStyleRules : [];
+  state.appliedRingChainStyleRules = state.ringChains.length ? state.appliedRingChainStyleRules : [];
+  clearRingChainStyleCache();
 
   state.logic.positions = new Map();
   state.logic.layoutKey = "";
@@ -1514,6 +1676,8 @@ function rebuildIndexes() {
   const nodeByName = new Map();
   const upperNameToName = new Map();
   const linksByNode = new Map();
+  const ringChainMembersByName = new Map();
+  const ringChainSegmentsByName = new Map();
   state.nodes.forEach(node => {
     const name = node["NE Name"];
     if (!name) return;
@@ -1531,8 +1695,26 @@ function rebuildIndexes() {
   });
   const missingCoord = state.nodes.filter(node => !hasCoord(node)).length;
   const brokenLinks = state.links.filter(link => !nodeByName.has(link["Src NE Name"]) || !nodeByName.has(link["Sink NE Name"])).length;
-  state.indexes = { nodeByName, upperNameToName, linksByNode };
-  state.quality = { missingCoord, brokenLinks };
+  const missingRingChainMemberNames = new Set();
+  state.ringChains.forEach((row, index) => {
+    const rowKey = ringChainRowKey(row, index);
+    const members = parseMemberPath(row.Member_path);
+    const validMembers = members.filter(name => {
+      const exists = nodeByName.has(name);
+      if (!exists) missingRingChainMemberNames.add(name);
+      return exists;
+    });
+    const segments = [];
+    for (let i = 1; i < members.length; i++) {
+      if (nodeByName.has(members[i - 1]) && nodeByName.has(members[i])) {
+        segments.push(linkPairKey(members[i - 1], members[i]));
+      }
+    }
+    ringChainMembersByName.set(rowKey, validMembers);
+    ringChainSegmentsByName.set(rowKey, segments);
+  });
+  state.indexes = { nodeByName, upperNameToName, linksByNode, ringChainMembersByName, ringChainSegmentsByName };
+  state.quality = { missingCoord, brokenLinks, missingRingChainMembers: missingRingChainMemberNames.size };
 }
 
 function isLargeDataset() {
@@ -1576,6 +1758,17 @@ function collectValueOptions(rows, field, limit = 120) {
   return values.sort((a, b) => a.localeCompare(b));
 }
 
+function parseMemberPath(value) {
+  return String(value || "")
+    .split("->")
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function ringChainRowKey(row, index) {
+  return String(row && row.Name || "").trim() || `ring-chain-${index}`;
+}
+
 function refreshAll() {
   updateFieldSelectors();
   updateSuggestions();
@@ -1591,6 +1784,7 @@ function updateFieldSelectors() {
   updateTableFieldSelector();
   renderNodeStyleRules();
   renderLinkStyleRules();
+  renderRingChainStyleRules();
   updateConditionValueSuggestions("highlight");
   updateConditionValueSuggestions("filter");
   updateRuleSummaries();
@@ -1604,11 +1798,12 @@ function updateRuleSummaries() {
 function ruleSummary(rule) {
   const group = normalizeRuleGroup(rule);
   if (!group) return t("noConditionRule");
+  const prefix = group.source === CONDITION_SOURCES.RING_CHAINS ? `${t("conditionSourceRingChains")} / ` : "";
   if (group.conditions.length === 1) {
     const condition = group.conditions[0];
-    return `${condition.field} ${operatorLabel(condition.op)} ${condition.value || ""}`.trim();
+    return `${prefix}${condition.field} ${operatorLabel(condition.op)} ${condition.value || ""}`.trim();
   }
-  return t(group.mode === "any" ? "conditionSummaryAny" : "conditionSummaryAll", { count: group.conditions.length });
+  return `${prefix}${t(group.mode === "any" ? "conditionSummaryAny" : "conditionSummaryAll", { count: group.conditions.length })}`;
 }
 
 function operatorLabel(op) {
@@ -1649,6 +1844,7 @@ function updateSuggestions() {
 
 function readRule(prefix) {
   return {
+    source: CONDITION_SOURCES.NODES,
     field: el[`${prefix}Field`].value,
     op: el[`${prefix}Op`].value,
     value: el[`${prefix}Value`].value
@@ -1665,6 +1861,7 @@ function ruleGroupFromQuickControls(prefix) {
 function normalizeRuleGroup(rule) {
   if (!rule) return null;
 
+  const source = normalizeConditionSource(rule.source);
   const conditions = Array.isArray(rule.conditions)
     ? rule.conditions
     : [rule];
@@ -1678,9 +1875,14 @@ function normalizeRuleGroup(rule) {
 
   if (!normalized.length) return null;
   return {
+    source,
     mode: rule.mode === "any" ? "any" : "all",
     conditions: normalized
   };
+}
+
+function normalizeConditionSource(source) {
+  return source === CONDITION_SOURCES.RING_CHAINS ? CONDITION_SOURCES.RING_CHAINS : CONDITION_SOURCES.NODES;
 }
 
 function pruneRuleGroupFields(rule, available, fallback) {
@@ -1731,7 +1933,10 @@ function matchesCondition(row, rule) {
 function openConditionModal(type, index = null) {
   state.conditionModalType = type;
   state.conditionModalTarget = { type, index };
-  state.conditionDraft = cloneRuleGroup(conditionTargetRule(type, index)) || quickRuleGroupForTarget(type) || emptyRuleGroup(conditionFieldsForTarget(type)[0]);
+  const initialSource = type === "ringChainStyle" ? CONDITION_SOURCES.RING_CHAINS : CONDITION_SOURCES.NODES;
+  state.conditionDraft = cloneRuleGroup(conditionTargetRule(type, index)) || quickRuleGroupForTarget(type) || emptyRuleGroup("", initialSource);
+  const fields = conditionFieldsForTarget(type);
+  if (!state.conditionDraft.conditions[0].field) state.conditionDraft.conditions[0].field = fields[0] || "";
   renderConditionModal();
   el.conditionModal.classList.remove("hidden");
 }
@@ -1747,6 +1952,7 @@ function conditionTargetRule(type, index = null) {
   if (type === "highlight" || type === "filter") return state[`${type}Rule`];
   if (type === "nodeStyle") return state.nodeStyleRules[index];
   if (type === "linkStyle") return state.linkStyleRules[index];
+  if (type === "ringChainStyle") return state.ringChainStyleRules[index];
   return null;
 }
 
@@ -1756,11 +1962,34 @@ function quickRuleGroupForTarget(type) {
 }
 
 function conditionFieldsForTarget(type) {
-  return type === "linkStyle" ? state.linkFields : state.nodeFields;
+  const source = conditionSourceForTarget(type);
+  if (type === "linkStyle") return state.linkFields;
+  if (source === CONDITION_SOURCES.RING_CHAINS) return state.ringChainFields;
+  return state.nodeFields;
 }
 
-function emptyRuleGroup(field = "") {
+function conditionSourceForTarget(type) {
+  if (type === "ringChainStyle") return CONDITION_SOURCES.RING_CHAINS;
+  return normalizeConditionSource(state.conditionDraft && state.conditionDraft.source);
+}
+
+function conditionSourceOptions(selected) {
+  const options = [
+    [CONDITION_SOURCES.NODES, "conditionSourceNodes"]
+  ];
+  if (state.ringChains.length) options.push([CONDITION_SOURCES.RING_CHAINS, "conditionSourceRingChains"]);
+  return options
+    .map(([value, key]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${escapeHtml(t(key))}</option>`)
+    .join("");
+}
+
+function canChooseConditionSource(type) {
+  return (type === "highlight" || type === "filter") && state.ringChains.length > 0;
+}
+
+function emptyRuleGroup(field = "", source = CONDITION_SOURCES.NODES) {
   return {
+    source,
     mode: "all",
     conditions: [{ field, op: "contains", value: "" }]
   };
@@ -1768,7 +1997,7 @@ function emptyRuleGroup(field = "") {
 
 function cloneRuleGroup(rule) {
   const group = normalizeRuleGroup(rule);
-  return group ? { mode: group.mode, conditions: group.conditions.map(condition => ({ ...condition })) } : null;
+  return group ? { source: group.source, mode: group.mode, conditions: group.conditions.map(condition => ({ ...condition })) } : null;
 }
 
 function renderConditionModal() {
@@ -1778,6 +2007,10 @@ function renderConditionModal() {
   el.conditionModeGroup.querySelectorAll("input[name='conditionMode']").forEach(input => {
     input.checked = input.value === draft.mode;
   });
+  const source = conditionSourceForTarget(type);
+  el.conditionSourceGroup.classList.toggle("hidden", !canChooseConditionSource(type));
+  el.conditionSourceSelect.innerHTML = conditionSourceOptions(source);
+  el.conditionSourceSelect.value = source;
   el.conditionRuleList.innerHTML = draft.conditions.map((condition, index) => conditionRowMarkup(condition, index)).join("");
   renderConditionHistory();
 }
@@ -1802,7 +2035,12 @@ function conditionRowMarkup(condition, index) {
 
 function conditionValueOptions(field) {
   const type = state.conditionModalType;
-  const rows = type === "linkStyle" ? state.links : state.nodes;
+  const source = conditionSourceForTarget(type);
+  const rows = type === "linkStyle"
+    ? state.links
+    : source === CONDITION_SOURCES.RING_CHAINS
+      ? state.ringChains
+      : state.nodes;
   const history = type === "filter"
     ? state.searchHistory.filter
     : type === "highlight"
@@ -1815,16 +2053,27 @@ function conditionValueOptions(field) {
 
 function conditionValueHistory(type, field) {
   const values = [];
+  const source = conditionSourceForTarget(type);
   state.conditionHistory
     .filter(item => item.type === type)
     .forEach(item => {
       const group = normalizeRuleGroup(item.rule);
       if (!group) return;
+      if (group.source !== source) return;
       group.conditions.forEach(condition => {
         if (condition.field === field && condition.value) values.push(condition.value);
       });
     });
   return values;
+}
+
+function updateConditionSourceFromControl() {
+  if (!state.conditionDraft) return;
+  const source = normalizeConditionSource(el.conditionSourceSelect.value);
+  state.conditionDraft.source = source;
+  const fields = conditionFieldsForTarget(state.conditionModalType);
+  state.conditionDraft.conditions = [{ field: fields[0] || "", op: "contains", value: "" }];
+  renderConditionModal();
 }
 
 function updateConditionRowSuggestions(event) {
@@ -1842,6 +2091,7 @@ function conditionModalTitle(type) {
   if (type === "filter") return t("complexFilterTitle");
   if (type === "nodeStyle") return t("nodeStyleRules");
   if (type === "linkStyle") return t("linkStyleRules");
+  if (type === "ringChainStyle") return t("ringChainStyleRules");
   return t("complexHighlightTitle");
 }
 
@@ -1852,10 +2102,15 @@ function applyRuleGroupToTarget(target, group) {
     return;
   }
 
-  const rules = target.type === "nodeStyle" ? state.nodeStyleRules : state.linkStyleRules;
+  const rules = target.type === "nodeStyle"
+    ? state.nodeStyleRules
+    : target.type === "ringChainStyle"
+      ? state.ringChainStyleRules
+      : state.linkStyleRules;
   const rule = rules[target.index];
   if (!rule || !group) return;
 
+  rule.source = group.source;
   rule.mode = group.mode;
   rule.conditions = group.conditions.map(condition => ({ ...condition }));
   const first = group.conditions[0];
@@ -1867,7 +2122,11 @@ function applyRuleGroupToTarget(target, group) {
 
 function renderConditionHistory() {
   const type = state.conditionModalType;
-  const history = state.conditionHistory.filter(item => item.type === type);
+  const source = conditionSourceForTarget(type);
+  const history = state.conditionHistory.filter(item => {
+    const group = normalizeRuleGroup(item.rule);
+    return item.type === type && (!group || group.source === source);
+  });
   if (!history.length) {
     el.conditionHistoryList.innerHTML = `<span class="notice">${escapeHtml(t("noConditionHistory"))}</span>`;
     return;
@@ -1882,7 +2141,11 @@ function restoreConditionHistory(event) {
   const button = event.target.closest("[data-restore-condition]");
   if (!button) return;
 
-  const history = state.conditionHistory.filter(item => item.type === state.conditionModalType);
+  const source = conditionSourceForTarget(state.conditionModalType);
+  const history = state.conditionHistory.filter(item => {
+    const group = normalizeRuleGroup(item.rule);
+    return item.type === state.conditionModalType && (!group || group.source === source);
+  });
   const item = history[Number(button.getAttribute("data-restore-condition"))];
   if (!item) return;
   state.conditionDraft = cloneRuleGroup(item.rule);
@@ -1892,6 +2155,9 @@ function restoreConditionHistory(event) {
 function syncConditionDraftFromModal() {
   if (!state.conditionDraft) state.conditionDraft = emptyRuleGroup();
   const checkedMode = el.conditionModeGroup.querySelector("input[name='conditionMode']:checked");
+  state.conditionDraft.source = canChooseConditionSource(state.conditionModalType)
+    ? normalizeConditionSource(el.conditionSourceSelect.value)
+    : conditionSourceForTarget(state.conditionModalType);
   state.conditionDraft.mode = checkedMode ? checkedMode.value : "all";
   state.conditionDraft.conditions = [...el.conditionRuleList.querySelectorAll(".condition-row")].map(row => ({
     field: row.querySelector("[data-condition-field]").value,
@@ -1923,17 +2189,20 @@ function applyConditionModal() {
   const type = target.type;
   const group = normalizeRuleGroup(state.conditionDraft);
   applyRuleGroupToTarget(target, group);
-  if (group && (type === "highlight" || type === "filter")) {
+  if (group && (type === "highlight" || type === "filter") && group.source === CONDITION_SOURCES.NODES) {
     const first = group.conditions[0];
     el[`${type}Field`].value = first.field;
     el[`${type}Op`].value = first.op;
     el[`${type}Value`].value = first.value || "";
+    group.conditions.forEach(condition => rememberSearchHistory(type, condition.value));
+  } else if (group && (type === "highlight" || type === "filter")) {
     group.conditions.forEach(condition => rememberSearchHistory(type, condition.value));
   }
   if (group) rememberConditionHistory(type, group);
   updateRuleSummaries();
   renderNodeStyleRules();
   renderLinkStyleRules();
+  renderRingChainStyleRules();
   closeConditionModal();
   renderTopologies();
 }
@@ -2001,14 +2270,33 @@ function intersectSets(a, b) {
   return out;
 }
 
+function nodeNamesForRule(rule, sourceRows = state.nodes) {
+  const group = normalizeRuleGroup(rule);
+  const names = new Set();
+  if (!group) return names;
+
+  if (group.source === CONDITION_SOURCES.RING_CHAINS) {
+    state.ringChains.forEach((row, index) => {
+      if (!matchesRule(row, group)) return;
+      const key = ringChainRowKey(row, index);
+      const members = state.indexes.ringChainMembersByName.get(key) || parseMemberPath(row.Member_path).filter(name => state.indexes.nodeByName.has(name));
+      members.forEach(name => names.add(name));
+    });
+    return names;
+  }
+
+  sourceRows.forEach(node => {
+    if (matchesRule(node, group)) names.add(node["NE Name"]);
+  });
+  return names;
+}
+
 function getVisibleData() {
   const nodeByName = state.indexes.nodeByName;
   const filterMatchNames = new Set(state.nodes.map(node => node["NE Name"]));
   if (state.filterRule) {
     filterMatchNames.clear();
-    state.nodes.forEach(node => {
-      if (matchesRule(node, state.filterRule)) filterMatchNames.add(node["NE Name"]);
-    });
+    nodeNamesForRule(state.filterRule, state.nodes).forEach(name => filterMatchNames.add(name));
   }
   const queryMatchNames = state.bulkQuery ? state.bulkQuery.matchNames : null;
   const activeSeedNames = queryMatchNames
@@ -2056,8 +2344,8 @@ function getVisibleData() {
   const selectedLinkKeys = new Set();
 
   if (state.highlightRule) {
-    nodes.forEach(node => {
-      if (matchesRule(node, state.highlightRule)) highlightNames.add(node["NE Name"]);
+    nodeNamesForRule(state.highlightRule, nodes).forEach(name => {
+      if (visibleNames.has(name)) highlightNames.add(name);
     });
     links.forEach(link => {
       if (highlightNames.has(link["Src NE Name"]) && highlightNames.has(link["Sink NE Name"])) {
@@ -2902,6 +3190,25 @@ function updateStats(data) {
   el.statLinks.textContent = state.links.length;
   el.statVisibleNodes.textContent = data.nodes.length;
   el.statVisibleLinks.textContent = data.links.length;
+  const hasRingChains = state.ringChains.length > 0;
+  if (el.statRingCard) el.statRingCard.classList.toggle("hidden", !hasRingChains);
+  if (el.statChainCard) el.statChainCard.classList.toggle("hidden", !hasRingChains);
+  if (hasRingChains) {
+    const stats = ringChainStats();
+    el.statRings.textContent = stats.rings;
+    el.statChains.textContent = stats.chains;
+  }
+}
+
+function ringChainStats() {
+  let rings = 0;
+  let chains = 0;
+  state.ringChains.forEach(row => {
+    const category = String(row.Category || "").trim().toLowerCase();
+    if (category === "ring") rings += 1;
+    if (category === "link") chains += 1;
+  });
+  return { rings, chains };
 }
 
 function updateViewMessage(data) {
@@ -2921,6 +3228,7 @@ function updateViewMessage(data) {
 
   if (missingCoord) parts.push(t("invalidCoord", { count: missingCoord }));
   if (brokenLinks) parts.push(t("brokenLinks", { count: brokenLinks }));
+  if (state.quality.missingRingChainMembers) parts.push(t("ringChainMemberMissing", { count: state.quality.missingRingChainMembers }));
   el.viewMessage.textContent = parts.join(state.lang === "zh" ? "，" : ", ");
 }
 
@@ -3039,6 +3347,9 @@ function applyTableEdits() {
   state.linkFields = collectFields(state.links, REQUIRED_LINK);
   pruneNodeStyleRules();
   pruneLinkStyleRules();
+  pruneRingChainStyleRules();
+  rebuildIndexes();
+  clearRingChainStyleCache();
   state.logic.positions = new Map();
   state.logic.layoutKey = "";
   refreshAll();
@@ -3047,6 +3358,10 @@ function applyTableEdits() {
 
 function linkKey(link) {
   return `${link["Src NE Name"] || ""}::${link["Sink NE Name"] || ""}`;
+}
+
+function linkPairKey(a, b) {
+  return `${a || ""}::${b || ""}`;
 }
 
 function groupBy(items, getter) {
@@ -3078,12 +3393,55 @@ function resolveLinkStyle(link) {
     style.lineStyle = LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : style.lineStyle;
     style.width = LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : style.width;
   });
+  applyRingChainLinkStyle(link, style);
 
   return {
     color: style.color,
     weight: linkWeight(style.width),
     dashArray: linkDashArray(style.lineStyle)
   };
+}
+
+function applyRingChainLinkStyle(link, style) {
+  if (!state.ringChains.length || !state.appliedRingChainStyleRules.length) return;
+
+  const key = linkKey(link);
+  const reverseKey = linkPairKey(link["Sink NE Name"], link["Src NE Name"]);
+  const segmentStyles = getRingChainSegmentStyleMap();
+  const matchedStyle = segmentStyles.get(key) || segmentStyles.get(reverseKey);
+  if (!matchedStyle) return;
+  style.color = normalizeColor(matchedStyle.color, style.color);
+  style.lineStyle = LINE_STYLE_VALUES.includes(matchedStyle.lineStyle) ? matchedStyle.lineStyle : style.lineStyle;
+  style.width = LINE_WIDTH_VALUES.includes(matchedStyle.width) ? matchedStyle.width : style.width;
+}
+
+function getRingChainSegmentStyleMap() {
+  const key = JSON.stringify(state.appliedRingChainStyleRules) + `:${state.ringChains.length}`;
+  if (state.ringChainStyleCache.key === key) return state.ringChainStyleCache.styles;
+
+  const styles = new Map();
+  state.appliedRingChainStyleRules.forEach(rule => {
+    const group = normalizeRuleGroup(rule);
+    if (!group) return;
+    state.ringChains.forEach((row, index) => {
+      if (!matchesRule(row, group)) return false;
+      const rowKey = ringChainRowKey(row, index);
+      const segments = state.indexes.ringChainSegmentsByName.get(rowKey) || [];
+      segments.forEach(segmentKey => {
+        styles.set(segmentKey, {
+          color: normalizeColor(rule.color, DEFAULT_LINK_STYLE.color),
+          lineStyle: LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : DEFAULT_LINK_STYLE.lineStyle,
+          width: LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : DEFAULT_LINK_STYLE.width
+        });
+      });
+    });
+  });
+  state.ringChainStyleCache = { key, styles };
+  return styles;
+}
+
+function clearRingChainStyleCache() {
+  state.ringChainStyleCache = { key: "", styles: new Map() };
 }
 
 function linkWeight(width) {
@@ -3182,7 +3540,7 @@ function hasCoord(node) {
 
 function setMessage(target, text, type) {
   target.textContent = text;
-  target.classList.remove("error", "ok");
+  target.classList.remove("error", "ok", "warning");
   if (type) target.classList.add(type);
 }
 

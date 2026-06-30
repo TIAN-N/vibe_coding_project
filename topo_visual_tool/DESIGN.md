@@ -480,3 +480,29 @@ Logic Topo 在白色 SVG 画布上展示逻辑关系，布局依据链路表自�
 - 链路样式渲染读取 `appliedLinkStyleRules`，避免用户编辑未确认的链路规则时立即改变地图或逻辑拓扑。
 - 高亮条件区新增“对比度”配置，取值 0 到 1；对比度越高，未命中网元和链路越淡，对比度为 1 时未命中对象透明度为 0。
 - 高亮对比度同时作用于 GIS 和 Logic Topo；命中对象继续保留自身原样式。
+
+## 12. Ring/Chain Recognition Table
+
+The ring/chain recognition table is an optional upload. The upload card adds a Ring/Chain Table input. When users click Parse Upload, the tool parses and caches the table only when a file is provided. If no ring/chain file is provided, existing topology, highlight, filter, and style behavior remains unchanged.
+
+Required fields are `Category`, `Name`, `Root1`, `Root2`, `Label`, `Member_num`, `Member_path`, `Uplink_pair`, and `Belong_agg`. `Category=Ring` contributes to the ring count, and `Category=Link` contributes to the chain count. `Member_path` is split by `->` and trimmed into a member device sequence.
+
+After a ring/chain table is uploaded:
+
+- The statistics card shows ring count and chain count.
+- Missing `Member_path` devices are reported as a warning and ignored in visualization logic.
+- The warning does not block device/link rendering or ring/chain cache creation.
+
+Highlight and filter rules now support a condition source per rule group:
+
+- Device fields: match device rows directly, preserving previous behavior.
+- Ring/chain fields: match ring/chain rows first, then union all valid devices from matched rows' `Member_path`.
+
+The downstream behavior is shared:
+
+- Filter keeps matched devices and links whose source and sink are both in the matched device set.
+- Highlight preserves matched devices and links whose source and sink are both in the matched device set; unmatched elements are dimmed by user contrast.
+
+Ring/chain style rules are shown only after a ring/chain table exists. They reuse the compound condition card with the source fixed to ring/chain fields. A matched rule only styles adjacent `Member_path` segments, for example `A->B->C` affects `A-B` and `B-C`. If multiple ring/chain style rules match the same link, later applied rules override earlier ones.
+
+Condition value suggestions continue to merge current data enumerations with cached history. Device rules read values from the device table, link style rules read values from the link table, and ring/chain rules read values from the ring/chain table.

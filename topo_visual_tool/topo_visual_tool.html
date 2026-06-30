@@ -39,6 +39,10 @@
               <span data-i18n="linkTable">链路表</span>
               <input id="linkFile" type="file" accept=".csv,.xlsx,.xls">
             </label>
+            <label class="file-line">
+              <span data-i18n="ringChainTable">环链表</span>
+              <input id="ringChainFile" type="file" accept=".csv,.xlsx,.xls">
+            </label>
             <div class="row">
               <button id="loadFilesBtn" class="primary grow" type="button" data-i18n="parseUpload">解析上传数据</button>
               <button id="mockBtn" type="button" data-i18n="loadMock">加载 Mock</button>
@@ -54,6 +58,8 @@
             <div class="stat"><b id="statLinks">0</b><span data-i18n="links">链路</span></div>
             <div class="stat"><b id="statVisibleNodes">0</b><span data-i18n="visibleDevices">当前显示网元</span></div>
             <div class="stat"><b id="statVisibleLinks">0</b><span data-i18n="visibleLinks">当前显示链路</span></div>
+            <div id="statRingCard" class="stat hidden"><b id="statRings">0</b><span data-i18n="rings">环</span></div>
+            <div id="statChainCard" class="stat hidden"><b id="statChains">0</b><span data-i18n="chains">链</span></div>
           </div>
         </section>
 
@@ -86,6 +92,14 @@
                 <button id="applyLinkStyleRulesBtn" class="primary grow" type="button" data-i18n="applyLinkStyleRules">应用链路规则</button>
               </div>
               <datalist id="linkStyleValueSuggestions"></datalist>
+            </div>
+            <div id="ringChainStyleGroup" class="style-group hidden">
+              <div class="style-title" data-i18n="ringChainStyleRules">环链样式规则</div>
+              <div id="ringChainStyleRuleList" class="link-style-rule-list"></div>
+              <div class="row">
+                <button id="addRingChainStyleRuleBtn" class="grow" type="button" data-i18n="addRingChainStyleRule">新增环链规则</button>
+                <button id="applyRingChainStyleRulesBtn" class="primary grow" type="button" data-i18n="applyRingChainStyleRules">应用环链规则</button>
+              </div>
             </div>
             <div class="style-group">
               <div class="style-title" data-i18n="routePathStyle">路网路径样式</div>
@@ -215,6 +229,9 @@
         <div id="conditionModeGroup" class="condition-mode">
           <label><input type="radio" name="conditionMode" value="all"><span data-i18n="matchAll">全部满足</span></label>
           <label><input type="radio" name="conditionMode" value="any"><span data-i18n="matchAny">任一满足</span></label>
+        </div>
+        <div id="conditionSourceGroup" class="condition-source hidden">
+          <label><span data-i18n="conditionSource">条件来源</span><select id="conditionSourceSelect"></select></label>
         </div>
         <div id="conditionRuleList" class="condition-rule-list"></div>
         <button id="addConditionRuleBtn" type="button" data-i18n="addCondition">新增条件</button>

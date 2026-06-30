@@ -470,7 +470,8 @@ input[type="file"] {
   padding: 0 8px;
 }
 .rule-actions button[data-remove-node-rule],
-.link-style-rule button[data-remove-link-rule] {
+.link-style-rule button[data-remove-link-rule],
+.link-style-rule button[data-remove-ring-chain-rule] {
   color: var(--danger);
   border-color: #efc6c6;
   background: #fff;
@@ -586,6 +587,7 @@ input[type="file"] {
 }
 .message.error { color: var(--danger); }
 .message.ok { color: var(--ok); }
+.message.warning { color: #9a6a12; }
 
 .condition-summary {
   min-height: 18px;
@@ -635,6 +637,20 @@ input[type="file"] {
   margin-bottom: 10px;
   color: var(--text);
   font-size: 12px;
+}
+.condition-source {
+  margin-bottom: 10px;
+}
+.condition-source label {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.condition-source select {
+  width: 180px;
 }
 .condition-mode label {
   display: inline-flex;
