@@ -58,6 +58,8 @@ const I18N = {
     deviceTable: "网元表",
     linkTable: "链路表",
     ringChainTable: "环链表",
+    projectNameLabel: "项目名称",
+    projectNamePlaceholder: "输入项目名称",
     parseUpload: "解析上传数据",
     loadMock: "加载 Mock",
     requiredFields: "必选字段：NE Name、Role、Longitude、Latitude、Src NE Name、Sink NE Name。",
@@ -215,6 +217,8 @@ const I18N = {
     deviceTable: "Device Table",
     linkTable: "Link Table",
     ringChainTable: "Ring/Chain Table",
+    projectNameLabel: "Project",
+    projectNamePlaceholder: "Enter project name",
     parseUpload: "Parse Upload",
     loadMock: "Load Mock",
     requiredFields: "Required fields: NE Name, Role, Longitude, Latitude, Src NE Name, Sink NE Name.",
@@ -367,6 +371,7 @@ const I18N = {
 
 const state = {
   lang: "zh",
+  projectName: "",
   nodes: [],
   links: [],
   ringChains: [],
@@ -552,6 +557,7 @@ function onMapClick(event) {
 }
 
 function bindEvents() {
+  el.projectNameInput.addEventListener("input", updateProjectNameFromControl);
   el.langZhBtn.addEventListener("click", () => switchLanguage("zh"));
   el.langEnBtn.addEventListener("click", () => switchLanguage("en"));
   el.tabTopo.addEventListener("click", () => switchPage("topo"));
@@ -668,6 +674,27 @@ function t(key, params = {}) {
     value = value.replaceAll(`{${name}}`, params[name]);
   });
   return value;
+}
+
+function updateProjectNameFromControl() {
+  state.projectName = el.projectNameInput.value.trim();
+}
+
+function setDefaultProjectName(date = new Date()) {
+  state.projectName = formatProjectTimestamp(date);
+  if (el.projectNameInput) el.projectNameInput.value = state.projectName;
+}
+
+function formatProjectTimestamp(date) {
+  const pad = value => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join("-");
 }
 
 function loadSearchHistory() {
@@ -1661,6 +1688,7 @@ function setData(nodes, links, ringChains = []) {
   state.highlightRule = null;
   state.filterRule = null;
   state.bulkQuery = null;
+  setDefaultProjectName();
   state.ringChainStyleRules = state.ringChains.length ? state.ringChainStyleRules : [];
   state.appliedRingChainStyleRules = state.ringChains.length ? state.appliedRingChainStyleRules : [];
   clearRingChainStyleCache();

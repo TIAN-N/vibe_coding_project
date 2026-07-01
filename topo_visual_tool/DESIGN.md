@@ -506,3 +506,11 @@ The downstream behavior is shared:
 Ring/chain style rules are shown only after a ring/chain table exists. They reuse the compound condition card with the source fixed to ring/chain fields. A matched rule only styles adjacent `Member_path` segments, for example `A->B->C` affects `A-B` and `B-C`. If multiple ring/chain style rules match the same link, later applied rules override earlier ones.
 
 Condition value suggestions continue to merge current data enumerations with cached history. Device rules read values from the device table, link style rules read values from the link table, and ring/chain rules read values from the ring/chain table.
+
+## 13. Project Name Record
+
+The top-right toolbar includes a project name field before the language switch. It is used to mark the current uploaded data version without changing topology data.
+
+- After each successful data parse or mock load, the field defaults to the parse timestamp in `YYYY-MM-DD-HH-mm-ss` format.
+- Users can edit the field directly to name the current data version.
+- Language switching updates only labels and placeholders; the user-entered project name is preserved.
