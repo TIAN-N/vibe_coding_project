@@ -568,3 +568,16 @@ Ring/chain style rules are compiled into a segment style map so link rendering p
 `Route WKT` paths are rendered only in GIS view. They use a Canvas overlay rather than one Leaflet layer per route. Canvas paths support visibility, color, width, line style, and opacity configuration. During map movement or zooming, the existing route Canvas is removed and recreated after the map stabilizes to avoid stale transformed pixels and visible artifacts.
 
 Route path hit testing is based on pixel distance to route segments. Selecting a route also selects the corresponding link and highlights the route endpoints' device nodes, even when the route geometry endpoints are not identical to device coordinates.
+
+### 14.6 Colocated GIS Device Contract
+
+GIS rendering groups visible devices by exact longitude and latitude. A coordinate with one visible device keeps the normal node marker. A coordinate with multiple visible devices renders as a colocated marker with a visible count.
+
+Colocated marker style follows the current role rule:
+
+- If all devices at the coordinate have the same role, use that role's node style.
+- If roles differ, choose the highest-priority role style using `PE > ASG > CSG > OTHER`.
+
+Filtering, highlighting, and locating work on device identity first, then GIS rendering regroups the resulting visible devices by coordinate. This keeps colocated behavior consistent with existing filter/highlight semantics.
+
+Clicking a colocated marker opens the details card with the coordinate, role distribution, count, and all devices at that coordinate. Clicking a device in that list switches to the existing single-device details flow and highlights that device's related links. Searching for a colocated device pans to the coordinate and opens the colocated list with the target device emphasized.

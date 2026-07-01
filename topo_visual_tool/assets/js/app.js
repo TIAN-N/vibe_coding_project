@@ -70,6 +70,10 @@ const I18N = {
     chains: "链",
     visibleRings: "当前显示环",
     visibleChains: "当前显示链",
+    colocatedDevices: "共址网元",
+    colocatedDeviceCount: "{count} 个网元",
+    colocatedRoleSummary: "角色：{text}",
+    colocatedCoordinate: "坐标：{lng}, {lat}",
     visibleDevices: "当前显示网元",
     visibleLinks: "当前显示链路",
     sectionLegend: "节点图例",
@@ -231,6 +235,10 @@ const I18N = {
     chains: "Chains",
     visibleRings: "Visible Rings",
     visibleChains: "Visible Chains",
+    colocatedDevices: "Colocated Devices",
+    colocatedDeviceCount: "{count} devices",
+    colocatedRoleSummary: "Roles: {text}",
+    colocatedCoordinate: "Coordinate: {lng}, {lat}",
     visibleDevices: "Visible Devices",
     visibleLinks: "Visible Links",
     sectionLegend: "Node Legend",
@@ -387,6 +395,7 @@ const state = {
   selectedName: "",
   selectedLinkKey: "",
   selectedRouteKey: "",
+  selectedCoordinateKey: "",
   highlightRule: null,
   filterRule: null,
   bulkQuery: null,
@@ -1688,6 +1697,7 @@ function setData(nodes, links, ringChains = []) {
   state.selectedName = "";
   state.selectedLinkKey = "";
   state.selectedRouteKey = "";
+  state.selectedCoordinateKey = "";
   state.routeHitEntries = [];
   state.highlightRule = null;
   state.filterRule = null;
@@ -2512,9 +2522,23 @@ function renderMap(data) {
     state.mapLayers.links.push(base, line);
   });
 
-  mapNodes.forEach(node => {
-    if (!hasCoord(node)) return;
+  groupNodesByCoordinate(mapNodes).forEach(group => {
+    if (group.nodes.length > 1) {
+      const marker = createColocatedNodeLayer(group, data, degreeMap, {
+        hasHighlight,
+        dimNodeOpacity
+      }).addTo(state.map);
+      marker.bindTooltip(colocatedTooltip(group), { permanent: false, direction: "top", className: "node-tip" });
+      marker.on("click", event => {
+        if (window.L && event) L.DomEvent.stop(event);
+        showColocatedDetails(group);
+        renderTopologies();
+      });
+      state.mapLayers.nodes.push(marker);
+      return;
+    }
 
+    const node = group.nodes[0];
     const name = node["NE Name"];
     const selected = state.selectedName === name;
     const neighbor = data.selectedNeighborNames.has(name);
@@ -2539,6 +2563,90 @@ function renderMap(data) {
     });
     state.mapLayers.nodes.push(marker);
   });
+}
+
+function groupNodesByCoordinate(nodes) {
+  const groups = new Map();
+  nodes.forEach(node => {
+    if (!hasCoord(node)) return;
+    const key = coordinateKey(node);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        lat: Number(node.Latitude),
+        lng: Number(node.Longitude),
+        nodes: []
+      });
+    }
+    groups.get(key).nodes.push(node);
+  });
+  return [...groups.values()];
+}
+
+function coordinateKey(node) {
+  return `${formatCoordinateKey(node.Longitude)}::${formatCoordinateKey(node.Latitude)}`;
+}
+
+function formatCoordinateKey(value) {
+  return Number(value).toFixed(7);
+}
+
+function createColocatedNodeLayer(group, data, degreeMap, options) {
+  const style = colocatedGroupStyle(group.nodes);
+  const selected = group.nodes.some(node => state.selectedName === node["NE Name"]) || state.selectedCoordinateKey === group.key;
+  const neighbor = group.nodes.some(node => data.selectedNeighborNames.has(node["NE Name"]));
+  const highlighted = group.nodes.some(node => data.highlightNames.has(node["NE Name"]));
+  const active = selected || neighbor;
+  const dim = options.hasHighlight && !highlighted && !active;
+  const maxDegree = group.nodes.reduce((max, node) => Math.max(max, degreeMap.get(node["NE Name"]) || 0), 0);
+  const size = clamp(22 + Math.sqrt(group.nodes.length) * 4 + Math.sqrt(maxDegree), 24, 42);
+  const borderColor = selected ? "#245a6e" : neighbor ? "#2f6f86" : "#ffffff";
+  const opacity = dim ? options.dimNodeOpacity : 1;
+  const html = `<div class="colocated-marker ${active ? "active" : ""}" style="--cluster-color:${escapeAttr(style.color)};--cluster-border:${escapeAttr(borderColor)};--cluster-opacity:${opacity};width:${size}px;height:${size}px;">${group.nodes.length}</div>`;
+  return L.marker([group.lat, group.lng], {
+    interactive: true,
+    icon: L.divIcon({
+      className: "colocated-marker-wrap",
+      html,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2]
+    })
+  });
+}
+
+function colocatedGroupStyle(nodes) {
+  const sameRole = nodes.every(node => roleKey(node) === roleKey(nodes[0]));
+  if (sameRole) return resolveNodeStyle(nodes[0]);
+
+  const priority = ["PE", "ASG", "CSG", "OTHER"];
+  const bestRole = nodes
+    .map(node => roleKey(node))
+    .sort((a, b) => priority.indexOf(a) - priority.indexOf(b))[0] || "OTHER";
+  const bestNode = nodes.find(node => roleKey(node) === bestRole) || nodes[0];
+  return resolveNodeStyle(bestNode);
+}
+
+function roleKey(node) {
+  const role = String(node && node.Role || "").trim().toUpperCase();
+  return ROLE_ORDER.includes(role) ? role : "OTHER";
+}
+
+function colocatedTooltip(group) {
+  const names = group.nodes.slice(0, 6).map(node => escapeHtml(node["NE Name"])).join("<br>");
+  const more = group.nodes.length > 6 ? `<br>... +${group.nodes.length - 6}` : "";
+  return `<strong>${escapeHtml(t("colocatedDevices"))}</strong><br>${escapeHtml(t("colocatedDeviceCount", { count: group.nodes.length }))}<br>${escapeHtml(t("colocatedRoleSummary", { text: roleSummaryText(group.nodes) }))}<br>${names}${more}`;
+}
+
+function roleSummaryText(nodes) {
+  const counts = {};
+  nodes.forEach(node => {
+    const role = roleKey(node);
+    counts[role] = (counts[role] || 0) + 1;
+  });
+  return ["PE", "ASG", "CSG", "OTHER"]
+    .filter(role => counts[role])
+    .map(role => `${role}:${counts[role]}`)
+    .join(" ");
 }
 
 function renderRouteCanvas(mapLinks, data) {
@@ -3160,7 +3268,14 @@ function locateNode() {
     centerLogicOn(node["NE Name"]);
   }
 
-  showDetails(node);
+  if (state.view === "gis" && hasCoord(node)) {
+    const visibleNodes = getVisibleData().nodes;
+    const colocated = visibleNodes.filter(item => hasCoord(item) && coordinateKey(item) === coordinateKey(node));
+    if (colocated.length > 1) showColocatedDetails({ key: coordinateKey(node), lat: Number(node.Latitude), lng: Number(node.Longitude), nodes: colocated }, node["NE Name"]);
+    else showDetails(node);
+  } else {
+    showDetails(node);
+  }
   renderTopologies();
 }
 
@@ -3200,14 +3315,54 @@ function showDetails(node) {
   state.selectedName = node["NE Name"];
   state.selectedLinkKey = "";
   state.selectedRouteKey = "";
+  state.selectedCoordinateKey = "";
   el.details.innerHTML = `<h3>${escapeHtml(node["NE Name"] || t("unnamedDevice"))}</h3><div class="kv">${
     state.nodeFields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(node[field] ?? "")}</div>`).join("")
   }</div>`;
   el.details.classList.add("show");
 }
 
+function showColocatedDetails(group, focusName = "") {
+  state.selectedCoordinateKey = group.key;
+  state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
+  if (!focusName) state.selectedName = "";
+  const sortedNodes = [...group.nodes].sort((a, b) => rolePriority(roleKey(a)) - rolePriority(roleKey(b)) || String(a["NE Name"]).localeCompare(String(b["NE Name"])));
+  el.details.innerHTML = `<h3>${escapeHtml(t("colocatedDevices"))}</h3>
+    <div class="colocated-summary">
+      <div>${escapeHtml(t("colocatedDeviceCount", { count: group.nodes.length }))}</div>
+      <div>${escapeHtml(t("colocatedRoleSummary", { text: roleSummaryText(group.nodes) }))}</div>
+      <div>${escapeHtml(t("colocatedCoordinate", { lng: formatCoord(group.lng), lat: formatCoord(group.lat) }))}</div>
+    </div>
+    <div class="colocated-list">
+      ${sortedNodes.map(node => {
+        const name = node["NE Name"];
+        const active = focusName && name === focusName;
+        return `<button class="${active ? "active" : ""}" type="button" data-colocated-node="${escapeAttr(name)}">
+          <span>${escapeHtml(name)}</span><em>${escapeHtml(roleKey(node))}</em>
+        </button>`;
+      }).join("")}
+    </div>`;
+  el.details.classList.add("show");
+  el.details.querySelectorAll("[data-colocated-node]").forEach(button => {
+    button.addEventListener("click", () => {
+      const node = state.indexes.nodeByName.get(button.getAttribute("data-colocated-node"));
+      if (node) {
+        showDetails(node);
+        renderTopologies();
+      }
+    });
+  });
+}
+
+function rolePriority(role) {
+  const priority = { PE: 0, ASG: 1, CSG: 2, OTHER: 3 };
+  return priority[role] ?? priority.OTHER;
+}
+
 function showLinkDetails(link, options = {}) {
   state.selectedName = "";
+  state.selectedCoordinateKey = "";
   const key = linkKey(link);
   state.selectedLinkKey = key;
   state.selectedRouteKey = options.route || routePointsForLink(link).length > 1 ? key : "";
@@ -3219,10 +3374,11 @@ function showLinkDetails(link, options = {}) {
 }
 
 function clearSelection() {
-  const changed = Boolean(state.selectedName || state.selectedLinkKey || state.selectedRouteKey || el.details.classList.contains("show"));
+  const changed = Boolean(state.selectedName || state.selectedLinkKey || state.selectedRouteKey || state.selectedCoordinateKey || el.details.classList.contains("show"));
   state.selectedName = "";
   state.selectedLinkKey = "";
   state.selectedRouteKey = "";
+  state.selectedCoordinateKey = "";
   el.details.classList.remove("show");
   return changed;
 }

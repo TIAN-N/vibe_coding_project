@@ -301,6 +301,7 @@ topo_visual_tool.html
 - `device.csv`：当前网元测试表。
 - `link.csv`：当前链路测试表，包含扩展链路属性和 `Route WKT`。
 - `ring_chain_sample.csv`：环链识别测试表，覆盖 `Ring`、`Link` 和缺失成员 warning 场景。
+- `colocated_device_sample.csv` / `colocated_link_sample.csv`：同经纬度共址网元测试表，覆盖同角色共址、混合角色共址和 PE/ASG/CSG 混合共址。
 
 建议测试流程：
 
@@ -313,3 +314,5 @@ topo_visual_tool.html
 7. 新增环链样式规则，配置 `Label` 或 `Category` 条件，确认只改变对应 `Member_path` 相邻路径段样式。
 8. 点击路网路径，确认路径、直连链路、源宿网元同步高亮。
 9. 手动修改项目名称，切换中英文，确认项目名称不被覆盖。
+10. 上传 `colocated_device_sample.csv` 和 `colocated_link_sample.csv`，确认同经纬度多个网元在 GIS 上显示为带数量的共址聚合点；同角色聚合点使用该角色样式，混合角色按 `PE > ASG > CSG` 优先级取主样式。
+11. 点击共址聚合点，确认右上角详情卡片列出该坐标下全部网元；点击列表中的某个网元后，进入单网元详情并高亮其相关链路。

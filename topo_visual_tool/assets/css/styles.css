@@ -542,6 +542,36 @@ input[type="file"] {
 }
 #logicCanvas:active { cursor: grabbing; }
 #map.light-basemap .leaflet-tile-pane { display: none; }
+.colocated-marker-wrap {
+  background: transparent;
+  border: 0;
+}
+.colocated-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--cluster-border, #fff);
+  border-radius: 999px;
+  background: var(--cluster-color, var(--primary));
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .82), 0 7px 18px rgba(29, 51, 68, .24);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  opacity: var(--cluster-opacity, 1);
+}
+.colocated-marker::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border: 1px solid var(--cluster-color, var(--primary));
+  opacity: .58;
+  border-radius: 999px;
+}
+.colocated-marker.active {
+  box-shadow: 0 0 0 4px rgba(36, 90, 110, .18), 0 8px 20px rgba(29, 51, 68, .28);
+}
 
 .empty {
   position: absolute;
@@ -588,6 +618,43 @@ input[type="file"] {
 .kv div:nth-child(even) {
   overflow-wrap: anywhere;
   color: var(--text);
+}
+.colocated-summary {
+  display: grid;
+  gap: 5px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+.colocated-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.colocated-list button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding: 7px 9px;
+  text-align: left;
+}
+.colocated-list button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.colocated-list span {
+  overflow-wrap: anywhere;
+}
+.colocated-list em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  text-align: right;
 }
 
 .notice {
