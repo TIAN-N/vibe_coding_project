@@ -842,3 +842,13 @@
 - README 补充 `ring_chain_sample.csv` 的用途，作为环链识别功能测试数据。
 - DESIGN.md 新增“Current Interaction Contract”，统一记录数据加载、条件来源、高亮/过滤、样式优先级和路网路径渲染契约。
 - ITERATION_LOG.md 记录本次文档同步，便于追踪这次非代码功能变更。
+
+## 2026-07-01 泰国大规模共站点测试数据
+
+本轮新增用于 GIS 共站点聚合性能验证的大规模测试数据。
+
+- 新增 `thailand_colocated_large_device.csv`，包含 60 个 ASG 和 1100 个 CSG。
+- 新增 `thailand_colocated_large_link.csv`，包含 60 条 ASG ring 链路和 1100 条 CSG uplink 链路。
+- 网元分布在泰国境内 500 个唯一经纬度站点上，每个站点均包含多个网元，用于验证同经纬度共站点聚合渲染。
+- 链路表包含 `Route WKT`，可同时验证路网路径图层和共站点聚合在大数据规模下的协同显示。
+- 已校验链路源宿均能匹配网元表，端点缺失数量为 0。

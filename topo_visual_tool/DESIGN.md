@@ -581,3 +581,9 @@ Colocated marker style follows the current role rule:
 Filtering, highlighting, and locating work on device identity first, then GIS rendering regroups the resulting visible devices by coordinate. This keeps colocated behavior consistent with existing filter/highlight semantics.
 
 Clicking a colocated marker opens the details card with the coordinate, role distribution, count, and all devices at that coordinate. Clicking a device in that list switches to the existing single-device details flow and highlights that device's related links. Searching for a colocated device pans to the coordinate and opens the colocated list with the target device emphasized.
+
+### 14.7 Large Thailand Colocated Test Dataset
+
+`thailand_colocated_large_device.csv` and `thailand_colocated_large_link.csv` provide a GIS stress dataset for colocated rendering. The dataset contains 60 ASG devices, 1100 CSG devices, 500 unique Thailand coordinate sites, and 1160 links.
+
+Every coordinate site has multiple devices so the GIS view can consistently exercise colocated marker grouping. Links include synthetic `Route WKT` values to validate that route rendering remains compatible with colocated node rendering at larger scale.

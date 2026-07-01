@@ -302,6 +302,7 @@ topo_visual_tool.html
 - `link.csv`：当前链路测试表，包含扩展链路属性和 `Route WKT`。
 - `ring_chain_sample.csv`：环链识别测试表，覆盖 `Ring`、`Link` 和缺失成员 warning 场景。
 - `colocated_device_sample.csv` / `colocated_link_sample.csv`：同经纬度共址网元测试表，覆盖同角色共址、混合角色共址和 PE/ASG/CSG 混合共址。
+- `thailand_colocated_large_device.csv` / `thailand_colocated_large_link.csv`：泰国境内大规模共站点压测数据，包含 60 个 ASG、1100 个 CSG、500 个经纬度站点和 1160 条链路。
 
 建议测试流程：
 
@@ -316,3 +317,4 @@ topo_visual_tool.html
 9. 手动修改项目名称，切换中英文，确认项目名称不被覆盖。
 10. 上传 `colocated_device_sample.csv` 和 `colocated_link_sample.csv`，确认同经纬度多个网元在 GIS 上显示为带数量的共址聚合点；同角色聚合点使用该角色样式，混合角色按 `PE > ASG > CSG` 优先级取主样式。
 11. 点击共址聚合点，确认右上角详情卡片列出该坐标下全部网元；点击列表中的某个网元后，进入单网元详情并高亮其相关链路。
+12. 上传 `thailand_colocated_large_device.csv` 和 `thailand_colocated_large_link.csv`，验证 500 个泰国经纬度站点、千级 CSG 和 50+ ASG 场景下的 GIS 聚合渲染、点击详情和筛选高亮性能。
