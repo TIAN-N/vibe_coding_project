@@ -68,6 +68,8 @@ const I18N = {
     links: "链路",
     rings: "环",
     chains: "链",
+    visibleRings: "当前显示环",
+    visibleChains: "当前显示链",
     visibleDevices: "当前显示网元",
     visibleLinks: "当前显示链路",
     sectionLegend: "节点图例",
@@ -227,6 +229,8 @@ const I18N = {
     links: "Links",
     rings: "Rings",
     chains: "Chains",
+    visibleRings: "Visible Rings",
+    visibleChains: "Visible Chains",
     visibleDevices: "Visible Devices",
     visibleLinks: "Visible Links",
     sectionLegend: "Node Legend",
@@ -2319,8 +2323,18 @@ function nodeNamesForRule(rule, sourceRows = state.nodes) {
   return names;
 }
 
+function ringChainRowsForRule(rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group || group.source !== CONDITION_SOURCES.RING_CHAINS) return [];
+  return state.ringChains.filter(row => matchesRule(row, group));
+}
+
 function getVisibleData() {
   const nodeByName = state.indexes.nodeByName;
+  const filterGroup = normalizeRuleGroup(state.filterRule);
+  const filteredRingChains = filterGroup && filterGroup.source === CONDITION_SOURCES.RING_CHAINS
+    ? ringChainRowsForRule(filterGroup)
+    : null;
   const filterMatchNames = new Set(state.nodes.map(node => node["NE Name"]));
   if (state.filterRule) {
     filterMatchNames.clear();
@@ -2400,7 +2414,7 @@ function getVisibleData() {
     }
   }
 
-  return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, highlightNames, highlightLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
+  return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, filteredRingChains, highlightNames, highlightLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
 }
 
 function highlightDimOpacity(kind) {
@@ -3226,12 +3240,20 @@ function updateStats(data) {
     el.statRings.textContent = stats.rings;
     el.statChains.textContent = stats.chains;
   }
+  const hasRingChainFilter = Array.isArray(data.filteredRingChains);
+  if (el.statVisibleRingCard) el.statVisibleRingCard.classList.toggle("hidden", !hasRingChainFilter);
+  if (el.statVisibleChainCard) el.statVisibleChainCard.classList.toggle("hidden", !hasRingChainFilter);
+  if (hasRingChainFilter) {
+    const stats = ringChainStats(data.filteredRingChains);
+    el.statVisibleRings.textContent = stats.rings;
+    el.statVisibleChains.textContent = stats.chains;
+  }
 }
 
-function ringChainStats() {
+function ringChainStats(rows = state.ringChains) {
   let rings = 0;
   let chains = 0;
-  state.ringChains.forEach(row => {
+  rows.forEach(row => {
     const category = String(row.Category || "").trim().toLowerCase();
     if (category === "ring") rings += 1;
     if (category === "link") chains += 1;

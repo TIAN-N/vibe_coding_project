@@ -232,6 +232,7 @@ topo_visual_tool.html
 - `Member_path` 按 `->` 解析，例如 `A->B->C`。
 - 如果 `Member_path` 中有网元不在网元表中，页面给出 warning，但不中断解析；缺失网元在后续高亮、过滤和样式计算中忽略。
 - 仓库内提供 `ring_chain_sample.csv`，基于当前 `device.csv` 和 `link.csv` 构造，可用于环链功能测试。
+- 当过滤条件来源为环链字段时，统计卡片会额外显示“当前显示环”和“当前显示链”，分别统计本次环链条件命中的 `Category=Ring` 和 `Category=Link` 记录数。
 
 ### 高亮与过滤
 
@@ -307,7 +308,7 @@ topo_visual_tool.html
 2. 上传 `device.csv`、`link.csv` 和 `ring_chain_sample.csv`。
 3. 点击“解析上传数据”，确认项目名称自动生成时间戳。
 4. 确认统计卡片显示网元、链路、当前显示网元、当前显示链路、环数量、链数量。
-5. 用环链字段条件过滤 `Category 等于 Link`，确认只保留命中 `Member_path` 网元及其两端都命中的链路。
+5. 用环链字段条件过滤 `Category 等于 Link`，确认只保留命中 `Member_path` 网元及其两端都命中的链路，并确认统计卡片显示“当前显示环 / 当前显示链”。
 6. 用环链字段条件设置高亮，调节对比度，确认非命中对象按透明度淡化。
 7. 新增环链样式规则，配置 `Label` 或 `Category` 条件，确认只改变对应 `Member_path` 相邻路径段样式。
 8. 点击路网路径，确认路径、直连链路、源宿网元同步高亮。

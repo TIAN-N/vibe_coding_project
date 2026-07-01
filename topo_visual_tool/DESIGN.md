@@ -490,6 +490,7 @@ Required fields are `Category`, `Name`, `Root1`, `Root2`, `Label`, `Member_num`,
 After a ring/chain table is uploaded:
 
 - The statistics card shows ring count and chain count.
+- When the active filter condition source is ring/chain fields, the statistics card also shows visible ring count and visible chain count based on matched ring/chain rows.
 - Missing `Member_path` devices are reported as a warning and ignored in visualization logic.
 - The warning does not block device/link rendering or ring/chain cache creation.
 
@@ -548,6 +549,8 @@ Both highlight and filter use the same two-step resolution:
 2. Resolve matched links as links whose `Src NE Name` and `Sink NE Name` are both in the matched device set.
 
 Filter removes non-matched devices and non-matched links from the rendered data. Highlight keeps the current rendered data but dims non-matched devices and links according to the configured contrast. Matched devices and links keep their existing node/link/ring-chain styles.
+
+When the active filter source is `ringChains`, the matched ring/chain row list is also carried into the statistics layer. `Category=Ring` rows are counted as visible rings, and `Category=Link` rows are counted as visible chains. These visible ring/chain statistics are hidden for device-field filters and for non-filtered views.
 
 ### 14.4 Style Priority Contract
 
