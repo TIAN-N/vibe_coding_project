@@ -514,3 +514,54 @@ The top-right toolbar includes a project name field before the language switch. 
 - After each successful data parse or mock load, the field defaults to the parse timestamp in `YYYY-MM-DD-HH-mm-ss` format.
 - Users can edit the field directly to name the current data version.
 - Language switching updates only labels and placeholders; the user-entered project name is preserved.
+
+## 14. Current Interaction Contract
+
+This section consolidates the current behavior after recent feature extensions.
+
+### 14.1 Data Loading Contract
+
+The tool has three upload inputs:
+
+- Device table: required.
+- Link table: required.
+- Ring/chain recognition table: optional.
+
+Parsing is triggered by the single Parse Upload action. Device and link tables are validated first. If a ring/chain table is provided, it is validated and cached after the core topology data is loaded. A missing ring/chain table is treated as a normal state and does not expose ring/chain style controls.
+
+Successful parsing also refreshes the project name field with a timestamp. The project name is metadata for the current page state only; it does not alter device, link, ring/chain, or style records.
+
+### 14.2 Condition Source Contract
+
+Highlight and filter condition groups have exactly one source:
+
+- `nodes`: match device rows.
+- `ringChains`: match ring/chain rows, then resolve matched rows to devices through `Member_path`.
+
+Mixed device and ring/chain conditions in the same condition group are intentionally not supported. This keeps `all` and `any` semantics clear and avoids implicit joins between unrelated row models.
+
+### 14.3 Highlight and Filter Contract
+
+Both highlight and filter use the same two-step resolution:
+
+1. Resolve a matched device set.
+2. Resolve matched links as links whose `Src NE Name` and `Sink NE Name` are both in the matched device set.
+
+Filter removes non-matched devices and non-matched links from the rendered data. Highlight keeps the current rendered data but dims non-matched devices and links according to the configured contrast. Matched devices and links keep their existing node/link/ring-chain styles.
+
+### 14.4 Style Priority Contract
+
+Link visual style is resolved in this order:
+
+1. Default link style.
+2. Applied link style rules.
+3. Applied ring/chain style rules for adjacent `Member_path` segments.
+4. Selected link or selected route state.
+
+Ring/chain style rules are compiled into a segment style map so link rendering performs direct lookup rather than scanning all ring/chain rows per link. Later applied ring/chain rules override earlier matched rules on the same segment.
+
+### 14.5 Route Path Rendering Contract
+
+`Route WKT` paths are rendered only in GIS view. They use a Canvas overlay rather than one Leaflet layer per route. Canvas paths support visibility, color, width, line style, and opacity configuration. During map movement or zooming, the existing route Canvas is removed and recreated after the map stabilizes to avoid stale transformed pixels and visible artifacts.
+
+Route path hit testing is based on pixel distance to route segments. Selecting a route also selects the corresponding link and highlights the route endpoints' device nodes, even when the route geometry endpoints are not identical to device coordinates.
