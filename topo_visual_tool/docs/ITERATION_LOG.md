@@ -1,0 +1,854 @@
+# 开发迭代日志
+
+## 2026-06-20 迭代 1
+
+### 目标
+
+完成轻量级本地 Web 前端拓扑可视工具的端到端首版交付。
+
+### 设计决策
+
+- 采用本地静态网页交付，满足本地 PC 直接打开的要求。
+- CSV 解析使用内置逻辑，降低基础场景依赖。
+- XLSX、GIS 地图分别接入 SheetJS 与 Leaflet CDN，避免构建工程和本地安装依赖。
+- Logic Topo 使用原生 SVG 与轻量 force layout，避免引入过重图形库。
+- 高亮、过滤、数据管理字段均从网元表动态生成，满足后续字段扩展。
+
+### 实现内容
+
+- 实现上传解析、GIS Topo、Logic Topo、搜索定位、高亮、过滤、数据管理、Mock 数据。
+- 拆分为 `topo_visual_tool.html`、`assets/css/styles.css`、`assets/js/app.js`。
+- 补充 `README.md` 和 `DESIGN.md`。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+
+## 2026-06-20 迭代 2
+
+### 目标
+
+根据反馈优化项目结构说明，并明确后续面向需求变更和能力演进的维护方式。
+
+### 实现内容
+
+- 保持 `topo_visual_tool.html` 可直接打开，承载页面结构与 CDN 依赖入口。
+- `assets/css/styles.css` 承载视觉样式。
+- `assets/js/app.js` 承载业务逻辑。
+- README 增加启动方式、目录结构、数据契约、扩展点和测试路径。
+
+## 2026-06-20 迭代 3
+
+### 目标
+
+按用户优化意见提升界面质感、数据管理可用性、GIS/Logic 可视效果、双语能力，并扩展 Mock 数据规模用于性能观察。
+
+### 实现内容
+
+- UI 视觉调整为商务、柔和的运维控制台风格：
+  - 低饱和背景。
+  - 柔和蓝绿色主色。
+  - 更细腻的卡片阴影、按钮状态、输入框焦点状态。
+- 数据管理增强：
+  - 表格单元格由 `contenteditable` 改为输入框，提升编辑稳定性。
+  - 新增数据统计条，显示当前表、显示记录、总记录、字段数、数据概况。
+  - 网元表统计角色分布，链路表统计端点缺失情况。
+- Logic Topo 增强：
+  - 节点半径按自由度自适应。
+  - 选中样式由黑色边框改为柔和青蓝描边和外圈光晕。
+  - 高亮样式使用暖金色外圈，降低未命中对象透明度。
+- GIS Topo 增强：
+  - 地图瓦片降低透明度并降低饱和度。
+  - 链路采用浅色底线加业务色线的双层绘制。
+  - 网元采用外圈光晕加角色色节点，搜索选中和高亮状态更显著。
+- 双语能力：
+  - 增加中文 / English 切换。
+  - 静态文本、占位符、动态提示、统计标签统一通过 `I18N` 字典管理。
+  - 英文术语中“网元”使用 `Device`，“链路”使用 `Link`。
+- Mock 数据增强：
+  - 当时版本从小规模样例扩展为约 120 个网元和 188 条链路。
+  - 覆盖多区域、多厂商、多状态、多服务等级。
+  - 用于观察 GIS、Logic、过滤、高亮、数据管理在中等规模数据下的响应。
+- 文档同步：
+  - `DESIGN.md` 已同步最新设计。
+  - `README.md` 已同步最新入口、能力、扩展点和测试路径。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+- 验证 `topo_visual_tool.html` 包含语言切换、数据统计条和脚本引用。
+- 验证 `assets/js/app.js` 包含大规模 Mock、数据统计、语言切换、节点半径计算等关键实现。
+
+## 2026-06-20 迭代 4
+
+### 目标
+
+优化百级网元下 Logic Topo 的可读性，清理节点外层阴影，修正过滤和高亮链路规则，并导出 Mock CSV 文件供用户从上传流程开始测试。
+
+### 实现内容
+
+- Logic Topo 布局从力导向改为确定性分层分组布局：
+  - PE 位于上层。
+  - ASG 位于中层。
+  - CSG 位于下层。
+  - 同一 `Region` 内节点按网格排列。
+- 移除节点外层视觉负担：
+  - GIS 节点删除外圈光晕，仅保留角色色填充和描边。
+  - Logic 节点删除外圈环和 drop-shadow。
+- 调整过滤规则：
+  - 保留符合条件的网元。
+  - 保留源端或宿端任一端在符合条件网元清单内的链路。
+  - 链路另一端网元作为上下文节点显示。
+- 调整高亮规则：
+  - 高亮符合条件的网元。
+  - 高亮源端或宿端任一端在符合条件网元清单内的链路。
+- 导出当时版本 Mock 数据文件：
+  - `device.csv`：120 条网元。
+  - `link.csv`：188 条链路。
+- 同步更新 `DESIGN.md` 和 `README.md`。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+- 当时生成 `device.csv` 和 `link.csv`，确认数量为 120 devices / 188 links；当前版本已在迭代 5 更新为 120 devices / 177 links。
+
+## 2026-06-20 迭代 5
+
+### 目标
+
+进一步提升百级网元 Logic Topo 的可读性，并将 Mock 数据改造成更贴近真实网络的接入环、汇聚环、核心 full-mesh 结构。
+
+### 实现内容
+
+- Logic Topo 新增网络结构化布局：
+  - PE 位于顶部核心区，按椭圆分布，适配 full-mesh。
+  - ASG 按 `Ring ID` 形成汇聚环，位于中上层。
+  - CSG 按 `Ring ID` 形成接入环路径，位于下层。
+  - 节点名称固定放在节点右侧，减少名称与节点重叠。
+  - 同一环内节点按顺序排列，减少长距离交叉。
+- 点击节点后，GIS 和 Logic 视图都会强调该节点的一跳直连链路和邻居节点。
+- 对没有 `Ring ID` 的上传数据，保留通用分层分组布局作为回退。
+- Mock 数据真实化：
+  - 6 个 PE，PE 之间 full-mesh。
+  - 6 个 ASG 汇聚环，每环 4 个 ASG，并双上联到一对 PE。
+  - 18 个 CSG 接入环，每环 5 个 CSG，并由环起点和终点双上联到一对 ASG。
+  - 网元表新增 `Ring ID`、`Ring Role`、`Uplink Pair` 字段。
+- 重新导出 Mock CSV：
+  - `device.csv`：120 条网元。
+  - `link.csv`：177 条链路。
+- 同步更新 `DESIGN.md` 和 `README.md`。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+- 重新生成 `device.csv` 和 `link.csv`，确认数量为 120 devices / 177 links。
+
+## 2026-06-20 迭代 6
+
+### 目标
+
+按用户建议借鉴 NetworkX `spring_layout` / springout 类布局算法，并新增面向外部清单粘贴的批量网元/链路查询能力。
+
+### 实现内容
+
+- Logic Topo 布局升级为浏览器端 spring layout：
+  - 使用网络结构化布局作为确定性初始坐标。
+  - 链路两端使用弹簧吸引力。
+  - 所有节点之间使用斥力。
+  - 保留 PE / ASG / CSG 弱层级约束，避免层次完全混杂。
+  - 布局计算预留横向标签空间，降低网元名称与节点或其他名称重叠概率。
+- 新增批量查询功能：
+  - 左侧新增“批量查询”文本框。
+  - 支持从 Word / Excel / CSV 粘贴多行、逗号、制表符、空格分隔的网元或链路端点。
+  - 点击“查询”后，只显示相关网元、相关链路和链路上下文端点。
+  - 点击“清除查询”恢复普通过滤/高亮视图。
+- 双语字典补充批量查询相关中文和英文文案。
+- 同步更新 `DESIGN.md` 和 `README.md`。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+- 验证 `topo_visual_tool.html` 已包含批量查询输入框和查询按钮。
+- 验证 `assets/js/app.js` 已包含 `applySpringLayout`、`parseBulkQuery`、`intersectSets` 等关键实现。
+
+## 2026-06-22 迭代 7
+
+### 目标
+
+解决 2w+ 网元、万级链路上传后页面卡死的问题，让工具在大规模数据下仍能快速恢复交互，并支持局部拓扑查看。
+
+### 实现内容
+
+- 新增性能阈值配置 `PERF`：
+  - Logic Topo 布局上限：600 网元 / 1000 链路。
+  - GIS 渲染上限：2500 网元 / 2500 链路。
+  - 数据表渲染上限：500 行。
+- 上传数据后建立索引：
+  - `nodeByName`
+  - `upperNameToName`
+  - `linksByNode`
+- 大规模数据加载时跳过全量 Logic spring layout，避免 O(n²) 主线程阻塞。
+- GIS 使用 Leaflet canvas renderer，并按当前地图视窗裁剪渲染对象。
+- 数据管理表格只渲染前 500 行，保留完整数据统计。
+- 批量查询与一跳链路查询改用索引，避免全链路反复扫描。
+- 坐标缺失和断链统计在加载时缓存，避免地图移动时重复计算。
+- 新增大规模测试数据：
+  - `large_device.csv`：20000 条网元。
+  - `large_link.csv`：30000 条链路。
+- 同步更新 `DESIGN.md` 和 `README.md`。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+- 生成 `large_device.csv` 和 `large_link.csv`，确认数量为 20000 devices / 30000 links。
+- 使用 Node 模拟核心路径：
+  - CSV 解析约 39ms。
+  - 索引构建约 19ms。
+  - 批量查询一跳过滤约 0ms 级。
+  - 表格渲染行数限制为 500。
+
+## 2026-06-22 迭代 8
+
+### 目标
+
+按用户反馈重新构造更合理的大规模测试拓扑：节点分布尽可能覆盖泰国，暂不构造 PE，控制 CSG 和 ASG 的连接度。
+
+### 实现内容
+
+- 重新生成 `large_device.csv`：
+  - 20000 条网元。
+  - 2500 个 ASG。
+  - 17500 个 CSG。
+  - 经纬度分布覆盖泰国多个区域。
+- 重新生成 `large_link.csv`：
+  - 17500 条链路。
+  - 每个 ASG 连接附近 7 个 CSG。
+  - 每个 CSG 只连接 1 个 ASG。
+  - ASG-CSG 链路距离控制在约 20km 内。
+- 同步更新 `DESIGN.md` 和 `README.md`。
+
+### 测试记录
+
+- 数量校验：`large_device.csv=20000`，`large_link.csv=17500`。
+- 连接度校验：`maxCsg=1`，`minAsg=7`，`maxAsg=7`。
+- `node --check assets/js/app.js` 通过。
+
+
+
+
+
+
+
+
+## 2026-06-22 迭代 9
+
+### 目标
+
+解决大规模数据场景下 GIS 地图放大后在线瓦片加载失败、出现灰色色块的问题，同时降低缩放和拖动过程中的业务图层重绘压力。
+
+### 实现内容
+
+- GIS 地图初始化增加瓦片加载优化：
+  - `updateWhenIdle=true`
+  - `updateWhenZooming=false`
+  - `keepBuffer=4`
+  - `maxNativeZoom=18`
+- 地图拖动和缩放期间不立即重绘网元/链路，改为 `moveend` / `zoomend` 后防抖刷新。
+- 增加在线瓦片失败监控，15 秒内连续失败达到阈值后自动切换为本地浅色简洁底图。
+- 地图容器增加浅色网格背景兜底，在线瓦片未加载完成或被移除时仍保持可读。
+- GIS 单次渲染上限从 2500 网元 / 2500 链路收敛为 1500 网元 / 1500 链路，优先保证大数据缩放响应。
+- GIS 视窗裁剪范围增加少量 padding，避免拖动后边缘对象频繁闪现或消失。
+- 同步更新 `DESIGN.md` 和 `README.md`。
+
+### 测试记录
+
+- 执行 `node --check assets/js/app.js`，业务脚本语法检查通过。
+- 核对 `DESIGN.md`、`README.md` 和 `assets/css/styles.css` 已同步本轮 GIS 瓦片兜底与缩放优化。
+
+## 2026-06-23 迭代 10
+
+### 目标
+
+按用户反馈开放节点视觉样式配置，并优化 Logic Topo 中无连接网元的布局方式，避免孤立散点干扰有连接节点的 spring layout。
+
+### 设计更新
+
+- `DESIGN.md` 新增“可配置节点样式与孤立网元布局”章节。
+- 明确高亮节点和角色图例均支持颜色、大小、形状配置。
+- 明确 GIS / Logic Topo 统一支持圆形、方形、菱形、三角形。
+- 明确 Logic Topo 中自由度为 0 的网元不参与 spring layout，而是统一平铺到画布底部散点带。
+
+### 实现内容
+
+- 侧边栏新增“样式设置”面板：
+  - 高亮节点样式：颜色、大小、形状。
+  - CSG / ASG / PE / Other 角色样式：颜色、大小、形状。
+  - 支持一键恢复默认样式。
+- 角色图例改为动态渲染，跟随用户配置实时更新。
+- GIS Topo 节点渲染改为统一 shape 工厂：
+  - 圆形继续使用 Leaflet `circleMarker`。
+  - 方形、菱形、三角形使用 Leaflet polygon，保持矢量渲染和大数据响应能力。
+- Logic Topo 节点渲染从固定 `<circle>` 升级为 SVG shape helper。
+- Logic Topo 布局分流：
+  - 有连接节点进入 spring layout。
+  - 无连接节点按名称稳定排序后平铺到画布底部。
+  - 引入 layout key，拖拽、缩放、样式变化不会重复触发布局计算。
+- `README.md` 同步新增样式配置说明、测试路径和大规模验证结果。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态资源一致性检查通过：新增样式控件 ID、CSS 类、JS 绑定均存在。
+- 大规模数据路径验证：
+  - `large_device.csv=20000`
+  - `large_link.csv=17500`
+  - 断链 `0`
+  - CSG 最大连接数 `1`
+  - ASG 最小/最大连接数 `7/7`
+  - GIS 有效坐标抽样 `1500`
+  - PowerShell 解析、索引和统计验证耗时约 `2999ms`
+- Logic 局部样本验证：
+  - 360 网元 / 315 链路样本低于 Logic 阈值，可进入布局。
+  - 550 网元 / 479 链路样本中识别到孤立节点并进入底部散点带。
+
+## 2026-06-23 迭代 11
+
+### 目标
+
+为高亮条件、过滤条件、网元定位输入框增加历史搜索缓存，用户清空某次输入后，再次点击输入框可以快速选择之前使用过的记录。
+
+### 设计更新
+
+- `DESIGN.md` 新增“搜索历史缓存”设计说明。
+- 历史记录使用浏览器 `localStorage` 保存，不写入上传数据文件。
+- 网元定位、高亮条件值、过滤条件值三类历史相互独立。
+- 每类最多保留 12 条，重复记录去重并前移。
+
+### 实现内容
+
+- `topo_visual_tool.html` 为高亮条件值、过滤条件值增加 datalist 候选源。
+- `assets/js/app.js` 增加搜索历史状态、加载、保存、去重、候选刷新逻辑。
+- 网元定位候选列表改为“历史定位记录 + 当前网元名称联想”的合并列表。
+- 增加自定义历史下拉菜单，输入框为空且获得焦点/点击时直接浮现历史记录，避免依赖不同浏览器的 datalist 弹出行为。
+- 高亮/过滤的清除按钮只清空当前输入，不清除历史缓存。
+- 为大规模数据场景限制网元定位 datalist 的普通网元候选数量，避免一次性写入 2w 条候选影响响应。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态一致性检查通过：`neSuggestions`、`highlightHistory`、`filterHistory` 与 JS 绑定均存在。
+- 静态一致性检查通过：`SEARCH_HISTORY_KEY`、`loadSearchHistory`、`rememberSearchHistory`、`bindSearchHistoryInput`、`showSearchHistoryMenu`、`hideSearchHistoryMenu`、`localStorage` 关键实现均存在。
+
+## 2026-06-23 迭代 12
+
+### 目标
+
+补齐高亮样式设置能力：除高亮节点颜色、大小、形状外，开放与高亮节点相关的链路颜色设置。
+
+### 设计更新
+
+- `DESIGN.md` 将高亮样式定义扩展为“节点颜色、节点大小、节点形状、相关链路颜色”。
+- 相关链路颜色在 GIS Topo 与 Logic Topo 中保持一致。
+- 选中链路仍保留选中态颜色优先级，避免和高亮链路混淆。
+
+### 实现内容
+
+- `topo_visual_tool.html` 在高亮样式设置中新增“链接颜色”颜色选择器。
+- `assets/js/app.js` 中 `DEFAULT_HIGHLIGHT_STYLE` 新增 `linkColor`。
+- 高亮样式初始化、实时更新、重置流程均接入 `highlightLinkColorInput`。
+- GIS 高亮相关链路读取 `state.highlightStyle.linkColor`。
+- Logic 高亮相关链路通过内联 `stroke` 使用用户配置的链接颜色。
+- 高亮节点描边同步改为使用用户配置的节点颜色。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态一致性检查通过：
+  - HTML 存在 `highlightLinkColorInput`。
+  - JS 存在 `linkColor` 状态和 `el.highlightLinkColorInput` 绑定。
+  - GIS / Logic 高亮链路均读取 `state.highlightStyle.linkColor`。
+  - CSS 存在 `--node-highlight` 变量，用于 Logic 高亮节点描边。
+
+## 2026-06-23 迭代 13
+
+### 目标
+
+扩展样式设置能力：自动解析上传 link 表字段及枚举值，允许用户按链路字段条件配置链路颜色、线型和线宽；同时增强高亮/过滤条件值的字段枚举联想。
+
+### 设计更新
+
+- `DESIGN.md` 新增“链路样式规则与字段值联想”设计说明。
+- 链路样式规则支持多条同时生效，按列表顺序匹配，后匹配规则覆盖前匹配规则。
+- 不预设 link 表字段含义，所有字段和值均来自用户上传数据。
+- 操作符先支持 `等于`、`包含`、`不等于`。
+- GIS Topo 和 Logic Topo 共用链路样式规则；选中链路和高亮相关链路保留更高视觉优先级。
+
+### 实现内容
+
+- `topo_visual_tool.html` 在“样式设置”中新增“链路样式规则”区域：
+  - 新增规则。
+  - 删除规则。
+  - 字段、条件、取值、颜色、线型、线宽配置。
+- `assets/js/app.js` 新增：
+  - `linkStyleRules` 状态。
+  - link 表字段枚举解析 `collectValueOptions`。
+  - 链路样式规则渲染、编辑、删除和字段切换逻辑。
+  - `resolveLinkStyle` 统一计算链路颜色、线宽、虚线样式。
+- GIS 链路渲染接入 `color`、`weight`、`dashArray`。
+- Logic 链路渲染接入 SVG `stroke`、`stroke-width`、`stroke-dasharray`。
+- 高亮/过滤条件值联想升级：
+  - 根据当前选择字段解析网元表已有取值。
+  - 字段枚举值优先展示，历史记录作为补充。
+  - 仍允许用户直接输入未出现的新值。
+- `assets/css/styles.css` 增加链路规则紧凑卡片样式，降低侧边栏视觉负担。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态一致性检查通过：
+  - HTML 存在 `linkStyleRuleList`、`addLinkStyleRuleBtn`。
+  - JS 存在 `linkStyleRules`、`resolveLinkStyle`、`collectValueOptions`、`updateConditionValueSuggestions`。
+  - CSS 存在 `.link-style-rule`。
+- Mock 数据规则验证：
+  - `link.csv=177`。
+  - 自动识别字段 `Link Type`。
+  - 自动识别枚举值 5 个：`PE-FullMesh`、`ASG-Ring`、`ASG-Uplink`、`CSG-Ring`、`CSG-Uplink`。
+  - 示例规则命中 129 条链路。
+- 大规模数据规则验证：
+  - `large_link.csv=17500`。
+  - 自动识别字段 `Link Type`。
+  - 枚举值 `ASG-CSG-Access` 命中 17500 条链路。
+  - PowerShell 枚举解析与匹配验证耗时约 `640ms`。
+
+## 2026-06-23 迭代 14
+
+### 目标
+
+将节点图例样式从固定 `Role` 字段配置升级为通用节点样式规则：自动解析 device 表字段和值，允许用户按任意字段条件配置节点颜色、大小和形状，并通过拖拽调整规则优先级。
+
+### 设计更新
+
+- `DESIGN.md` 将“角色图例样式”扩展为“节点样式规则”。
+- 默认规则仍按 `Role` 自动生成：
+  - Other 灰色圆形兜底规则位于最前。
+  - CSG 蓝色圆形、ASG 橙色圆形、PE 红色圆形位于其后。
+- 规则按从上到下匹配，后匹配规则覆盖前匹配规则。
+- 用户新增规则可选择 device 表任意字段，条件值自动联想该字段已有取值，也允许手动输入。
+- 规则支持拖拽排序，用于调整匹配优先级。
+
+### 实现内容
+
+- `topo_visual_tool.html`：
+  - 固定角色图例改为动态 `nodeLegend`。
+  - 角色样式编辑区改为 `nodeStyleRuleList` 节点样式规则区。
+  - 新增 `addNodeStyleRuleBtn` 和节点规则取值 datalist。
+- `assets/js/app.js`：
+  - 移除固定 `roleStyles` 状态。
+  - 新增 `nodeStyleRules` 状态。
+  - 新增 `resolveNodeStyle`，统一计算节点基础颜色、大小、形状。
+  - 新增节点规则新增、删除、编辑、字段值联想和拖拽排序逻辑。
+  - 节点图例由当前节点样式规则动态生成。
+  - GIS / Logic 节点渲染均改为读取 `resolveNodeStyle`。
+- `assets/css/styles.css`：
+  - 增加节点样式规则卡片样式。
+  - 增加拖拽手柄和拖拽态样式。
+- `README.md` 同步更新功能说明和建议测试路径。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态一致性检查通过：
+  - HTML 存在 `nodeLegend`、`nodeStyleRuleList`、`addNodeStyleRuleBtn`。
+  - JS 存在 `nodeStyleRules`、`resolveNodeStyle`、`onNodeRuleDrop`、`updateNodeLegend`。
+  - CSS 存在 `.node-style-rule` 和 `.node-style-rule.dragging`。
+- `device.csv` 当前包含 4527 条网元，Role 枚举值为 `asg/csg`。
+- 默认节点规则使用大小写不敏感匹配：
+  - CSG 命中 4407 条。
+  - ASG 命中 120 条。
+- 修正默认兜底规则顺序：Other 规则放在最前，避免因“后匹配覆盖前匹配”覆盖 CSG/ASG/PE 默认规则。
+
+## 2026-06-23 迭代 15
+
+### 目标
+
+根据用户使用反馈，将“节点图例/角色基础样式”和“节点样式规则覆盖”解耦：节点图例仍默认按角色展示并允许用户单独配置；节点样式规则作为独立覆盖层，只有点击“应用节点规则”后才影响命中节点。
+
+### 设计更新
+
+- `DESIGN.md` 明确节点样式分层：
+  - 角色图例基础层：CSG / ASG / PE / Other 的颜色、大小、形状。
+  - 节点规则覆盖层：按 device 表字段条件覆盖命中节点样式。
+- 节点规则编辑为草稿态，新增、编辑、拖拽不会立即影响拓扑。
+- 点击“应用节点规则”后，当前规则列表才进入已应用覆盖层。
+- 删除节点规则会同步移除该规则覆盖效果。
+- 重置样式会清空节点规则并恢复角色图例基础样式。
+
+### 实现内容
+
+- `topo_visual_tool.html`：
+  - 恢复 `roleStyleEditor` 角色图例样式编辑区。
+  - 节点规则区新增 `applyNodeStyleRulesBtn`。
+- `assets/js/app.js`：
+  - 恢复 `roleStyles` 作为基础节点样式状态。
+  - 新增 `appliedNodeStyleRules` 作为已应用覆盖层。
+  - `resolveNodeStyle` 改为先读取角色基础样式，再叠加已应用节点规则。
+  - 节点规则新增、编辑、拖拽只更新草稿规则，不立即刷新拓扑。
+  - 删除规则会重建已应用规则并刷新拓扑，确保覆盖效果被移除。
+  - 重置样式恢复默认角色样式、清空草稿规则和已应用规则。
+  - 节点图例只展示角色基础样式，不再展示自定义节点规则。
+- `README.md` 同步更新功能说明和测试路径。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态一致性检查通过：
+  - HTML 存在 `roleStyleEditor` 和 `applyNodeStyleRulesBtn`。
+  - JS 存在 `roleStyles`、`appliedNodeStyleRules`、`applyNodeStyleRules`。
+  - `resolveNodeStyle` 从角色基础样式开始计算。
+- `device.csv` 当前 4527 条网元：
+  - 角色基础样式中 CSG 命中 4407 条。
+  - 应用 `Role = csg` 自定义规则后，覆盖命中 4407 条。
+  - 清空/删除规则后，恢复 CSG 基础样式命中 4407 条。
+
+## 2026-06-23 迭代 16
+
+### 目标
+
+修复节点样式规则卡片 UI 溢出问题：新增节点规则时输入框向左溢出侧边栏；同时按用户建议取消拖拽排序，改为固定排序按钮。
+
+### 实现内容
+
+- 移除节点规则卡片中的拖拽手柄和 HTML5 拖拽事件。
+- 新增“上移 / 下移”按钮调整节点规则顺序。
+- 节点规则卡片改为两列稳定布局：
+  - 第一行：字段 + 条件。
+  - 第二行：取值。
+  - 第三行：颜色 + 大小。
+  - 第四行：形状。
+  - 第五行：上移 / 下移 / 删除操作。
+- 调整 CSS，确保输入框使用 `minmax(0, 1fr)` 和固定宽度操作列，避免再从左侧溢出功能面板。
+- 删除已废弃的 `dragRule` 文案。
+- `DESIGN.md` 和 `README.md` 将“拖拽排序”同步更新为“上移/下移调整顺序”。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 静态一致性检查通过：
+  - JS / CSS 不再包含 `drag-handle` 和节点规则拖拽函数。
+  - JS 存在 `data-move-node-rule` 上移/下移按钮。
+  - CSS 存在 `.rule-actions` 操作区。
+- 节点规则卡片使用 `grid-template-columns: minmax(0, 1fr) 110px`，防止输入框溢出。
+
+## 2026-06-24 迭代 17
+
+### 目标
+
+新增链路点击详情能力：用户点击 GIS 或 Logic Topo 中任意一条链路时，右上角弹出链路信息卡片，交互和视觉位置参考现有网元详情卡片。
+
+### 设计更新
+
+- 复用 `#details` 详情卡片容器，链路卡片与网元卡片使用同一套右上角浮层样式。
+- 新增链路选中状态 `selectedLinkKey`，与网元选中状态互斥。
+- 链路详情按 `state.linkFields` 动态渲染，不绑定固定业务字段。
+- 选中链路继续复用当前 GIS / Logic 链路高优先级样式，便于用户识别当前查看对象。
+
+### 实现内容
+
+- GIS Topo：为链路业务线和白色底线同时绑定点击事件，提升细线点击命中率。
+- Logic Topo：为 SVG 链路线段绑定点击事件，并通过渲染时的 `data-link` 回查对应链路记录。
+- 新增 `showLinkDetails(link)`，展示 `Src NE Name - Sink NE Name` 标题和 link 表全部字段。
+- 点击网元或定位网元时自动清除链路选中态，点击链路时自动清除网元选中态。
+- 内置 Mock 链路数据补充 `Status`、`Media Type`、`Protection`、`Service Class`、`Utilization` 等属性。
+- 当前测试 `link.csv` 补充 `Link Type`、`Status`、`Capacity`、`Media Type`、`Protection`、`Service Class`、`Utilization` 字段，用于链路详情验证。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- `link.csv` 当前包含 3480 条链路记录，字段数从 2 个扩展为 9 个。
+
+## 2026-06-24 迭代 18
+
+### 目标
+
+优化条件过滤逻辑：用户按字段和条件值筛选时，只展示符合条件的网元，以及这些网元之间构成的链路。
+
+### 设计更新
+
+- 条件过滤不再自动带入命中网元的一跳邻居节点。
+- 条件过滤下链路必须满足源端和宿端都在过滤命中网元集合内。
+- 批量查询仍保留一跳上下文能力；如果批量查询与条件过滤同时存在，条件过滤作为最终边界约束。
+
+### 实现内容
+
+- 调整 `getVisibleData()` 的过滤分支：存在 `filterRule` 时直接从全量链路中过滤两端都命中的链路。
+- 调整过滤后的可见网元集合：存在 `filterRule` 时只使用命中网元，不再从链路另一端补充上下文网元。
+- 保留仅批量查询场景的一跳链路和上下文节点展示逻辑。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-24 迭代 19
+
+### 目标
+
+新增 GIS 路网路径呈现能力：当 link 表存在 `Route WKT` 且行内有有效 `LINESTRING` 时，根据路网路由绘制 GIS 路径图层。
+
+### 设计更新
+
+- 路网路径作为 GIS 专属图层，位于现有链路直连线下方。
+- 左侧“样式设置”新增路网路径样式区域，支持显示开关、颜色、线宽和线型。
+- 默认勾选显示路网路径；取消勾选后清除该图层。
+- 无 `Route WKT` 字段或字段为空时不渲染路网路径。
+- WKT 解析兼容半角/全角括号、英文/中文逗号和多空格，经纬度顺序按 `lng lat` 处理。
+
+### 实现内容
+
+- 新增 `ROUTE_WKT_FIELD`、`DEFAULT_ROUTE_PATH_STYLE` 和 `routePathStyle` 状态。
+- 新增 `parseRouteWkt()`，将 `LINESTRING` 转换为 Leaflet polyline 坐标。
+- GIS `renderMap()` 中新增路网路径图层清理和绘制逻辑。
+- `topo_visual_tool.html` 新增路网路径样式控件，`styles.css` 补充控件布局。
+- 内置 Mock 链路和当前 `link.csv` 均新增 `Route WKT` 数据。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+- 当前 `link.csv` 包含 3480 条链路记录，`Route WKT` 非空记录 3480 条。
+
+## 2026-06-24 迭代 20
+
+### 目标
+
+优化路网路径交互与渲染性能：点击某条路网路径时突出显示对应路由和源宿网元；点击空白区域时清除节点、链路和路网路径选中态；降低大量 Route WKT 场景下的 GIS 渲染卡顿。
+
+### 设计更新
+
+- 路网路径从逐条 Leaflet polyline 改为单 Canvas 图层合批绘制，减少大量路径带来的图层和 DOM 开销。
+- GIS 路网路径点击使用像素级线段命中测试，命中后复用链路详情卡片展示 link 记录。
+- 选中路网路径时，同步高亮对应 Route WKT 折线、源宿直连链路、源宿网元。
+- 当路网路径首尾点与源宿网元经纬度不重合时，绘制端点引导线辅助识别对应关系。
+- GIS 地图空白点击、Logic Topo 空白点击均会清除当前选中态；画布拖动不会误触发清除。
+
+### 实现内容
+
+- 新增 `selectedRouteKey`、`routeHitEntries`、`ROUTE_HIT_TOLERANCE_PX` 和 `ROUTE_POINTS_CACHE`。
+- 新增 `renderRouteCanvas()`，将当前可见路由绘制到一个 Canvas overlay，并按选中态做二次高亮绘制。
+- Canvas 路网图层按 `devicePixelRatio` 设置实际绘制尺寸，降低高分屏下路径线条发虚的问题。
+- 新增 `findRouteHit()`、`routeDistanceToContainerPoint()` 和 `pointToSegmentDistance()`，支持点击路网路径定位对应链路。
+- 新增 `routePointsForLink()` 缓存 Route WKT 解析结果，避免频繁重解析。
+- 新增 `clearSelection()`，统一处理空白点击后的选中态和详情卡片清理。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-24 迭代 21
+
+### 目标
+
+修复 GIS 地图放大、缩小时路网 Canvas 图层残影问题，并为路网路径开放透明度样式配置，解决默认路网路径显示过淡的问题。
+
+### 设计更新
+
+- 路网 Canvas 不参与 Leaflet 缩放动画复用；地图开始平移或缩放时立即清理旧 Canvas，地图停止后重新按当前视口绘制。
+- 左侧“路网路径样式”新增透明度滑杆，范围为 0.1 到 1。
+- 路网路径默认透明度调整为 0.86，未选中状态更清晰；选中路由仍使用最高可见度，其他路由按比例降低透明度。
+
+### 实现内容
+
+- 新增 `clearRouteLayers()`，统一移除路网 Canvas 图层并清空路由点击命中缓存。
+- 在 Leaflet `movestart` / `zoomstart` 事件中调用 `clearRouteLayers()`，避免缩放过程中旧 Canvas 被拉伸形成残影。
+- `DEFAULT_ROUTE_PATH_STYLE` 新增 `opacity` 字段，渲染时由 `renderRouteCanvas()` 读取并应用。
+- `topo_visual_tool.html` 新增 `routePathOpacityInput` 滑杆，`styles.css` 调整路网样式控件列布局。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-24 迭代 22
+
+### 目标
+
+排查并修复 GIS 底层在线地图渲染发糊的问题。
+
+### 原因分析
+
+- 在线瓦片图层被设置为 `opacity: 0.64`，底图与背景混合后对比度不足，视觉上偏淡偏糊。
+- CSS 对 `.leaflet-tile-pane` 使用了 `filter: saturate(...) contrast(...) brightness(...)`，会触发浏览器对瓦片层二次栅格化，高分屏和缩放后更容易出现模糊。
+- Leaflet 瓦片 `detectRetina` 关闭，高 DPI 屏幕上仍使用普通瓦片，清晰度不足。
+- `updateWhenZooming` 关闭时，缩放过程中更容易看到被拉伸的旧瓦片。
+
+### 实现内容
+
+- 在线瓦片透明度调整为 `1`，恢复原始底图清晰度。
+- 移除 `.leaflet-tile-pane` 的 CSS filter，避免瓦片层被滤镜重采样。
+- 开启 `detectRetina`，高分屏设备使用更高分辨率瓦片。
+- 开启 `updateWhenZooming` 并关闭 `updateWhenIdle`，缩放过程中更积极更新瓦片。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-25 迭代 23
+
+### 目标
+
+将高亮、过滤、节点样式规则和链路样式规则从单字段条件扩展为多字段复合条件，并优化高亮交互为“淡化未命中对象”。
+
+### 设计更新
+
+- 保留左侧单条件快捷入口，复杂组合条件通过“复合条件”弹层编辑。
+- 复合条件支持 `全部满足` 与 `任一满足` 两种组合方式。
+- 条件弹层支持新增、删除多条字段条件，并复用于高亮、过滤、节点样式规则和链路样式规则。
+- 条件历史保存到 `localStorage`，弹层内展示历史条件，支持一键恢复之前应用过的条件。
+- 高亮不再改变命中节点/链路的样式，命中对象保留原节点样式和链路样式，仅降低未命中对象透明度。
+
+### 实现内容
+
+- 新增条件组模型 `{ mode, conditions }`，`matchesRule()` 统一支持单条件和复合条件。
+- 新增复合条件弹层、条件历史列表、历史恢复和持久化逻辑。
+- 节点样式规则与链路样式规则改为条件摘要 + 复合条件编辑按钮。
+- 移除旧的高亮节点样式配置 UI 和相关渲染覆盖逻辑。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-25 迭代 24
+
+### 目标
+
+统一节点样式规则和链路样式规则的应用方式，并开放高亮未命中对象的淡化强度配置。
+
+### 设计更新
+
+- 链路样式规则改为“编辑草稿 + 应用后生效”，与节点样式规则交互保持一致。
+- 高亮条件区新增“对比度”滑杆，范围为 0 到 1；对比度越高，未命中节点和链路越淡。
+- 对比度同时作用于 GIS Topo 和 Logic Topo。
+
+### 实现内容
+
+- 新增 `appliedLinkStyleRules`，链路渲染只读取已应用的链路规则。
+- 新增“应用链路规则”按钮和 `applyLinkStyleRules()`。
+- 新增 `highlightContrast` 状态与 `highlightDimOpacity()`，替换原先写死的未命中透明度。
+- Logic Topo 通过 CSS 变量接收当前未命中透明度。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-25 迭代 25
+
+### 目标
+
+调整高亮对比度语义，使最大对比度时未命中节点和链路基本不可见。
+
+### 实现内容
+
+- `highlightDimOpacity()` 改为按基础透明度乘以 `(1 - contrast)` 计算。
+- 当对比度为 `1` 时，未命中节点、链路和节点填充透明度均为 `0`。
+- 当对比度为 `0` 时，未命中对象保持原始可见度。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-25 迭代 26
+
+### 目标
+
+修复复合条件弹层中条件值输入框缺少枚举值和历史输入候选的问题。
+
+### 实现内容
+
+- 每条复合条件行的 value 输入框增加动态 `datalist`。
+- 候选值按当前字段从上传数据中提取枚举值。
+- 高亮/过滤条件合并对应的历史输入缓存。
+- 节点样式/链路样式条件合并同类型复合条件历史中的输入值。
+- 条件字段切换后自动清空当前值并刷新候选列表。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-27 迭代 27
+
+### 目标
+
+修正高亮条件的链路保留逻辑：只保留源宿两端都命中高亮条件的链路，其他节点和链路按对比度透明化。
+
+### 实现内容
+
+- `getVisibleData()` 中 `highlightLinkKeys` 从“一端命中”改为“源宿两端都命中”。
+- GIS 直连链路和 Logic 链路继续基于 `highlightLinkKeys` 判断是否保留原透明度。
+- GIS 路网路径图层同步使用 `highlightLinkKeys`，非命中路由按高亮对比度透明化。
+
+### 测试记录
+
+- `node --check assets/js/app.js` 通过。
+
+## 2026-06-30 环链识别表可视化
+
+本轮新增可选环链识别表上传、环链字段高亮/过滤和环链样式规则，便于基于外部环链识别结果快速定位拓扑中的环、链路径。
+
+- 上传区新增“环链表”入口；未上传时不影响原有网元表、链路表解析。
+- 解析环链表后缓存 `Category`、`Name`、`Root1`、`Root2`、`Label`、`Member_num`、`Member_path`、`Uplink_pair`、`Belong_agg` 字段。
+- 统计卡片在存在环链数据时显示环数量和链数量，其中 `Category=Ring` 计入环，`Category=Link` 计入链。
+- `Member_path` 按 `->` 解析；缺失网元以 warning 提示并在渲染逻辑中忽略，不中断上传。
+- 高亮/过滤复合条件新增条件来源：网元字段或环链字段；每个条件组只允许一种来源。
+- 环链字段命中时，先匹配环链记录，再取命中记录 `Member_path` 的网元并集；后续链路仍要求源宿两端都在命中网元集合内。
+- 样式设置新增环链样式规则，仅在已上传环链表后展示；规则只作用于命中环链记录 `Member_path` 中相邻节点形成的路径段。
+- 环链字段条件值输入框接入数据枚举值和历史输入值联想。
+- 新增 `ring_chain_sample.csv`，基于当前 `device.csv` 和 `link.csv` 构造环链测试数据，覆盖 `Ring`、`Link` 和缺失成员 warning 场景。
+
+## 2026-07-01 项目名称记录栏
+
+为便于标记当前数据版本，在网页右上角、语言切换控件前新增项目名称输入栏。
+
+- 每次成功解析上传数据或加载 Mock 数据后，默认写入当前解析时间戳。
+- 时间戳格式为 `YYYY-MM-DD-HH-mm-ss`。
+- 用户可直接编辑项目名称，作为当前数据版本标记。
+- 语言切换只刷新标签和 placeholder，不覆盖用户已输入的项目名称。
+## 2026-07-01 GIS 同经纬度共址网元聚合
+
+本轮优化 GIS 视图中多个网元经纬度完全相同的可视化问题。
+
+- GIS 渲染前按经纬度对当前可见网元分组。
+- 单网元坐标继续使用原节点样式。
+- 多网元坐标渲染为带数量的共址聚合点，避免多个 marker 完全重叠后无法识别。
+- 共址点同角色时使用该角色样式；多角色时按 `PE > ASG > CSG > OTHER` 优先级取主样式。
+- 点击共址点后，右上角详情卡片展示该坐标下全部网元、角色分布和坐标。
+- 点击共址列表中的某个网元后，进入原有单网元详情，并沿用现有一跳链路高亮逻辑。
+- 定位到共址网元时，地图平移到对应坐标并打开共址列表，目标网元在列表中高亮。
+- 新增 `colocated_device_sample.csv` 和 `colocated_link_sample.csv`，用于验证同角色共址、混合角色共址和 PE/ASG/CSG 混合共址场景。
+
+## 2026-07-01 环链字段过滤统计增强
+
+本轮补充环链字段过滤后的统计卡片信息。
+
+- 当过滤条件来源为环链字段时，统计卡片额外显示“当前显示环”和“当前显示链”。
+- “当前显示环”统计本次环链过滤条件命中的 `Category=Ring` 记录数。
+- “当前显示链”统计本次环链过滤条件命中的 `Category=Link` 记录数。
+- 未使用环链字段过滤时，这两张统计卡片保持隐藏，避免和环链表总量统计混淆。
+- README 和 DESIGN.md 已同步记录该统计行为。
+
+## 2026-07-01 文档同步：当前版本功能总览
+
+本轮根据最近几次功能拓展，同步更新 README、设计文档和迭代日志，确保文档描述与当前工具行为一致。
+
+- README 新增“当前版本能力补充”，覆盖项目名称记录、环链识别表、复合高亮/过滤、环链样式规则、路网路径图层和推荐测试流程。
+- README 明确当前过滤逻辑：只保留命中网元，以及源宿两端都在命中网元集合内的链路。
+- README 明确环链字段条件逻辑：先匹配环链记录，再从 `Member_path` 提取网元并集。
+- README 补充 `ring_chain_sample.csv` 的用途，作为环链识别功能测试数据。
+- DESIGN.md 新增“Current Interaction Contract”，统一记录数据加载、条件来源、高亮/过滤、样式优先级和路网路径渲染契约。
+- ITERATION_LOG.md 记录本次文档同步，便于追踪这次非代码功能变更。
+
+## 2026-07-01 泰国大规模共站点测试数据
+
+本轮新增用于 GIS 共站点聚合性能验证的大规模测试数据。
+
+- 新增 `thailand_colocated_large_device.csv`，包含 60 个 ASG 和 1100 个 CSG。
+- 新增 `thailand_colocated_large_link.csv`，包含 60 条 ASG ring 链路和 1100 条 CSG uplink 链路。
+- 网元分布在泰国境内 500 个唯一经纬度站点上，每个站点均包含多个网元，用于验证同经纬度共站点聚合渲染。
+- 链路表包含 `Route WKT`，可同时验证路网路径图层和共站点聚合在大数据规模下的协同显示。
+- 已校验链路源宿均能匹配网元表，端点缺失数量为 0。
