@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>路网距离计算器</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQFQt5YV4dE1s0x33p3u1h5g0f4p9Q="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <header>
+          <h1>路网距离计算器</h1>
+          <p id="status">未加载路网</p>
+        </header>
+
+        <section class="panel">
+          <h2>路网数据</h2>
+          <label class="file-picker">
+            <span>选择 CSV</span>
+            <input id="csvFile" type="file" accept=".csv,text/csv" />
+          </label>
+          <button id="uploadBtn" type="button">上传并加载</button>
+        </section>
+
+        <section class="panel">
+          <h2>源宿坐标</h2>
+          <div class="grid">
+            <label>起点经度<input id="startLon" type="number" step="0.000001" value="116.000000" /></label>
+            <label>起点纬度<input id="startLat" type="number" step="0.000001" value="39.000000" /></label>
+            <label>终点经度<input id="endLon" type="number" step="0.000001" value="116.010000" /></label>
+            <label>终点纬度<input id="endLat" type="number" step="0.000001" value="39.010000" /></label>
+          </div>
+          <button id="routeBtn" type="button">计算路由</button>
+        </section>
+
+        <section class="panel result-panel">
+          <h2>计算结果</h2>
+          <dl>
+            <dt>距离</dt>
+            <dd id="distance">-</dd>
+            <dt>吸附耗时</dt>
+            <dd id="snapTime">-</dd>
+            <dt>寻路耗时</dt>
+            <dd id="searchTime">-</dd>
+            <dt>总耗时</dt>
+            <dd id="totalTime">-</dd>
+          </dl>
+        </section>
+      </aside>
+      <section id="map" aria-label="路由地图"></section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
+
