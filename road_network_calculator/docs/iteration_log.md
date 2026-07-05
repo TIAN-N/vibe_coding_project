@@ -136,3 +136,71 @@ python -m compileall road_network app scripts
 - 更新 README 和设计文档状态。
 - 建立 git commit。
 - 推送远程仓库。
+
+## 2026-07-05 Iteration 2：路网展示、批量查询与交互增强设计
+
+### 新增需求
+
+- 上传路网后在 GIS 地图显示路网图层，默认青色线条。
+- 支持用户控制路网图层颜色、线型、透明度、最大绘制数量和显隐。
+- 避免百万路网在浏览器一次性全量渲染，采用后端抽样和前端分批绘制。
+- 增加批量经纬度输入框，支持每行 4 个数字：
+
+```text
+100.491389 13.75 100.53485 13.7465
+```
+
+- 保存历史查询记录，点击历史记录可回放起终点和路径。
+- 起点或终点距离路网最近节点超过 1km 时，吸附失败，不执行寻路。
+- 增加中英文界面切换。
+- 补充 README，让 Python 初学者可以按步骤使用工具或引用核心类。
+
+### 设计决策
+
+- 路网预览接口返回抽样边，不直接返回全量百万边。
+- 历史查询存储在浏览器 `localStorage`，避免新增数据库依赖。
+- 批量查询第一版按顺序串行调用后端，保证实现稳定；后续如有大量批处理需求可改为后端批量并发或后台任务。
+- 吸附阈值放在后端统一校验，前端只负责提示。
+
+### 已完成实现
+
+- 新增 `GET /api/network/preview`：
+  - 返回抽样路网线段。
+  - 支持 `limit` 控制最大返回线段数。
+- 新增 `POST /api/routes/batch`：
+  - 支持批量源宿查询。
+  - 单次最多 200 条。
+- 扩展 `POST /api/route`：
+  - 增加 1000m 最大吸附距离校验。
+  - 起点或终点离路网超过 1km 时返回 400 错误。
+- 扩展 `RoadDistanceCalculator.shortest_path`：
+  - 支持 `max_snap_distance_m`。
+  - 返回起点和终点吸附距离。
+- 前端新增：
+  - 路网图层抽样展示。
+  - 路网颜色、线型、透明度、最大线段数、显隐控制。
+  - 批量输入和结果列表。
+  - 查询历史记录与点击回放。
+  - 中英文切换。
+- README 已重写为面向 Python 初学者的完整使用教程。
+
+### 验证结果
+
+```text
+python scripts\run_tests.py
+PASS test_geometry
+PASS test_loader_and_calculator
+PASS total=2
+```
+
+```text
+python -m pytest
+4 passed, 1 skipped
+```
+
+说明：`tests/test_api.py` 因当前环境缺少 `httpx` 被跳过。`httpx>=0.24` 已加入 `requirements.txt`，依赖完整环境会执行 FastAPI TestClient 测试。
+
+```text
+python -m compileall road_network app scripts
+Result: passed
+```

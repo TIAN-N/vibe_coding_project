@@ -17,6 +17,30 @@ class RouteResponse(BaseModel):
     snapped_end: Tuple[float, float]
     timings_ms: Dict[str, float]
     reachable: bool
+    snap_start_distance_m: float
+    snap_end_distance_m: float
+
+
+class BatchRouteRequest(BaseModel):
+    routes: List[RouteRequest] = Field(..., min_items=1, max_items=200)
+
+
+class BatchRouteItem(BaseModel):
+    index: int
+    ok: bool
+    error: str = ""
+    route: RouteRequest
+    result: Optional[RouteResponse] = None
+
+
+class BatchRouteResponse(BaseModel):
+    results: List[BatchRouteItem]
+
+
+class NetworkPreview(BaseModel):
+    total_edges: int
+    returned_edges: int
+    lines: List[List[Tuple[float, float]]]
 
 
 class NetworkStatus(BaseModel):

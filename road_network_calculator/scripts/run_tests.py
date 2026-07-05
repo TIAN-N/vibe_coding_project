@@ -38,6 +38,17 @@ def test_loader_and_calculator():
         assert result.path[0] == (116.0, 39.0)
         assert result.path[-1] == (116.001, 39.001)
 
+        far_result = RoadDistanceCalculator(network).shortest_path(
+            0.0,
+            0.0,
+            116.001,
+            39.001,
+            max_snap_distance_m=1000.0,
+        )
+        assert not far_result.reachable
+        assert far_result.snap_start_distance_m > 1000.0
+        assert far_result.path == []
+
 
 def main():
     tests = [test_geometry, test_loader_and_calculator]
@@ -49,4 +60,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

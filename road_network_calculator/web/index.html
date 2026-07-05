@@ -4,62 +4,94 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Road Network Calculator</title>
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
-      crossorigin=""
-    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <aside class="sidebar">
         <header>
-          <h1>Road Network Calculator</h1>
+          <div class="header-row">
+            <h1 data-i18n="appTitle">Road Network Calculator</h1>
+            <select id="languageSelect" aria-label="Language">
+              <option value="en">EN</option>
+              <option value="zh">中文</option>
+            </select>
+          </div>
           <p id="status">Network not loaded</p>
         </header>
 
         <section class="panel">
-          <h2>Road Data</h2>
+          <h2 data-i18n="roadData">Road Data</h2>
           <label class="file-picker">
-            <span>Select WKT CSV</span>
+            <span data-i18n="selectCsv">Select WKT CSV</span>
             <input id="csvFile" type="file" accept=".csv,text/csv" />
           </label>
-          <button id="uploadBtn" type="button">Upload and Load</button>
+          <button id="uploadBtn" type="button" data-i18n="uploadLoad">Upload and Load</button>
         </section>
 
         <section class="panel">
-          <h2>Route Coordinates</h2>
+          <h2 data-i18n="networkLayer">Network Layer</h2>
+          <label class="check-row">
+            <input id="showNetworkLayer" type="checkbox" checked />
+            <span data-i18n="showNetwork">Show road network</span>
+          </label>
           <div class="grid">
-            <label>Start Lon<input id="startLon" type="number" step="0.000001" value="100.501765" /></label>
-            <label>Start Lat<input id="startLat" type="number" step="0.000001" value="13.756331" /></label>
-            <label>End Lon<input id="endLon" type="number" step="0.000001" value="100.534850" /></label>
-            <label>End Lat<input id="endLat" type="number" step="0.000001" value="13.746500" /></label>
+            <label><span data-i18n="lineColor">Line color</span><input id="networkColor" type="color" value="#00c8d7" /></label>
+            <label><span data-i18n="lineStyle">Line style</span>
+              <select id="networkStyle">
+                <option value="solid" data-i18n="solid">Solid</option>
+                <option value="dashed" data-i18n="dashed">Dashed</option>
+                <option value="dotted" data-i18n="dotted">Dotted</option>
+              </select>
+            </label>
+            <label><span data-i18n="opacity">Opacity</span><input id="networkOpacity" type="range" min="0.1" max="1" step="0.05" value="0.65" /></label>
+            <label><span data-i18n="maxLines">Max lines</span><input id="networkLimit" type="number" min="100" max="50000" step="100" value="5000" /></label>
           </div>
-          <button id="routeBtn" type="button">Calculate Route</button>
+          <button id="refreshNetworkBtn" type="button" data-i18n="refreshLayer">Refresh Layer</button>
+        </section>
+
+        <section class="panel">
+          <h2 data-i18n="routeCoordinates">Route Coordinates</h2>
+          <div class="grid">
+            <label><span data-i18n="startLon">Start Lon</span><input id="startLon" type="number" step="0.000001" value="100.501765" /></label>
+            <label><span data-i18n="startLat">Start Lat</span><input id="startLat" type="number" step="0.000001" value="13.756331" /></label>
+            <label><span data-i18n="endLon">End Lon</span><input id="endLon" type="number" step="0.000001" value="100.534850" /></label>
+            <label><span data-i18n="endLat">End Lat</span><input id="endLat" type="number" step="0.000001" value="13.746500" /></label>
+          </div>
+          <button id="routeBtn" type="button" data-i18n="calculateRoute">Calculate Route</button>
+        </section>
+
+        <section class="panel">
+          <h2 data-i18n="batchQuery">Batch Query</h2>
+          <textarea id="batchInput" spellcheck="false" placeholder="100.491389 13.75 100.53485 13.7465"></textarea>
+          <button id="batchBtn" type="button" data-i18n="runBatch">Run Batch</button>
+          <div id="batchResults" class="list"></div>
         </section>
 
         <section class="panel result-panel">
-          <h2>Result</h2>
+          <h2 data-i18n="result">Result</h2>
           <dl>
-            <dt>Distance</dt>
+            <dt data-i18n="distance">Distance</dt>
             <dd id="distance">-</dd>
-            <dt>Snap Time</dt>
+            <dt data-i18n="snapTime">Snap Time</dt>
             <dd id="snapTime">-</dd>
-            <dt>Search Time</dt>
+            <dt data-i18n="searchTime">Search Time</dt>
             <dd id="searchTime">-</dd>
-            <dt>Total Time</dt>
+            <dt data-i18n="totalTime">Total Time</dt>
             <dd id="totalTime">-</dd>
           </dl>
+        </section>
+
+        <section class="panel">
+          <h2 data-i18n="history">History</h2>
+          <div id="historyList" class="list"></div>
         </section>
       </aside>
       <section id="map" aria-label="Route map"></section>
     </main>
 
-    <script
-      src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
-      crossorigin=""
-    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

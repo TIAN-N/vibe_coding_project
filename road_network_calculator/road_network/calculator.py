@@ -19,18 +19,48 @@ class RouteResult:
     start_node: int
     end_node: int
     reachable: bool
+    snap_start_distance_m: float
+    snap_end_distance_m: float
 
 
 class RoadDistanceCalculator:
     def __init__(self, network: RoadNetwork):
         self.network = network
 
-    def shortest_path(self, start_lon: float, start_lat: float, end_lon: float, end_lat: float) -> RouteResult:
+    def shortest_path(
+        self,
+        start_lon: float,
+        start_lat: float,
+        end_lon: float,
+        end_lat: float,
+        max_snap_distance_m: Optional[float] = None,
+    ) -> RouteResult:
         total_started = time.perf_counter()
         snap_started = time.perf_counter()
-        start_node, _ = self.network.spatial_index.query(start_lon, start_lat)
-        end_node, _ = self.network.spatial_index.query(end_lon, end_lat)
+        start_node, start_snap_distance = self.network.spatial_index.query(start_lon, start_lat)
+        end_node, end_snap_distance = self.network.spatial_index.query(end_lon, end_lat)
         snap_ms = (time.perf_counter() - snap_started) * 1000.0
+
+        if max_snap_distance_m is not None and (
+            start_snap_distance > max_snap_distance_m or end_snap_distance > max_snap_distance_m
+        ):
+            total_ms = (time.perf_counter() - total_started) * 1000.0
+            return RouteResult(
+                distance_m=0.0,
+                path=[],
+                snapped_start=(float(self.network.node_lons[start_node]), float(self.network.node_lats[start_node])),
+                snapped_end=(float(self.network.node_lons[end_node]), float(self.network.node_lats[end_node])),
+                timings_ms={
+                    "snap": snap_ms,
+                    "search": 0.0,
+                    "total": total_ms,
+                },
+                start_node=start_node,
+                end_node=end_node,
+                reachable=False,
+                snap_start_distance_m=float(start_snap_distance),
+                snap_end_distance_m=float(end_snap_distance),
+            )
 
         search_started = time.perf_counter()
         distance, node_path = self._bidirectional_dijkstra(start_node, end_node)
@@ -38,7 +68,7 @@ class RoadDistanceCalculator:
 
         if math.isinf(distance):
             path = []
-            distance_out = math.inf
+            distance_out = 0.0
             reachable = False
         else:
             path = [(float(self.network.node_lons[n]), float(self.network.node_lats[n])) for n in node_path]
@@ -59,6 +89,8 @@ class RoadDistanceCalculator:
             start_node=start_node,
             end_node=end_node,
             reachable=reachable,
+            snap_start_distance_m=float(start_snap_distance),
+            snap_end_distance_m=float(end_snap_distance),
         )
 
     def _bidirectional_dijkstra(self, start: int, target: int) -> Tuple[float, List[int]]:
@@ -147,4 +179,3 @@ class RoadDistanceCalculator:
             node = int(prev_b[node])
 
         return left + right
-
