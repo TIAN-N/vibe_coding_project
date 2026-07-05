@@ -1,8 +1,49 @@
-const map = L.map("map").setView([39.0, 116.0], 12);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: "&copy; OpenStreetMap contributors",
-}).addTo(map);
+const THAILAND_CENTER = [13.756331, 100.501765];
+
+const map = L.map("map", {
+  center: THAILAND_CENTER,
+  zoom: 11,
+  preferCanvas: true,
+});
+
+const baseLayers = {
+  "OSM Standard": L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  }),
+  "OSM HOT": L.tileLayer("https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors, Tiles style by HOT",
+  }),
+  "Carto Positron": L.tileLayer(
+    "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+    {
+      maxZoom: 20,
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+    },
+  ),
+};
+
+let activeBaseName = "OSM Standard";
+baseLayers[activeBaseName].addTo(map);
+L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
+
+for (const [name, layer] of Object.entries(baseLayers)) {
+  layer.on("tileerror", () => {
+    if (name !== activeBaseName) return;
+    const fallback = name === "OSM Standard" ? "Carto Positron" : "OSM HOT";
+    if (baseLayers[fallback] && fallback !== activeBaseName) {
+      map.removeLayer(layer);
+      activeBaseName = fallback;
+      baseLayers[fallback].addTo(map);
+      setStatus(`Base map switched to ${fallback}`);
+    }
+  });
+}
+
+map.whenReady(() => {
+  setTimeout(() => map.invalidateSize(), 100);
+});
 
 let routeLayer = null;
 let startMarker = null;
@@ -21,23 +62,23 @@ async function refreshStatus() {
   const response = await fetch("/api/network/status");
   const data = await response.json();
   if (data.loaded) {
-    setStatus(`已加载：${data.nodes.toLocaleString()} 个节点，${data.edges.toLocaleString()} 条边`);
+    setStatus(`Loaded: ${data.nodes.toLocaleString()} nodes, ${data.edges.toLocaleString()} edges`);
   } else {
-    setStatus("未加载路网");
+    setStatus("Network not loaded");
   }
 }
 
 uploadBtn.addEventListener("click", async () => {
   const fileInput = document.getElementById("csvFile");
   if (!fileInput.files.length) {
-    setStatus("请选择 CSV 文件", true);
+    setStatus("Please select a CSV file", true);
     return;
   }
 
   const formData = new FormData();
   formData.append("file", fileInput.files[0]);
   uploadBtn.disabled = true;
-  setStatus("正在上传并加载路网...");
+  setStatus("Uploading and loading road network...");
 
   try {
     const response = await fetch("/api/network/upload", {
@@ -46,9 +87,9 @@ uploadBtn.addEventListener("click", async () => {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "路网加载失败");
+      throw new Error(data.detail || "Failed to load road network");
     }
-    setStatus(`已加载：${data.nodes.toLocaleString()} 个节点，${data.edges.toLocaleString()} 条边`);
+    setStatus(`Loaded: ${data.nodes.toLocaleString()} nodes, ${data.edges.toLocaleString()} edges`);
   } catch (error) {
     setStatus(error.message, true);
   } finally {
@@ -73,7 +114,7 @@ routeBtn.addEventListener("click", async () => {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "路由计算失败");
+      throw new Error(data.detail || "Route calculation failed");
     }
     renderRoute(data);
   } catch (error) {
@@ -84,7 +125,7 @@ routeBtn.addEventListener("click", async () => {
 });
 
 function renderRoute(data) {
-  document.getElementById("distance").textContent = data.reachable ? `${data.distance_m.toFixed(1)} m` : "不可达";
+  document.getElementById("distance").textContent = data.reachable ? `${data.distance_m.toFixed(1)} m` : "Unreachable";
   document.getElementById("snapTime").textContent = `${data.timings_ms.snap.toFixed(2)} ms`;
   document.getElementById("searchTime").textContent = `${data.timings_ms.search.toFixed(2)} ms`;
   document.getElementById("totalTime").textContent = `${data.timings_ms.total.toFixed(2)} ms`;
@@ -95,8 +136,8 @@ function renderRoute(data) {
 
   const start = [data.snapped_start[1], data.snapped_start[0]];
   const end = [data.snapped_end[1], data.snapped_end[0]];
-  startMarker = L.marker(start).addTo(map).bindPopup("吸附起点");
-  endMarker = L.marker(end).addTo(map).bindPopup("吸附终点");
+  startMarker = L.marker(start).addTo(map).bindPopup("Snapped start");
+  endMarker = L.marker(end).addTo(map).bindPopup("Snapped end");
 
   if (data.path.length > 0) {
     const latLngs = data.path.map(([lon, lat]) => [lat, lon]);
@@ -107,5 +148,4 @@ function renderRoute(data) {
   }
 }
 
-refreshStatus().catch(() => setStatus("无法连接后端服务", true));
-
+refreshStatus().catch(() => setStatus("Cannot connect to backend service", true));

@@ -68,3 +68,46 @@ query long distance=58975.8m snap=0.08ms search=366.79ms total=367.20ms path_nod
 
 - 当前环境 pip 代理不可用，未能安装缺失的 `fastapi` 和 `pytest`。
 - FastAPI 端到端服务需在依赖安装成功后补充启动验证。
+
+## OSM 真实城市路网补充测试
+
+### 生成文件
+
+```text
+data/osm_bangkok_roads.csv
+data/osm_chiang_mai_roads.csv
+data/osm_manila_roads.csv
+data/osm_cebu_roads.csv
+data/sample_routes.csv
+```
+
+### 文件规模
+
+```text
+osm_bangkok_roads.csv     3,259,859 bytes
+osm_chiang_mai_roads.csv  1,304,144 bytes
+osm_manila_roads.csv      2,676,052 bytes
+osm_cebu_roads.csv        1,856,536 bytes
+```
+
+### 样例查询
+
+```text
+Bangkok: Grand Palace to Siam Paragon
+reachable=True distance=5053.3m total=69.22ms
+
+Bangkok: Lumphini Park to Chatuchak Market
+reachable=True distance=8348.5m total=161.96ms
+
+Chiang Mai: Old City West-East
+reachable=True distance=466.0m total=0.99ms
+
+Manila: Rizal Park to SM Mall of Asia
+reachable=True distance=4981.2m total=48.86ms
+
+Manila: Intramuros to Makati Ayala Triangle
+reachable=True distance=7179.8m total=111.02ms
+
+Cebu: Magellan's Cross to IT Park
+reachable=True distance=4727.5m total=48.36ms
+```

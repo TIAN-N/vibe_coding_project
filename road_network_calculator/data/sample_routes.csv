@@ -1,0 +1,7 @@
+country,city,name,start_lon,start_lat,end_lon,end_lat,description
+Thailand,Bangkok,Grand Palace to Siam Paragon,100.491389,13.750000,100.534850,13.746500,Bangkok center sample route
+Thailand,Bangkok,Lumphini Park to Chatuchak Market,100.541800,13.730600,100.550200,13.799900,North-south Bangkok urban route
+Thailand,Chiang Mai,Old City West-East,98.987000,18.788000,98.991000,18.788000,Chiang Mai old city short route
+Philippines,Manila,Rizal Park to SM Mall of Asia,120.978300,14.582600,120.981700,14.535200,Metro Manila bay area route
+Philippines,Manila,Intramuros to Makati Ayala Triangle,120.974700,14.589600,121.023300,14.556100,Metro Manila cross-city route
+Philippines,Cebu,Magellan's Cross to IT Park,123.902200,10.293000,123.906300,10.330500,Cebu city route

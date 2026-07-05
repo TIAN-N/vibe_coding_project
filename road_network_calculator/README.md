@@ -59,3 +59,25 @@ python scripts/benchmark.py --csv data/mock_small.csv
 python scripts/benchmark.py --csv data/mock_medium.csv
 ```
 
+## 下载 OSM 真实路网数据
+
+```bash
+python scripts/fetch_osm_roads.py --city bangkok --city manila --output-dir data
+python scripts/fetch_osm_roads.py --city chiang_mai --city cebu --output-dir data
+```
+
+支持城市：
+
+```text
+bangkok
+chiang_mai
+manila
+cebu
+```
+
+运行样例点查询：
+
+```bash
+python scripts/query_samples.py --network-csv data/osm_bangkok_roads.csv --city Bangkok
+python scripts/query_samples.py --network-csv data/osm_manila_roads.csv --city Manila
+```
