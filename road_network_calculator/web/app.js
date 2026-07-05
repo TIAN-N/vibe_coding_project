@@ -42,7 +42,7 @@ const i18n = {
     batchDone: "Batch complete: {ok}/{total} reachable",
     noHistory: "No history yet",
     noNetworkPreview: "Load a road network before refreshing the layer",
-    previewLoaded: "Road network layer loaded: {shown}/{total} lines",
+    previewLoaded: "Road network layer loaded: {shown}/{matched} visible lines ({total} total)",
     previewHidden: "Road network layer hidden",
     snapTooFar: "Start or end point is not within 1km of the loaded road network. Routing cannot continue; road data may be missing.",
     unreachable: "Unreachable",
@@ -87,7 +87,7 @@ const i18n = {
     batchDone: "批量完成：{ok}/{total} 条可达",
     noHistory: "暂无历史记录",
     noNetworkPreview: "请先加载路网，再刷新图层",
-    previewLoaded: "路网图层已加载：{shown}/{total} 条线段",
+    previewLoaded: "路网图层已加载：当前视野 {shown}/{matched} 条线段（总计 {total} 条）",
     previewHidden: "路网图层已隐藏",
     snapTooFar: "起点或终点不在已加载路网 1km 范围内，无法寻路；请补充对应区域路网数据。",
     unreachable: "不可达",
@@ -103,6 +103,8 @@ let endMarker = null;
 let networkLayer = L.layerGroup();
 let networkPreview = null;
 let networkLoaded = false;
+let networkBounds = null;
+let viewportLoadTimer = null;
 
 const map = L.map("map", {
   center: THAILAND_CENTER,
@@ -187,6 +189,7 @@ async function refreshStatus() {
   const data = await response.json();
   networkLoaded = data.loaded;
   if (data.loaded) {
+    networkBounds = metadataToBounds(data.metadata);
     setStatus(t("loaded", { nodes: data.nodes.toLocaleString(), edges: data.edges.toLocaleString() }));
   } else {
     setStatus(t("notLoaded"));
@@ -209,11 +212,27 @@ async function loadNetworkPreview() {
     return;
   }
   const limit = Number(el.networkLimit.value) || 5000;
-  const response = await fetch(`/api/network/preview?limit=${encodeURIComponent(limit)}`);
+  const bounds = map.getBounds();
+  const params = new URLSearchParams({
+    west: bounds.getWest(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    north: bounds.getNorth(),
+    limit,
+  });
+  const response = await fetch(`/api/network/viewport?${params.toString()}`);
   const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || "Failed to load network preview");
+  if (!response.ok) throw new Error(data.detail || "Failed to load viewport road network");
   networkPreview = data;
   drawNetworkPreview();
+}
+
+function scheduleNetworkPreviewLoad() {
+  if (!networkLoaded || !el.showNetworkLayer.checked) return;
+  clearTimeout(viewportLoadTimer);
+  viewportLoadTimer = setTimeout(() => {
+    loadNetworkPreview().catch((error) => setStatus(localizeError(error.message), true));
+  }, 250);
 }
 
 function drawNetworkPreview() {
@@ -238,7 +257,13 @@ function drawNetworkPreview() {
     if (index < lines.length) {
       requestAnimationFrame(drawChunk);
     } else {
-      setStatus(t("previewLoaded", { shown: networkPreview.returned_edges, total: networkPreview.total_edges }));
+      setStatus(
+        t("previewLoaded", {
+          shown: networkPreview.returned_edges,
+          matched: networkPreview.matched_edges || networkPreview.returned_edges,
+          total: networkPreview.total_edges,
+        }),
+      );
     }
   }
 
@@ -262,8 +287,10 @@ async function uploadNetwork() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Failed to load road network");
     networkLoaded = true;
+    networkBounds = metadataToBounds(data.metadata);
     setStatus(t("loaded", { nodes: data.nodes.toLocaleString(), edges: data.edges.toLocaleString() }));
-    await loadNetworkPreview();
+    fitNetworkBounds();
+    scheduleNetworkPreviewLoad();
   } catch (error) {
     setStatus(localizeError(error.message), true);
   } finally {
@@ -470,10 +497,39 @@ el.uploadBtn.addEventListener("click", uploadNetwork);
 el.routeBtn.addEventListener("click", calculateRoute);
 el.batchBtn.addEventListener("click", runBatch);
 el.refreshNetworkBtn.addEventListener("click", () => loadNetworkPreview().catch((error) => setStatus(localizeError(error.message), true)));
-el.showNetworkLayer.addEventListener("change", drawNetworkPreview);
+el.showNetworkLayer.addEventListener("change", () => {
+  if (el.showNetworkLayer.checked) {
+    scheduleNetworkPreviewLoad();
+  } else {
+    drawNetworkPreview();
+  }
+});
 el.networkColor.addEventListener("input", drawNetworkPreview);
 el.networkStyle.addEventListener("change", drawNetworkPreview);
 el.networkOpacity.addEventListener("input", drawNetworkPreview);
+el.networkLimit.addEventListener("change", scheduleNetworkPreviewLoad);
+map.on("moveend zoomend", scheduleNetworkPreviewLoad);
+
+function metadataToBounds(metadata) {
+  if (!metadata) return null;
+  const keys = ["min_lon", "min_lat", "max_lon", "max_lat"];
+  if (!keys.every((key) => Number.isFinite(Number(metadata[key])))) return null;
+  return {
+    west: Number(metadata.min_lon),
+    south: Number(metadata.min_lat),
+    east: Number(metadata.max_lon),
+    north: Number(metadata.max_lat),
+  };
+}
+
+function fitNetworkBounds() {
+  if (!networkBounds) return;
+  const bounds = L.latLngBounds(
+    [networkBounds.south, networkBounds.west],
+    [networkBounds.north, networkBounds.east],
+  );
+  if (bounds.isValid()) map.fitBounds(bounds.pad(0.08));
+}
 
 map.whenReady(() => {
   setTimeout(() => map.invalidateSize(), 100);

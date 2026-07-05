@@ -13,6 +13,8 @@ class RoadNetwork:
     offsets: np.ndarray
     neighbors: np.ndarray
     weights: np.ndarray
+    edge_u: np.ndarray
+    edge_v: np.ndarray
     spatial_index: NearestNodeIndex
     metadata: Dict[str, float]
 
@@ -26,5 +28,4 @@ class RoadNetwork:
 
     @property
     def undirected_edge_count(self) -> int:
-        return int(len(self.neighbors) // 2)
-
+        return int(len(self.edge_u))

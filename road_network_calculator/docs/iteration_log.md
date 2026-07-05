@@ -204,3 +204,58 @@ python -m pytest
 python -m compileall road_network app scripts
 Result: passed
 ```
+
+## 2026-07-05 Iteration 3：大规模路网局部连续渲染优化
+
+### 问题分析
+
+用户上传 Bangkok CSV 后，路网图层显示为不连续的片段，但算路结果连续。排查发现：
+
+- Bangkok 路网共有 97,016 个节点、103,865 条无向边。
+- 默认图层预览只返回 5,000 条边。
+- 旧接口按全图边序列做间隔抽样，约每 20 条边显示 1 条。
+- 算路使用完整 CSR 图，路网主连通分量占比约 97.81%，所以路径可以连续。
+
+结论：不连续主要是全图抽样预览造成的 UI 视觉假象，不是原始路网或算法图断裂。
+
+### 本轮实现
+
+- `RoadNetwork` 增加无向边端点数组：
+  - `edge_u`
+  - `edge_v`
+- `RoadNetworkLoader` 在构建 CSR 时同步输出无向边数组。
+- 路网 metadata 增加边界：
+  - `min_lon`
+  - `min_lat`
+  - `max_lon`
+  - `max_lat`
+- 新增接口：
+
+```http
+GET /api/network/viewport?west=...&south=...&east=...&north=...&limit=12000
+```
+
+- `viewport` 接口按当前地图 bbox 对边做向量化过滤。
+- 若局部边数超过 `limit`，只在当前视野内抽样，而不是全图抽样。
+- 前端上传路网后自动缩放到路网边界。
+- 前端监听地图 `moveend` 和 `zoomend`，防抖加载当前视野路网。
+- 前端继续使用分批绘制，避免大量 polyline 一次性阻塞 UI。
+
+### 验证结果
+
+Bangkok 全图：
+
+```text
+nodes=97016
+edges=103865
+```
+
+曼谷中心 bbox：
+
+```text
+matched_edges=26028
+returned_edges=12000
+total_edges=103865
+```
+
+这说明新接口已经从“全图抽样”切换为“当前视野局部加载”。用户进一步放大后，`matched_edges` 会降低，显示会更接近局部完整路网。

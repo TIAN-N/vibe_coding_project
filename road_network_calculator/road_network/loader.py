@@ -61,7 +61,7 @@ class RoadNetworkLoader:
         if edge_weights is None:
             raise NotImplementedError("Non-deduplicated loading is not implemented")
 
-        offsets, neighbors, weights = self._build_csr(node_count, edge_weights.items())
+        offsets, neighbors, weights, edge_u, edge_v = self._build_csr(node_count, edge_weights.items())
         node_lons = np.asarray(lons, dtype=np.float64)
         node_lats = np.asarray(lats, dtype=np.float64)
         spatial_index = NearestNodeIndex(node_lons, node_lats)
@@ -73,11 +73,17 @@ class RoadNetworkLoader:
             offsets=offsets,
             neighbors=neighbors,
             weights=weights,
+            edge_u=edge_u,
+            edge_v=edge_v,
             spatial_index=spatial_index,
             metadata={
                 "load_time_ms": total_ms,
                 "raw_edge_count": float(raw_edge_count),
                 "invalid_rows": float(invalid_rows),
+                "min_lon": float(node_lons.min()),
+                "min_lat": float(node_lats.min()),
+                "max_lon": float(node_lons.max()),
+                "max_lat": float(node_lats.max()),
             },
         )
 
@@ -102,6 +108,8 @@ class RoadNetworkLoader:
     def _build_csr(self, node_count: int, edges: Iterable[Tuple[Tuple[int, int], float]]):
         degree = np.zeros(node_count, dtype=np.int64)
         edge_list = list(edges)
+        edge_u = np.empty(len(edge_list), dtype=np.int32 if node_count < 2147483647 else np.int64)
+        edge_v = np.empty(len(edge_list), dtype=np.int32 if node_count < 2147483647 else np.int64)
         for (a, b), _ in edge_list:
             degree[a] += 1
             degree[b] += 1
@@ -113,7 +121,10 @@ class RoadNetworkLoader:
         weights = np.empty(int(offsets[-1]), dtype=np.float64)
         cursor = offsets[:-1].copy()
 
-        for (a, b), weight in edge_list:
+        for edge_index, ((a, b), weight) in enumerate(edge_list):
+            edge_u[edge_index] = a
+            edge_v[edge_index] = b
+
             pos = cursor[a]
             neighbors[pos] = b
             weights[pos] = weight
@@ -124,5 +135,4 @@ class RoadNetworkLoader:
             weights[pos] = weight
             cursor[b] += 1
 
-        return offsets, neighbors, weights
-
+        return offsets, neighbors, weights, edge_u, edge_v

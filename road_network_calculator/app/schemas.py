@@ -43,6 +43,14 @@ class NetworkPreview(BaseModel):
     lines: List[List[Tuple[float, float]]]
 
 
+class NetworkViewport(BaseModel):
+    total_edges: int
+    matched_edges: int
+    returned_edges: int
+    bounds: Dict[str, float]
+    lines: List[List[Tuple[float, float]]]
+
+
 class NetworkStatus(BaseModel):
     loaded: bool
     nodes: int = 0

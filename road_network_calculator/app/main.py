@@ -10,7 +10,9 @@ from fastapi.staticfiles import StaticFiles
 
 from road_network import RoadDistanceCalculator, RoadNetwork, RoadNetworkLoader
 
-from .schemas import BatchRouteItem, BatchRouteRequest, BatchRouteResponse, NetworkPreview, NetworkStatus, RouteRequest, RouteResponse
+import numpy as np
+
+from .schemas import BatchRouteItem, BatchRouteRequest, BatchRouteResponse, NetworkPreview, NetworkStatus, NetworkViewport, RouteRequest, RouteResponse
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 WEB_DIR = BASE_DIR / "web"
@@ -54,29 +56,70 @@ def network_preview(limit: int = Query(5000, ge=1, le=50000)):
         raise HTTPException(status_code=400, detail="Road network is not loaded")
 
     total_edges = _network.undirected_edge_count
-    step = max(1, total_edges // limit) if total_edges else 1
-    lines = []
-    seen = 0
-
-    offsets = _network.offsets
-    neighbors = _network.neighbors
-    for node in range(_network.node_count):
-        for pos in range(int(offsets[node]), int(offsets[node + 1])):
-            nb = int(neighbors[pos])
-            if node >= nb:
-                continue
-            if seen % step == 0:
-                lines.append(
-                    [
-                        (float(_network.node_lons[node]), float(_network.node_lats[node])),
-                        (float(_network.node_lons[nb]), float(_network.node_lats[nb])),
-                    ]
-                )
-                if len(lines) >= limit:
-                    return NetworkPreview(total_edges=total_edges, returned_edges=len(lines), lines=lines)
-            seen += 1
-
+    edge_indices = _sample_indices(np.arange(total_edges), limit)
+    lines = _edge_indices_to_lines(edge_indices)
     return NetworkPreview(total_edges=total_edges, returned_edges=len(lines), lines=lines)
+
+
+@app.get("/api/network/viewport", response_model=NetworkViewport)
+def network_viewport(
+    west: float = Query(..., ge=-180, le=180),
+    south: float = Query(..., ge=-90, le=90),
+    east: float = Query(..., ge=-180, le=180),
+    north: float = Query(..., ge=-90, le=90),
+    limit: int = Query(12000, ge=100, le=100000),
+):
+    if _network is None:
+        raise HTTPException(status_code=400, detail="Road network is not loaded")
+    if west > east:
+        west, east = east, west
+    if south > north:
+        south, north = north, south
+
+    u = _network.edge_u
+    v = _network.edge_v
+    u_lons = _network.node_lons[u]
+    v_lons = _network.node_lons[v]
+    u_lats = _network.node_lats[u]
+    v_lats = _network.node_lats[v]
+
+    edge_min_lon = np.minimum(u_lons, v_lons)
+    edge_max_lon = np.maximum(u_lons, v_lons)
+    edge_min_lat = np.minimum(u_lats, v_lats)
+    edge_max_lat = np.maximum(u_lats, v_lats)
+    mask = (edge_max_lon >= west) & (edge_min_lon <= east) & (edge_max_lat >= south) & (edge_min_lat <= north)
+    matched = np.flatnonzero(mask)
+    sampled = _sample_indices(matched, limit)
+    lines = _edge_indices_to_lines(sampled)
+
+    return NetworkViewport(
+        total_edges=_network.undirected_edge_count,
+        matched_edges=int(len(matched)),
+        returned_edges=len(lines),
+        bounds={"west": west, "south": south, "east": east, "north": north},
+        lines=lines,
+    )
+
+
+def _sample_indices(indices, limit: int):
+    if len(indices) <= limit:
+        return indices
+    positions = np.linspace(0, len(indices) - 1, num=limit, dtype=np.int64)
+    return indices[positions]
+
+
+def _edge_indices_to_lines(edge_indices):
+    lines = []
+    for edge_index in edge_indices:
+        a = int(_network.edge_u[int(edge_index)])
+        b = int(_network.edge_v[int(edge_index)])
+        lines.append(
+            [
+                (float(_network.node_lons[a]), float(_network.node_lats[a])),
+                (float(_network.node_lons[b]), float(_network.node_lats[b])),
+            ]
+        )
+    return lines
 
 
 @app.post("/api/network/upload", response_model=NetworkStatus)
