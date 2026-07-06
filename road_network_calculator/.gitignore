@@ -6,5 +6,6 @@ __pycache__/
 .venv/
 venv/
 data/mock_large*.csv
+data/osm_bangkok_regions_edges.csv
+data/osm_bangkok_regions_failed_tiles.csv
 uploads/
-

@@ -5,3 +5,7 @@ Thailand,Chiang Mai,Old City West-East,98.987000,18.788000,98.991000,18.788000,C
 Philippines,Manila,Rizal Park to SM Mall of Asia,120.978300,14.582600,120.981700,14.535200,Metro Manila bay area route
 Philippines,Manila,Intramuros to Makati Ayala Triangle,120.974700,14.589600,121.023300,14.556100,Metro Manila cross-city route
 Philippines,Cebu,Magellan's Cross to IT Park,123.902200,10.293000,123.906300,10.330500,Cebu city route
+Thailand,Bangkok Large,Bangkok large 10km Siam to Chatuchak,100.541800,13.730600,100.550200,13.799900,Use data/osm_bangkok_regions_edges.csv
+Thailand,Bangkok Large,Bangkok large 20km Siam to Samut Prakan,100.534850,13.746500,100.596800,13.599100,Use data/osm_bangkok_regions_edges.csv
+Thailand,Bangkok Large,Bangkok large 30km Siam to Bang Bua Thong,100.534850,13.746500,100.424000,13.917000,Use data/osm_bangkok_regions_edges.csv
+Thailand,Bangkok Large,Bangkok large 50km Siam to Nakhon Pathom,100.534850,13.746500,100.062100,13.819900,Use data/osm_bangkok_regions_edges.csv
