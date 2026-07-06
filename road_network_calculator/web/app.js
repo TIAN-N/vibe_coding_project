@@ -40,6 +40,12 @@ const i18n = {
     searchTime: "Search Time",
     totalTime: "Total Time",
     history: "History",
+    historyHint: "Toggle records to show multiple routes on the map.",
+    focusRoute: "Focus",
+    showRoute: "Show",
+    color: "Color",
+    width: "Width",
+    style: "Style",
     notLoaded: "Network not loaded",
     loaded: "Loaded: {nodes} nodes, {edges} edges",
     chooseCsv: "Please select a CSV file",
@@ -92,6 +98,12 @@ const i18n = {
     searchTime: "寻路耗时",
     totalTime: "总耗时",
     history: "历史查询",
+    historyHint: "勾选历史记录，可在地图上同时显示多条路由。",
+    focusRoute: "定位",
+    showRoute: "显示",
+    color: "颜色",
+    width: "粗细",
+    style: "样式",
     notLoaded: "未加载路网",
     loaded: "已加载：{nodes} 个节点，{edges} 条边",
     chooseCsv: "请选择 CSV 文件",
@@ -111,14 +123,13 @@ const i18n = {
 };
 
 let lang = localStorage.getItem(LANG_KEY) || "en";
-let routeLayer = null;
-let startMarker = null;
-let endMarker = null;
 let networkLayer = L.layerGroup();
+let routeOverlayLayer = L.layerGroup();
 let networkPreview = null;
 let networkLoaded = false;
 let networkBounds = null;
 let viewportLoadTimer = null;
+let routeOverlays = {};
 
 const map = L.map("map", {
   center: THAILAND_CENTER,
@@ -144,6 +155,7 @@ const baseLayers = {
 let activeBaseName = "OSM Standard";
 baseLayers[activeBaseName].addTo(map);
 networkLayer.addTo(map);
+routeOverlayLayer.addTo(map);
 L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 
 for (const [name, layer] of Object.entries(baseLayers)) {
@@ -414,8 +426,10 @@ async function calculateRoute() {
   el.routeBtn.disabled = true;
   try {
     const result = await requestRoute(route);
-    renderRoute(result);
-    saveHistory(route, result);
+    const historyItem = saveHistory(route, result, { visible: true });
+    const routeId = historyItem ? historyItem.id : routeKey(route);
+    addOrUpdateRouteOverlay(routeId, route, result, { visible: true, fit: true });
+    updateResultPanel(result);
   } catch (error) {
     setStatus(localizeError(error.message), true);
   } finally {
@@ -434,31 +448,93 @@ async function requestRoute(route) {
   return data;
 }
 
-function renderRoute(data) {
+function updateResultPanel(data) {
   document.getElementById("distance").textContent = data.reachable ? `${data.distance_m.toFixed(1)} m` : t("unreachable");
   document.getElementById("snapTime").textContent = `${data.timings_ms.snap.toFixed(2)} ms`;
   document.getElementById("searchTime").textContent = `${data.timings_ms.search.toFixed(2)} ms`;
   document.getElementById("totalTime").textContent = `${data.timings_ms.total.toFixed(2)} ms`;
+}
 
-  if (routeLayer) map.removeLayer(routeLayer);
-  if (startMarker) map.removeLayer(startMarker);
-  if (endMarker) map.removeLayer(endMarker);
+function renderRoute(data) {
+  updateResultPanel(data);
+  const route = {
+    start_lon: data.snapped_start[0],
+    start_lat: data.snapped_start[1],
+    end_lon: data.snapped_end[0],
+    end_lat: data.snapped_end[1],
+  };
+  addOrUpdateRouteOverlay(routeKey(route), route, data, { visible: true, fit: true });
+}
 
+function addOrUpdateRouteOverlay(routeId, route, data, options = {}) {
+  if (!data || !data.reachable || !Array.isArray(data.path) || !data.path.length) return;
+  const existing = routeOverlays[routeId];
+  const style = Object.assign(defaultRouteStyle(Object.keys(routeOverlays).length), existing ? existing.style : {}, options.style || {});
+  if (existing) {
+    removeRouteOverlay(routeId);
+  }
   const start = [data.snapped_start[1], data.snapped_start[0]];
   const end = [data.snapped_end[1], data.snapped_end[0]];
-  startMarker = L.marker(start).addTo(map).bindPopup("Snapped start");
-  endMarker = L.marker(end).addTo(map).bindPopup("Snapped end");
+  const polyline = L.polyline(data.path.map(([lon, lat]) => [lat, lon]), leafletRouteStyle(style));
+  const startMarker = L.circleMarker(start, markerStyle(style)).bindPopup("Snapped start");
+  const endMarker = L.circleMarker(end, markerStyle(style)).bindPopup("Snapped end");
+  const group = L.layerGroup([polyline, startMarker, endMarker]);
+  routeOverlays[routeId] = { route, result: data, style, group, polyline };
+  if (options.visible !== false) group.addTo(routeOverlayLayer);
+  if (options.fit !== false) focusRouteOverlay(routeId);
+}
 
-  if (data.path.length > 0) {
-    routeLayer = L.polyline(data.path.map(([lon, lat]) => [lat, lon]), {
-      color: "#1967d2",
-      weight: 5,
-      opacity: 0.9,
-    }).addTo(map);
-    map.fitBounds(routeLayer.getBounds().pad(0.2));
+function removeRouteOverlay(routeId) {
+  const existing = routeOverlays[routeId];
+  if (!existing) return;
+  routeOverlayLayer.removeLayer(existing.group);
+  delete routeOverlays[routeId];
+}
+
+function setRouteOverlayVisible(routeId, visible, route, result, style) {
+  if (visible) {
+    addOrUpdateRouteOverlay(routeId, route, result, { visible: true, fit: false, style });
   } else {
-    map.fitBounds(L.latLngBounds([start, end]).pad(0.2));
+    removeRouteOverlay(routeId);
   }
+}
+
+function updateRouteOverlayStyle(routeId, style) {
+  const overlay = routeOverlays[routeId];
+  if (!overlay) return;
+  overlay.style = Object.assign({}, overlay.style, style);
+  overlay.polyline.setStyle(leafletRouteStyle(overlay.style));
+}
+
+function focusRouteOverlay(routeId) {
+  const overlay = routeOverlays[routeId];
+  if (!overlay || !overlay.polyline) return;
+  map.fitBounds(overlay.polyline.getBounds().pad(0.2));
+  updateResultPanel(overlay.result);
+}
+
+function defaultRouteStyle(index) {
+  const palette = ["#1967d2", "#d93025", "#188038", "#f9ab00", "#8e24aa", "#00acc1", "#ef6c00", "#3949ab"];
+  return { color: palette[index % palette.length], weight: 5, opacity: 0.9, dash: "solid" };
+}
+
+function leafletRouteStyle(style) {
+  return {
+    color: style.color,
+    weight: Number(style.weight) || 5,
+    opacity: Number(style.opacity) || 0.9,
+    dashArray: style.dash === "dashed" ? "10 7" : style.dash === "dotted" ? "2 8" : null,
+  };
+}
+
+function markerStyle(style) {
+  return {
+    radius: 5,
+    color: style.color,
+    fillColor: style.color,
+    fillOpacity: 0.9,
+    weight: 2,
+  };
 }
 
 function parseBatchInput(text) {
@@ -510,6 +586,12 @@ async function runBatch() {
 function renderBatchResults(results) {
   el.batchResults.innerHTML = "";
   results.forEach((item) => {
+    let routeId = null;
+    if (item.ok && item.result) {
+      const historyItem = saveHistory(item.route, item.result, { visible: true, silent: true });
+      routeId = historyItem ? historyItem.id : routeKey(item.route);
+      addOrUpdateRouteOverlay(routeId, item.route, item.result, { visible: true, fit: false });
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "list-item";
@@ -518,14 +600,15 @@ function renderBatchResults(results) {
     button.addEventListener("click", () => {
       writeRouteInputs(item.route);
       if (item.result) {
-        renderRoute(item.result);
-        if (item.ok) saveHistory(item.route, item.result);
+        if (routeId) focusRouteOverlay(routeId);
+        updateResultPanel(item.result);
       } else {
         setStatus(localizeError(item.error), true);
       }
     });
     el.batchResults.appendChild(button);
   });
+  renderHistory();
 }
 
 function loadHistory() {
@@ -536,17 +619,27 @@ function loadHistory() {
   }
 }
 
-function saveHistory(route, result) {
-  if (!result.reachable) return;
+function saveHistory(route, result, options = {}) {
+  if (!result.reachable) return null;
   const history = loadHistory();
+  const id = routeKey(route);
+  const existingIndex = history.findIndex((item) => item.id === id || routeKey(item.route) === id);
   const compactResult = compactHistoryResult(result);
-  history.unshift({
+  const item = {
+    id,
     route,
     result: compactResult,
+    visible: options.visible !== undefined ? options.visible : true,
+    style: existingIndex >= 0 && history[existingIndex].style ? history[existingIndex].style : defaultRouteStyle(history.length),
     created_at: new Date().toISOString(),
-  });
+  };
+  if (existingIndex >= 0) {
+    history.splice(existingIndex, 1);
+  }
+  history.unshift(item);
   persistHistory(history);
-  renderHistory();
+  if (!options.silent) renderHistory();
+  return item;
 }
 
 function compactHistoryResult(result) {
@@ -602,21 +695,94 @@ function renderHistory() {
   }
 
   history.forEach((item, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "list-item";
+    const routeId = item.id || routeKey(item.route);
+    const style = item.style || defaultRouteStyle(index);
+    const card = document.createElement("div");
+    card.className = "list-item route-card";
     const when = new Date(item.created_at).toLocaleString();
-    button.innerHTML = `<strong>${item.result.distance_m.toFixed(1)} m</strong><span class="muted">${when}<br>${formatRoute(item.route)}</span>`;
-    button.addEventListener("click", () => {
-      writeRouteInputs(item.route);
-      renderRoute(item.result);
+    card.innerHTML = `
+      <div class="route-card-header">
+        <input type="checkbox" ${item.visible ? "checked" : ""} aria-label="${t("showRoute")}" />
+        <div class="route-card-main">
+          <strong>${item.result.distance_m.toFixed(1)} m</strong>
+          <span class="muted">${when}<br>${formatRoute(item.route)}</span>
+        </div>
+      </div>
+      <div class="route-actions">
+        <label>${t("color")}<input class="route-color" type="color" value="${style.color}" /></label>
+        <label>${t("width")}<input class="route-width" type="number" min="1" max="14" step="1" value="${style.weight}" /></label>
+        <label>${t("style")}
+          <select class="route-dash">
+            <option value="solid" ${style.dash === "solid" ? "selected" : ""}>${t("solid")}</option>
+            <option value="dashed" ${style.dash === "dashed" ? "selected" : ""}>${t("dashed")}</option>
+            <option value="dotted" ${style.dash === "dotted" ? "selected" : ""}>${t("dotted")}</option>
+          </select>
+        </label>
+      </div>
+      <button type="button" class="route-focus">${t("focusRoute")}</button>
+    `;
+    const checkbox = card.querySelector('input[type="checkbox"]');
+    const colorInput = card.querySelector(".route-color");
+    const widthInput = card.querySelector(".route-width");
+    const dashSelect = card.querySelector(".route-dash");
+    const focusBtn = card.querySelector(".route-focus");
+
+    checkbox.addEventListener("change", () => {
+      item.visible = checkbox.checked;
+      item.style = readRouteStyleControls(colorInput, widthInput, dashSelect);
+      persistHistory(history);
+      setRouteOverlayVisible(routeId, item.visible, item.route, item.result, item.style);
+      if (item.visible) focusRouteOverlay(routeId);
     });
-    el.historyList.appendChild(button);
+    [colorInput, widthInput, dashSelect].forEach((control) => {
+      control.addEventListener("change", () => {
+        item.style = readRouteStyleControls(colorInput, widthInput, dashSelect);
+        persistHistory(history);
+        if (item.visible) {
+          if (!routeOverlays[routeId]) {
+            addOrUpdateRouteOverlay(routeId, item.route, item.result, { visible: true, fit: false, style: item.style });
+          } else {
+            updateRouteOverlayStyle(routeId, item.style);
+          }
+        }
+      });
+    });
+    focusBtn.addEventListener("click", () => {
+      writeRouteInputs(item.route);
+      if (item.visible) {
+        if (!routeOverlays[routeId]) addOrUpdateRouteOverlay(routeId, item.route, item.result, { visible: true, fit: false, style: item.style });
+        focusRouteOverlay(routeId);
+      } else {
+        updateResultPanel(item.result);
+      }
+    });
+    if (item.visible && !routeOverlays[routeId]) {
+      addOrUpdateRouteOverlay(routeId, item.route, item.result, { visible: true, fit: false, style: item.style });
+    }
+    el.historyList.appendChild(card);
   });
+}
+
+function readRouteStyleControls(colorInput, widthInput, dashSelect) {
+  return {
+    color: colorInput.value,
+    weight: Number(widthInput.value) || 5,
+    opacity: 0.9,
+    dash: dashSelect.value,
+  };
 }
 
 function formatRoute(route) {
   return `${route.start_lon}, ${route.start_lat} -> ${route.end_lon}, ${route.end_lat}`;
+}
+
+function routeKey(route) {
+  return [
+    Number(route.start_lon).toFixed(6),
+    Number(route.start_lat).toFixed(6),
+    Number(route.end_lon).toFixed(6),
+    Number(route.end_lat).toFixed(6),
+  ].join(",");
 }
 
 function localizeError(message) {

@@ -612,3 +612,59 @@ RoadNetworkLoader.load_csv(csv_path, progress_callback=...)
 ```
 
 加载成功后替换当前全局 `_network` 和 `_calculator`。
+
+## 16. 多光缆路由图层管理设计
+
+批量查询和历史查询支持多条光缆路径同时显示在 GIS 地图上。
+
+### 16.1 前端图层模型
+
+前端维护统一的路径图层容器：
+
+```text
+routeOverlayLayer = L.layerGroup()
+routeOverlays = {
+  routeId: {
+    route,
+    result,
+    style,
+    group,
+    polyline
+  }
+}
+```
+
+`routeId` 由起点和终点经纬度生成，精度保留 6 位小数：
+
+```text
+start_lon,start_lat,end_lon,end_lat
+```
+
+这样同一组源宿不会重复写入历史记录。
+
+### 16.2 批量查询行为
+
+- 批量查询完成后，所有成功路径默认显示在地图上。
+- 每条路径自动分配不同颜色。
+- 批量结果列表点击某条记录时，地图定位到对应路径。
+- 成功结果会写入历史记录，但重复源宿会去重。
+
+### 16.3 历史记录行为
+
+历史记录每条包含：
+
+- 显示/隐藏开关。
+- 路径颜色。
+- 路径粗细。
+- 线段样式：实线、虚线、点线。
+- 定位按钮。
+
+用户可以同时勾选多条历史记录，将多条光缆路径叠加显示在地图上。
+
+### 16.4 CoNET 品牌标识
+
+前端左侧栏顶部新增 CoNET 产品标识，并新增 SVG favicon：
+
+```text
+web/favicon.svg
+```

@@ -311,3 +311,46 @@ GET /api/network/upload/status/{job_id}
 state=running stage=building_index progress=88.0 nodes=900 edges=1740
 state=done stage=done progress=100.0 nodes=900 edges=1740
 ```
+
+## 2026-07-06 Iteration 5：多光缆路径叠加与 CoNET 标识
+
+### 需求
+
+- 批量查询的多组起终点计算后，所有成功光缆路径默认同时显示到 GIS 地图。
+- 每条路径默认随机或轮换使用不同颜色。
+- 单条 `Calculate Route` 查询不再清除旧路径，而是作为可管理图层保留。
+- 历史记录支持显示/取消显示某条或多条路径。
+- 历史路径支持自定义颜色、粗细、线段样式。
+- 重复源宿路由不重复记录。
+- 页面左侧栏顶部增加 CoNET 产品 Logo 和 favicon。
+
+### 实现
+
+- 新增统一前端路径图层容器：
+
+```text
+routeOverlayLayer
+routeOverlays
+```
+
+- 新增路径管理函数：
+  - `addOrUpdateRouteOverlay`
+  - `removeRouteOverlay`
+  - `setRouteOverlayVisible`
+  - `updateRouteOverlayStyle`
+  - `focusRouteOverlay`
+- 历史记录使用 `routeKey()` 按源宿坐标去重。
+- 批量查询成功结果默认写入历史并显示到地图。
+- 历史列表每条记录增加显示开关、颜色、粗细、线型和定位按钮。
+- 新增 `web/favicon.svg`。
+- 左侧栏顶部新增 CoNET 品牌区。
+
+### 验证
+
+```text
+node --check web\app.js
+passed
+
+python scripts\run_tests.py
+PASS total=2
+```
