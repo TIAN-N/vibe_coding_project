@@ -9,6 +9,13 @@ const i18n = {
     roadData: "Road Data",
     selectCsv: "Select WKT CSV",
     uploadLoad: "Upload and Load",
+    savingUpload: "Saving uploaded file...",
+    queuedUpload: "Queued for parsing...",
+    parsingUpload: "Parsing WKT rows...",
+    buildingGraph: "Building road graph...",
+    buildingIndex: "Building spatial index...",
+    uploadDone: "Road network loaded",
+    uploadFailed: "Road network loading failed",
     networkLayer: "Network Layer",
     showNetwork: "Show road network",
     lineColor: "Line color",
@@ -54,6 +61,13 @@ const i18n = {
     roadData: "路网数据",
     selectCsv: "选择 WKT CSV",
     uploadLoad: "上传并加载",
+    savingUpload: "正在保存上传文件...",
+    queuedUpload: "等待解析...",
+    parsingUpload: "正在解析 WKT 路网...",
+    buildingGraph: "正在构建路网图...",
+    buildingIndex: "正在构建空间索引...",
+    uploadDone: "路网加载完成",
+    uploadFailed: "路网加载失败",
     networkLayer: "路网图层",
     showNetwork: "显示路网路径",
     lineColor: "线条颜色",
@@ -159,6 +173,11 @@ const el = {
   networkLimit: document.getElementById("networkLimit"),
   batchResults: document.getElementById("batchResults"),
   historyList: document.getElementById("historyList"),
+  uploadProgress: document.getElementById("uploadProgress"),
+  uploadProgressText: document.getElementById("uploadProgressText"),
+  uploadProgressPercent: document.getElementById("uploadProgressPercent"),
+  uploadProgressBar: document.getElementById("uploadProgressBar"),
+  uploadProgressDetail: document.getElementById("uploadProgressDetail"),
 };
 
 function t(key, vars = {}) {
@@ -194,6 +213,7 @@ async function refreshStatus() {
   } else {
     setStatus(t("notLoaded"));
   }
+  updateNetworkSections();
 }
 
 function getLineOptions() {
@@ -281,21 +301,96 @@ async function uploadNetwork() {
   formData.append("file", fileInput.files[0]);
   el.uploadBtn.disabled = true;
   setStatus(t("loading"));
+  showUploadProgress();
+  updateUploadProgress({
+    progress: 1,
+    stage: "saving",
+    message: t("savingUpload"),
+    bytes_read: 0,
+    total_bytes: fileInput.files[0].size || 0,
+    nodes: 0,
+    edges: 0,
+  });
 
   try {
-    const response = await fetch("/api/network/upload", { method: "POST", body: formData });
+    const response = await fetch("/api/network/upload/start", { method: "POST", body: formData });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || "Failed to load road network");
-    networkLoaded = true;
-    networkBounds = metadataToBounds(data.metadata);
-    setStatus(t("loaded", { nodes: data.nodes.toLocaleString(), edges: data.edges.toLocaleString() }));
-    fitNetworkBounds();
-    scheduleNetworkPreviewLoad();
+    if (!response.ok) throw new Error(data.detail || "Failed to start road network loading");
+    await pollUploadJob(data.job_id);
   } catch (error) {
     setStatus(localizeError(error.message), true);
+    updateUploadProgress({ progress: 100, stage: "failed", message: t("uploadFailed"), error: error.message });
   } finally {
     el.uploadBtn.disabled = false;
   }
+}
+
+async function pollUploadJob(jobId) {
+  while (true) {
+    const response = await fetch(`/api/network/upload/status/${encodeURIComponent(jobId)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to read upload status");
+    updateUploadProgress(data);
+
+    if (data.state === "done") {
+      networkLoaded = true;
+      const network = data.network;
+      networkBounds = metadataToBounds(network.metadata);
+      setStatus(t("loaded", { nodes: network.nodes.toLocaleString(), edges: network.edges.toLocaleString() }));
+      updateNetworkSections();
+      fitNetworkBounds();
+      scheduleNetworkPreviewLoad();
+      return;
+    }
+    if (data.state === "failed") {
+      throw new Error(data.error || t("uploadFailed"));
+    }
+    await sleep(500);
+  }
+}
+
+function showUploadProgress() {
+  el.uploadProgress.classList.remove("hidden");
+}
+
+function updateUploadProgress(data) {
+  const progress = Math.max(0, Math.min(100, Number(data.progress) || 0));
+  el.uploadProgressBar.style.width = `${progress}%`;
+  el.uploadProgressPercent.textContent = `${progress.toFixed(1)}%`;
+  el.uploadProgressText.textContent = uploadStageText(data.stage, data.message);
+
+  const bytes = data.total_bytes ? `${formatBytes(data.bytes_read)} / ${formatBytes(data.total_bytes)}` : "";
+  const counts = data.nodes || data.edges ? `nodes=${Number(data.nodes || 0).toLocaleString()} edges=${Number(data.edges || 0).toLocaleString()}` : "";
+  el.uploadProgressDetail.textContent = [bytes, counts, data.error || ""].filter(Boolean).join(" | ");
+}
+
+function uploadStageText(stage, fallback) {
+  if (stage === "saving") return t("savingUpload");
+  if (stage === "queued") return t("queuedUpload");
+  if (stage === "parsing") return t("parsingUpload");
+  if (stage === "building_graph") return t("buildingGraph");
+  if (stage === "building_index") return t("buildingIndex");
+  if (stage === "done") return t("uploadDone");
+  if (stage === "failed") return t("uploadFailed");
+  return fallback || "";
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(2)} KB`;
+  return `${value} B`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function updateNetworkSections() {
+  document.querySelectorAll(".requires-network").forEach((node) => {
+    node.classList.toggle("hidden", !networkLoaded);
+  });
 }
 
 function readRouteInputs() {
@@ -579,3 +674,4 @@ map.whenReady(() => {
 
 applyLanguage();
 refreshStatus().catch(() => setStatus(t("backendDown"), true));
+updateNetworkSections();

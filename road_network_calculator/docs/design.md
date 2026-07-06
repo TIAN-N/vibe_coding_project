@@ -566,3 +566,49 @@ Start or end point is more than 1000m from the loaded road network. Routing cann
 - 中文
 
 语言偏好保存在 `localStorage`。界面静态文案、状态提示、错误提示、结果标题同步切换。
+
+## 15. 异步路网加载与进度条设计
+
+大规模 CSV 加载可能持续几十秒到数分钟。前端使用异步任务接口，不再等待同步上传接口一次性返回：
+
+```http
+POST /api/network/upload/start
+GET /api/network/upload/status/{job_id}
+```
+
+### 15.1 前端交互
+
+- 未加载路网时，仅展示路网上传区域。
+- 路网图层设置、单点寻路、批量查询、结果区、历史记录默认隐藏。
+- 上传开始后，在上传按钮下方展示线性进度条。
+- 加载完成后显示完整功能区。
+
+### 15.2 进度阶段
+
+进度条按当前加载实现分段：
+
+```text
+1% - 10%    saving / queued：保存上传文件与排队
+10% - 70%   parsing：读取 CSV，解析 WKT，构建临时节点和边
+72%         building_graph：构建 CSR 图结构
+88%         building_index：构建最近节点空间索引
+100%        done：替换当前全局路网，加载完成
+```
+
+CSV 解析阶段通过底层文件字节读取位置估算：
+
+```text
+progress = 10 + bytes_read / total_bytes * 60
+```
+
+因此大文件加载期间可以看到线性增长的真实解析进度。
+
+### 15.3 后端任务模型
+
+后端使用内存字典保存上传任务。后台线程执行：
+
+```python
+RoadNetworkLoader.load_csv(csv_path, progress_callback=...)
+```
+
+加载成功后替换当前全局 `_network` 和 `_calculator`。

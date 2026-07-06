@@ -1,6 +1,8 @@
 import os
 import tempfile
+import threading
 import time
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
@@ -12,7 +14,7 @@ from road_network import RoadDistanceCalculator, RoadNetwork, RoadNetworkLoader
 
 import numpy as np
 
-from .schemas import BatchRouteItem, BatchRouteRequest, BatchRouteResponse, NetworkPreview, NetworkStatus, NetworkViewport, RouteRequest, RouteResponse
+from .schemas import BatchRouteItem, BatchRouteRequest, BatchRouteResponse, NetworkPreview, NetworkStatus, NetworkViewport, RouteRequest, RouteResponse, UploadJobStatus, UploadStartResponse
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 WEB_DIR = BASE_DIR / "web"
@@ -31,6 +33,8 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 _network = None
 _calculator = None
 MAX_SNAP_DISTANCE_M = 1000.0
+_upload_jobs = {}
+_upload_jobs_lock = threading.Lock()
 
 
 @app.get("/")
@@ -157,6 +161,132 @@ async def upload_network(file: UploadFile = File(...)):
         edges=network.undirected_edge_count,
         metadata=dict(network.metadata),
     )
+
+
+@app.post("/api/network/upload/start", response_model=UploadStartResponse)
+async def start_upload_network(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are supported")
+
+    job_id = uuid.uuid4().hex
+    suffix = ".csv"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp_path = tmp.name
+        _set_upload_job(
+            job_id,
+            state="saving",
+            stage="saving",
+            progress=1.0,
+            message="Saving uploaded file",
+            bytes_read=0,
+            total_bytes=0,
+            nodes=0,
+            edges=0,
+            error="",
+            network=None,
+        )
+        bytes_written = 0
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            tmp.write(chunk)
+            bytes_written += len(chunk)
+            _update_upload_job(
+                job_id,
+                progress=min(9.0, 1.0 + (bytes_written / max(bytes_written, 1)) * 8.0),
+                bytes_read=bytes_written,
+                total_bytes=bytes_written,
+            )
+
+    _update_upload_job(job_id, state="queued", stage="queued", progress=10.0, message="Queued for parsing")
+    thread = threading.Thread(target=_load_network_job, args=(job_id, tmp_path), daemon=True)
+    thread.start()
+    return UploadStartResponse(job_id=job_id)
+
+
+@app.get("/api/network/upload/status/{job_id}", response_model=UploadJobStatus)
+def upload_job_status(job_id: str):
+    with _upload_jobs_lock:
+        job = _upload_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Upload job was not found")
+        return UploadJobStatus(job_id=job_id, **dict(job))
+
+
+def _load_network_job(job_id: str, csv_path: str):
+    global _network, _calculator
+
+    def on_progress(payload):
+        _update_upload_job(
+            job_id,
+            state="running",
+            stage=payload.get("stage", "running"),
+            progress=float(payload.get("progress", 0.0)),
+            message=payload.get("message", ""),
+            bytes_read=int(payload.get("bytes_read", 0) or 0),
+            total_bytes=int(payload.get("total_bytes", 0) or 0),
+            nodes=int(payload.get("nodes", 0) or 0),
+            edges=int(payload.get("edges", 0) or 0),
+        )
+
+    try:
+        _update_upload_job(job_id, state="running", stage="parsing", progress=10.0, message="Parsing WKT rows")
+        loader = RoadNetworkLoader()
+        network = loader.load_csv(csv_path, progress_callback=on_progress)
+        calculator = RoadDistanceCalculator(network)
+        _network = network
+        _calculator = calculator
+        status = NetworkStatus(
+            loaded=True,
+            nodes=network.node_count,
+            edges=network.undirected_edge_count,
+            metadata=dict(network.metadata),
+        )
+        _update_upload_job(
+            job_id,
+            state="done",
+            stage="done",
+            progress=100.0,
+            message="Road network loaded",
+            bytes_read=int(os.path.getsize(csv_path)),
+            total_bytes=int(os.path.getsize(csv_path)),
+            nodes=network.node_count,
+            edges=network.undirected_edge_count,
+            network=status,
+        )
+    except Exception as exc:
+        _update_upload_job(job_id, state="failed", stage="failed", progress=100.0, message="Load failed", error=str(exc))
+    finally:
+        try:
+            os.remove(csv_path)
+        except OSError:
+            pass
+
+
+def _set_upload_job(job_id: str, **payload):
+    with _upload_jobs_lock:
+        _upload_jobs[job_id] = payload
+
+
+def _update_upload_job(job_id: str, **payload):
+    with _upload_jobs_lock:
+        job = _upload_jobs.setdefault(
+            job_id,
+            {
+                "state": "unknown",
+                "stage": "",
+                "progress": 0.0,
+                "message": "",
+                "bytes_read": 0,
+                "total_bytes": 0,
+                "nodes": 0,
+                "edges": 0,
+                "error": "",
+                "network": None,
+            },
+        )
+        job.update(payload)
 
 
 @app.post("/api/route", response_model=RouteResponse)

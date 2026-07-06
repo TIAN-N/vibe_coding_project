@@ -259,3 +259,55 @@ total_edges=103865
 ```
 
 这说明新接口已经从“全图抽样”切换为“当前视野局部加载”。用户进一步放大后，`matched_edges` 会降低，显示会更接近局部完整路网。
+
+## 2026-07-06 Iteration 4：异步上传加载与进度条
+
+### 需求
+
+- 未加载路网数据时，只保留上传路网数据区域。
+- 路网加载完成后，再显示图层设置、寻路查询、批量查询、结果和历史记录等功能。
+- 百万级或千万级 CSV 加载期间，前端需要显示动态进度条。
+
+### 实现
+
+- `RoadNetworkLoader.load_csv` 增加 `progress_callback`。
+- CSV 解析阶段按文件字节读取位置估算 10%-70% 的进度。
+- CSR 构建阶段报告 72%。
+- KDTree 空间索引构建阶段报告 88%。
+- 完成后报告 100%。
+- 后端新增异步上传接口：
+
+```text
+POST /api/network/upload/start
+GET /api/network/upload/status/{job_id}
+```
+
+- FastAPI 后端使用后台线程执行路网加载任务。
+- 前端上传按钮下方新增线性进度条。
+- 前端通过轮询 job status 更新进度条。
+- 前端新增 `.requires-network` 区域控制，未加载时隐藏核心功能区。
+
+### 验证
+
+```text
+node --check web\app.js
+passed
+
+python scripts\run_tests.py
+PASS total=2
+
+python -m pytest
+6 passed, 1 skipped
+
+python -m compileall road_network app scripts
+passed
+```
+
+异步上传接口验证：
+
+```text
+POST /api/network/upload/start -> job_id
+GET /api/network/upload/status/{job_id}
+state=running stage=building_index progress=88.0 nodes=900 edges=1740
+state=done stage=done progress=100.0 nodes=900 edges=1740
+```

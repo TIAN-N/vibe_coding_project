@@ -56,3 +56,21 @@ class NetworkStatus(BaseModel):
     nodes: int = 0
     edges: int = 0
     metadata: Dict[str, float] = Field(default_factory=dict)
+
+
+class UploadStartResponse(BaseModel):
+    job_id: str
+
+
+class UploadJobStatus(BaseModel):
+    job_id: str
+    state: str
+    stage: str = ""
+    progress: float = 0.0
+    message: str = ""
+    bytes_read: int = 0
+    total_bytes: int = 0
+    nodes: int = 0
+    edges: int = 0
+    error: str = ""
+    network: Optional[NetworkStatus] = None

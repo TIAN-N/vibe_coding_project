@@ -28,9 +28,19 @@
             <input id="csvFile" type="file" accept=".csv,text/csv" />
           </label>
           <button id="uploadBtn" type="button" data-i18n="uploadLoad">Upload and Load</button>
+          <div id="uploadProgress" class="progress-panel hidden">
+            <div class="progress-meta">
+              <span id="uploadProgressText">Preparing...</span>
+              <span id="uploadProgressPercent">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="uploadProgressBar" class="progress-bar"></div>
+            </div>
+            <div id="uploadProgressDetail" class="progress-detail"></div>
+          </div>
         </section>
 
-        <section class="panel">
+        <section class="panel requires-network hidden">
           <h2 data-i18n="networkLayer">Network Layer</h2>
           <label class="check-row">
             <input id="showNetworkLayer" type="checkbox" checked />
@@ -51,7 +61,7 @@
           <button id="refreshNetworkBtn" type="button" data-i18n="refreshLayer">Refresh Layer</button>
         </section>
 
-        <section class="panel">
+        <section class="panel requires-network hidden">
           <h2 data-i18n="routeCoordinates">Route Coordinates</h2>
           <div class="grid">
             <label><span data-i18n="startLon">Start Lon</span><input id="startLon" type="number" step="0.000001" value="100.501765" /></label>
@@ -62,14 +72,14 @@
           <button id="routeBtn" type="button" data-i18n="calculateRoute">Calculate Route</button>
         </section>
 
-        <section class="panel">
+        <section class="panel requires-network hidden">
           <h2 data-i18n="batchQuery">Batch Query</h2>
           <textarea id="batchInput" spellcheck="false" placeholder="100.491389 13.75 100.53485 13.7465"></textarea>
           <button id="batchBtn" type="button" data-i18n="runBatch">Run Batch</button>
           <div id="batchResults" class="list"></div>
         </section>
 
-        <section class="panel result-panel">
+        <section class="panel result-panel requires-network hidden">
           <h2 data-i18n="result">Result</h2>
           <dl>
             <dt data-i18n="distance">Distance</dt>
@@ -83,7 +93,7 @@
           </dl>
         </section>
 
-        <section class="panel">
+        <section class="panel requires-network hidden">
           <h2 data-i18n="history">History</h2>
           <div id="historyList" class="list"></div>
         </section>
