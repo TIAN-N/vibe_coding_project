@@ -49,6 +49,16 @@ def test_loader_and_calculator():
         assert far_result.snap_start_distance_m > 1000.0
         assert far_result.path == []
 
+        lower_csv_path = os.path.join(tmp_dir, "network_lower.csv")
+        with open(lower_csv_path, "w", encoding="utf-8", newline="") as fp:
+            writer = csv.writer(fp)
+            writer.writerow(["wkt"])
+            writer.writerow(["LINESTRING(116.000 39.000,116.001 39.000)"])
+
+        lower_network = RoadNetworkLoader().load_csv(lower_csv_path)
+        assert lower_network.node_count == 2
+        assert lower_network.undirected_edge_count == 1
+
 
 def main():
     tests = [test_geometry, test_loader_and_calculator]

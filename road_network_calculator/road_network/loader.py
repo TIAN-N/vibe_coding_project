@@ -26,12 +26,13 @@ class RoadNetworkLoader:
 
         with open(csv_path, "r", encoding="utf-8-sig", newline="") as fp:
             reader = csv.DictReader(fp)
-            if not reader.fieldnames or "WKT" not in reader.fieldnames:
+            wkt_field = self._find_wkt_field(reader.fieldnames)
+            if wkt_field is None:
                 raise ValueError("CSV must contain a WKT column")
 
             for row in reader:
                 try:
-                    coords = parse_linestring_wkt(row["WKT"])
+                    coords = parse_linestring_wkt(row[wkt_field])
                 except Exception:
                     invalid_rows += 1
                     continue
@@ -86,6 +87,14 @@ class RoadNetworkLoader:
                 "max_lat": float(node_lats.max()),
             },
         )
+
+    def _find_wkt_field(self, fieldnames):
+        if not fieldnames:
+            return None
+        for fieldname in fieldnames:
+            if fieldname and fieldname.strip().lower() == "wkt":
+                return fieldname
+        return None
 
     def _get_or_create_node(
         self,
