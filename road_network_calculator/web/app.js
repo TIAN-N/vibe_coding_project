@@ -444,13 +444,55 @@ function loadHistory() {
 function saveHistory(route, result) {
   if (!result.reachable) return;
   const history = loadHistory();
+  const compactResult = compactHistoryResult(result);
   history.unshift({
     route,
-    result,
+    result: compactResult,
     created_at: new Date().toISOString(),
   });
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+  persistHistory(history);
   renderHistory();
+}
+
+function compactHistoryResult(result) {
+  const path = Array.isArray(result.path) ? result.path : [];
+  return {
+    distance_m: result.distance_m,
+    path: simplifyPathForHistory(path, 1200),
+    snapped_start: result.snapped_start,
+    snapped_end: result.snapped_end,
+    timings_ms: result.timings_ms,
+    reachable: result.reachable,
+    snap_start_distance_m: result.snap_start_distance_m,
+    snap_end_distance_m: result.snap_end_distance_m,
+  };
+}
+
+function simplifyPathForHistory(path, maxPoints) {
+  if (path.length <= maxPoints) return path;
+  const simplified = [];
+  const step = (path.length - 1) / (maxPoints - 1);
+  for (let i = 0; i < maxPoints; i++) {
+    simplified.push(path[Math.round(i * step)]);
+  }
+  return simplified;
+}
+
+function persistHistory(history) {
+  let items = history.slice(0, MAX_HISTORY);
+  while (items.length) {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(items));
+      return;
+    } catch (error) {
+      items = items.slice(0, Math.max(0, items.length - 5));
+    }
+  }
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
 }
 
 function renderHistory() {
