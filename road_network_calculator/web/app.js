@@ -173,7 +173,8 @@ for (const [name, layer] of Object.entries(baseLayers)) {
 
 const el = {
   status: document.getElementById("status"),
-  languageSelect: document.getElementById("languageSelect"),
+  langEnBtn: document.getElementById("langEnBtn"),
+  langZhBtn: document.getElementById("langZhBtn"),
   uploadBtn: document.getElementById("uploadBtn"),
   routeBtn: document.getElementById("routeBtn"),
   batchBtn: document.getElementById("batchBtn"),
@@ -202,7 +203,8 @@ function t(key, vars = {}) {
 
 function applyLanguage() {
   document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
-  el.languageSelect.value = lang;
+  el.langEnBtn.classList.toggle("active", lang === "en");
+  el.langZhBtn.classList.toggle("active", lang === "zh");
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });
@@ -791,11 +793,14 @@ function localizeError(message) {
   return message;
 }
 
-el.languageSelect.addEventListener("change", () => {
-  lang = el.languageSelect.value;
+function setLanguage(nextLang) {
+  lang = nextLang;
   localStorage.setItem(LANG_KEY, lang);
   applyLanguage();
-});
+}
+
+el.langEnBtn.addEventListener("click", () => setLanguage("en"));
+el.langZhBtn.addEventListener("click", () => setLanguage("zh"));
 el.uploadBtn.addEventListener("click", uploadNetwork);
 el.routeBtn.addEventListener("click", calculateRoute);
 el.batchBtn.addEventListener("click", runBatch);

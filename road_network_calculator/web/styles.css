@@ -112,16 +112,40 @@ body {
   letter-spacing: 0;
 }
 
-.brand-text small {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-}
-
 header h1 {
   margin: 0 0 8px;
   font-size: 24px;
   line-height: 1.2;
+}
+
+.language-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 92px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.language-toggle button {
+  width: auto;
+  min-height: 30px;
+  margin: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.language-toggle button:hover {
+  background: #eef4ff;
+}
+
+.language-toggle button.active {
+  background: var(--accent);
+  color: #fff;
 }
 
 header p {
