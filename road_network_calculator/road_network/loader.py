@@ -32,7 +32,7 @@ class RoadNetworkLoader:
 
             for row in reader:
                 try:
-                    coords = parse_linestring_wkt(row[wkt_field])
+                    coords = parse_linestring_wkt(self._read_wkt_value(row, wkt_field))
                 except Exception:
                     invalid_rows += 1
                     continue
@@ -95,6 +95,13 @@ class RoadNetworkLoader:
             if fieldname and fieldname.strip().lower() == "wkt":
                 return fieldname
         return None
+
+    def _read_wkt_value(self, row, wkt_field):
+        value = row.get(wkt_field, "")
+        extra_columns = row.get(None)
+        if extra_columns:
+            return ",".join([value] + extra_columns)
+        return value
 
     def _get_or_create_node(
         self,

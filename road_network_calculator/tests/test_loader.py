@@ -26,3 +26,17 @@ def test_loader_accepts_lowercase_wkt_column(tmp_path):
     network = RoadNetworkLoader().load_csv(str(csv_path))
     assert network.node_count == 2
     assert network.undirected_edge_count == 1
+
+
+def test_loader_accepts_unquoted_linestring_with_internal_comma(tmp_path):
+    csv_path = tmp_path / "network.csv"
+    csv_path.write_text(
+        "WKT\n"
+        "LINESTRING (100.8954023 13.9610057, 100.8953865 13.961329)\n"
+        "LINESTRING (100.8953865 13.961329, 100.8954031 13.9619644)\n",
+        encoding="utf-8",
+    )
+
+    network = RoadNetworkLoader().load_csv(str(csv_path))
+    assert network.node_count == 3
+    assert network.undirected_edge_count == 2
