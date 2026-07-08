@@ -88,6 +88,36 @@
           <div id="batchResults" class="list"></div>
         </section>
 
+        <section class="panel requires-network hidden">
+          <h2 data-i18n="batchFileRouting">Batch Route File</h2>
+          <label class="file-picker">
+            <span data-i18n="selectPairCsv">Select source-sink CSV</span>
+            <input id="batchRouteFile" type="file" accept=".csv,text/csv" />
+          </label>
+          <div class="grid">
+            <label><span data-i18n="thresholdKm">Threshold km</span><input id="batchThresholdKm" type="number" min="0" step="1" value="30" /></label>
+            <label><span data-i18n="workers">Workers</span><input id="batchWorkers" type="number" min="1" max="16" step="1" value="4" /></label>
+          </div>
+          <button id="batchRouteStartBtn" type="button" data-i18n="startBatchRouting">Start Batch Routing</button>
+          <div id="batchRouteProgress" class="progress-panel hidden">
+            <div class="progress-meta">
+              <span id="batchRouteProgressText">Preparing...</span>
+              <span id="batchRouteProgressPercent">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="batchRouteProgressBar" class="progress-bar"></div>
+            </div>
+            <div id="batchRouteProgressDetail" class="progress-detail"></div>
+          </div>
+          <button id="batchRouteDownloadBtn" type="button" class="hidden" data-i18n="downloadResult">Download Result CSV</button>
+          <div class="grid">
+            <label><span data-i18n="searchSrcName">Search Src Name</span><input id="batchPreviewSrc" type="text" /></label>
+            <label><span data-i18n="searchSinkName">Search Sink Name</span><input id="batchPreviewSink" type="text" /></label>
+          </div>
+          <button id="batchPreviewBtn" type="button" class="hidden" data-i18n="searchPreview">Search Preview Routes</button>
+          <div id="batchPreviewResults" class="list"></div>
+        </section>
+
         <section class="panel result-panel requires-network hidden">
           <h2 data-i18n="result">Result</h2>
           <dl>

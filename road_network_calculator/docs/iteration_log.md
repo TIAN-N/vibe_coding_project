@@ -354,3 +354,92 @@ passed
 python scripts\run_tests.py
 PASS total=2
 ```
+## 2026-07-08 Iteration 6：批量源宿文件路由计算
+
+### 需求
+
+- 路网加载完成后，支持上传源宿对 CSV。
+- 输入列为 `Src NE Name`、`Sink NE Name`、`Src Lon`、`Src Lat`、`Sink Lon`、`Sink Lat`。
+- 后端批量计算每一对源宿的路网距离和完整路由。
+- 输出 CSV 追加 `Straight Distance`、`Distance`、`Route`、`Error Detail`。
+- 成功时 `Error Detail` 为空；失败时直接写入原因，不再输出 `Status` 列。
+- 直线距离阈值默认 30km，单位 km。
+- 默认 `workers=4`。
+- 大路网下并发计算共享当前内存中的 CSR 图和空间索引，避免复制路网。
+- 前端显示异步任务进度条、完成数/总数、成功数、失败数、阈值跳过数。
+- 计算完成后支持下载结果 CSV。
+- 支持按源网元名称和宿网元名称搜索预览路由，并在 GIS 地图回放。
+
+### 实现
+
+- 新增 `road_network/batch_router.py`：
+  - `BatchRouteCalculator`
+  - 流式读取源宿对 CSV。
+  - 直线距离阈值过滤。
+  - 调用 `RoadDistanceCalculator.shortest_path()`。
+  - 输出 `LINESTRING(...)` 路由。
+  - 并发计算结果按输入行顺序写出。
+  - 保留前 1000 条成功结果用于前端预览。
+- 扩展 `app/main.py`：
+  - `POST /api/batch-routes/upload/start`
+  - `GET /api/batch-routes/status/{job_id}`
+  - `GET /api/batch-routes/download/{job_id}`
+  - `GET /api/batch-routes/preview/{job_id}`
+  - 批量任务启动时捕获当前 `_network` 和 `_calculator` 引用，避免任务运行中被新上传路网影响。
+- 扩展 `web/index.html`、`web/app.js`、`web/styles.css`：
+  - 新增批量源宿文件上传卡片。
+  - 新增阈值和 workers 输入。
+  - 新增批量任务进度条。
+  - 新增结果下载按钮。
+  - 新增源宿网元名称搜索预览。
+  - 点击预览路由后加入地图图层和历史清单。
+- 新增 `DT_test`：
+  - `test_batch_route_functional.py`
+  - `performance_dt.py`
+  - `README.md`
+
+### 验证
+
+```text
+node --check web\app.js
+passed
+
+python -m compileall app road_network DT_test
+passed
+
+python -m pytest DT_test tests -rs
+9 passed, 2 skipped, 2 warnings
+```
+
+说明：
+
+- 2 个 FastAPI `TestClient` 测试因当前环境缺少可用 `httpx` 被跳过。
+- `requirements.txt` 已包含 `httpx>=0.24`，完整安装依赖后会执行接口测试。
+
+### 性能 DT
+
+大规模合成路网：
+
+```text
+python DT_test\performance_dt.py --grid-size 500 --pairs 200 --workers 4
+```
+
+结果：
+
+```text
+WKT rows=499000
+nodes=250000
+undirected_edges=499000
+pairs=200
+load_seconds=5.883
+batch_seconds=3.854
+avg_ms_per_pair=19.269
+success=200
+failed=0
+```
+
+报告已保存：
+
+```text
+docs/batch_route_performance_dt_report.md
+```

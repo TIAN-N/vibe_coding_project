@@ -9,3 +9,5 @@ data/mock_large*.csv
 data/osm_bangkok_regions_edges.csv
 data/osm_bangkok_regions_failed_tiles.csv
 uploads/
+batch_results/
+DT_test/generated/

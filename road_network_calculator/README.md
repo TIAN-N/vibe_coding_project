@@ -288,3 +288,60 @@ python -m pip install -r requirements.txt
 - 上传的 CSV 是否覆盖该城市或区域。
 - 输入经纬度是否写反。
 - 坐标格式是否为 `经度 纬度`，不是 `纬度 经度`。
+## 15. 批量源宿文件路由计算
+
+路网加载完成后，侧边栏会显示 `Batch Route File` 功能区。
+
+源宿对 CSV 需要包含以下 6 列：
+
+```csv
+Src NE Name,Sink NE Name,Src Lon,Src Lat,Sink Lon,Sink Lat
+SiteA,SiteB,100.000000,13.000000,100.002000,13.000000
+```
+
+使用步骤：
+
+1. 先上传并加载路网 WKT CSV。
+2. 在 `Batch Route File` 中选择源宿对 CSV。
+3. 设置直线距离阈值，默认 `30`，单位是 km。
+4. 设置 workers，默认 `4`。
+5. 点击 `Start Batch Routing`。
+6. 等待进度条完成后，点击 `Download Result CSV` 下载结果。
+7. 可输入源网元或宿网元名称，点击预览查询，并在 GIS 地图上回放对应路由。
+
+结果 CSV 会追加：
+
+```text
+Straight Distance
+Distance
+Route
+Error Detail
+```
+
+成功时 `Error Detail` 为空；失败时会写入 `invalid coordinate`、`start_node can't snap to network`、`end_node can't snap to network`、`straight distance is longer than threshold` 或 `unreachable`。
+
+## 16. DT 测试与性能测试
+
+新增独立 DT 测试目录：
+
+```text
+DT_test/
+```
+
+运行功能 DT：
+
+```powershell
+python -m pytest DT_test
+```
+
+运行批量路由性能 DT：
+
+```powershell
+python DT_test\performance_dt.py --grid-size 500 --pairs 200 --workers 4
+```
+
+性能报告输出到：
+
+```text
+docs/batch_route_performance_dt_report.md
+```

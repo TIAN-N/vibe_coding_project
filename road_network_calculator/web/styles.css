@@ -257,6 +257,7 @@ label {
 }
 
 input[type="number"],
+input[type="text"],
 select {
   width: 100%;
   height: 36px;
@@ -389,6 +390,15 @@ dd {
 
 .route-card-main {
   min-width: 0;
+}
+
+.route-label {
+  display: block;
+  margin-bottom: 2px;
+  overflow-wrap: anywhere;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .route-actions {

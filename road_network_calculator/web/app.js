@@ -34,6 +34,18 @@ const i18n = {
     calculateRoute: "Calculate Route",
     batchQuery: "Batch Query",
     runBatch: "Run Batch",
+    batchFileRouting: "Batch Route File",
+    selectPairCsv: "Select source-sink CSV",
+    thresholdKm: "Threshold km",
+    workers: "Workers",
+    startBatchRouting: "Start Batch Routing",
+    downloadResult: "Download Result CSV",
+    searchSrcName: "Search Src Name",
+    searchSinkName: "Search Sink Name",
+    searchPreview: "Search Preview Routes",
+    uploadingBatchRoutes: "Uploading batch route CSV",
+    batchRouteDone: "Batch route calculation completed",
+    noPreviewRoutes: "No preview routes matched",
     result: "Result",
     distance: "Distance",
     snapTime: "Snap Time",
@@ -92,6 +104,18 @@ const i18n = {
     calculateRoute: "计算路由",
     batchQuery: "批量查询",
     runBatch: "批量计算",
+    batchFileRouting: "批量路由文件",
+    selectPairCsv: "选择源宿对 CSV",
+    thresholdKm: "阈值 km",
+    workers: "Workers",
+    startBatchRouting: "开始批量寻路",
+    downloadResult: "下载结果 CSV",
+    searchSrcName: "搜索源网元",
+    searchSinkName: "搜索宿网元",
+    searchPreview: "查询预览路由",
+    uploadingBatchRoutes: "正在上传批量路由 CSV",
+    batchRouteDone: "批量路由计算完成",
+    noPreviewRoutes: "没有匹配的预览路由",
     result: "计算结果",
     distance: "距离",
     snapTime: "吸附耗时",
@@ -185,6 +209,20 @@ const el = {
   networkOpacity: document.getElementById("networkOpacity"),
   networkLimit: document.getElementById("networkLimit"),
   batchResults: document.getElementById("batchResults"),
+  batchRouteFile: document.getElementById("batchRouteFile"),
+  batchThresholdKm: document.getElementById("batchThresholdKm"),
+  batchWorkers: document.getElementById("batchWorkers"),
+  batchRouteStartBtn: document.getElementById("batchRouteStartBtn"),
+  batchRouteProgress: document.getElementById("batchRouteProgress"),
+  batchRouteProgressText: document.getElementById("batchRouteProgressText"),
+  batchRouteProgressPercent: document.getElementById("batchRouteProgressPercent"),
+  batchRouteProgressBar: document.getElementById("batchRouteProgressBar"),
+  batchRouteProgressDetail: document.getElementById("batchRouteProgressDetail"),
+  batchRouteDownloadBtn: document.getElementById("batchRouteDownloadBtn"),
+  batchPreviewSrc: document.getElementById("batchPreviewSrc"),
+  batchPreviewSink: document.getElementById("batchPreviewSink"),
+  batchPreviewBtn: document.getElementById("batchPreviewBtn"),
+  batchPreviewResults: document.getElementById("batchPreviewResults"),
   historyList: document.getElementById("historyList"),
   uploadProgress: document.getElementById("uploadProgress"),
   uploadProgressText: document.getElementById("uploadProgressText"),
@@ -613,6 +651,148 @@ function renderBatchResults(results) {
   renderHistory();
 }
 
+async function startBatchRouteFileJob() {
+  if (!el.batchRouteFile.files.length) {
+    setStatus(t("chooseCsv"), true);
+    return;
+  }
+  const formData = new FormData();
+  formData.append("file", el.batchRouteFile.files[0]);
+  formData.append("straight_distance_threshold_km", Number(el.batchThresholdKm.value) || 30);
+  formData.append("workers", Number(el.batchWorkers.value) || 4);
+
+  el.batchRouteStartBtn.disabled = true;
+  el.batchRouteDownloadBtn.classList.add("hidden");
+  el.batchPreviewBtn.classList.add("hidden");
+  el.batchPreviewResults.innerHTML = "";
+  showBatchRouteProgress();
+  updateBatchRouteProgress({ progress: 1, completed: 0, total: 0, message: t("uploadingBatchRoutes") });
+
+  try {
+    const response = await fetch("/api/batch-routes/upload/start", { method: "POST", body: formData });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to start batch routing");
+    await pollBatchRouteJob(data.job_id);
+  } catch (error) {
+    setStatus(localizeError(error.message), true);
+    updateBatchRouteProgress({ progress: 100, message: error.message });
+  } finally {
+    el.batchRouteStartBtn.disabled = false;
+  }
+}
+
+async function pollBatchRouteJob(jobId) {
+  while (true) {
+    const response = await fetch(`/api/batch-routes/status/${encodeURIComponent(jobId)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Failed to read batch route status");
+    updateBatchRouteProgress(data);
+    if (data.state === "done") {
+      el.batchRouteDownloadBtn.classList.remove("hidden");
+      el.batchPreviewBtn.classList.remove("hidden");
+      el.batchRouteDownloadBtn.onclick = () => {
+        window.location.href = `/api/batch-routes/download/${encodeURIComponent(jobId)}`;
+      };
+      el.batchPreviewBtn.onclick = () => searchBatchRoutePreview(jobId);
+      setStatus(data.message || t("batchRouteDone"));
+      return;
+    }
+    if (data.state === "failed") {
+      throw new Error(data.error || "Batch route calculation failed");
+    }
+    await sleep(800);
+  }
+}
+
+function showBatchRouteProgress() {
+  el.batchRouteProgress.classList.remove("hidden");
+}
+
+function updateBatchRouteProgress(data) {
+  const progress = Math.max(0, Math.min(100, Number(data.progress) || 0));
+  el.batchRouteProgressBar.style.width = `${progress}%`;
+  el.batchRouteProgressPercent.textContent = `${progress.toFixed(1)}%`;
+  el.batchRouteProgressText.textContent = data.message || "Calculating routes";
+  el.batchRouteProgressDetail.textContent = [
+    `${Number(data.completed || 0).toLocaleString()} / ${Number(data.total || 0).toLocaleString()}`,
+    `success=${Number(data.success || 0).toLocaleString()}`,
+    `failed=${Number(data.failed || 0).toLocaleString()}`,
+    `threshold=${Number(data.skipped_by_threshold || 0).toLocaleString()}`,
+  ].join(" | ");
+}
+
+async function searchBatchRoutePreview(jobId) {
+  const params = new URLSearchParams({
+    src: el.batchPreviewSrc.value || "",
+    sink: el.batchPreviewSink.value || "",
+    limit: 50,
+  });
+  const response = await fetch(`/api/batch-routes/preview/${encodeURIComponent(jobId)}?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) {
+    setStatus(data.detail || "Failed to load preview routes", true);
+    return;
+  }
+  renderBatchRoutePreview(data.rows || []);
+}
+
+function renderBatchRoutePreview(rows) {
+  el.batchPreviewResults.innerHTML = "";
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.textContent = t("noPreviewRoutes");
+    el.batchPreviewResults.appendChild(empty);
+    return;
+  }
+  rows.forEach((row) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "list-item";
+    button.innerHTML = `<strong>${row["Src NE Name"]} -> ${row["Sink NE Name"]}</strong><span class="muted">${row.Distance} m</span>`;
+    button.addEventListener("click", () => {
+      const route = {
+        start_lon: Number(row["Src Lon"]),
+        start_lat: Number(row["Src Lat"]),
+        end_lon: Number(row["Sink Lon"]),
+        end_lat: Number(row["Sink Lat"]),
+      };
+      const result = resultFromBatchPreviewRow(row);
+      const historyItem = saveHistory(route, result, {
+        visible: true,
+        label: `${row["Src NE Name"]} -> ${row["Sink NE Name"]}`,
+      });
+      const routeId = historyItem ? historyItem.id : routeKey(route);
+      addOrUpdateRouteOverlay(routeId, route, result, { visible: true, fit: true });
+      updateResultPanel(result);
+    });
+    el.batchPreviewResults.appendChild(button);
+  });
+}
+
+function resultFromBatchPreviewRow(row) {
+  const path = parseLinestringPath(row.Route || "");
+  return {
+    distance_m: Number(row.Distance) || 0,
+    path,
+    snapped_start: path.length ? path[0] : [Number(row["Src Lon"]), Number(row["Src Lat"])],
+    snapped_end: path.length ? path[path.length - 1] : [Number(row["Sink Lon"]), Number(row["Sink Lat"])],
+    timings_ms: { snap: 0, search: 0, total: 0 },
+    reachable: path.length > 0,
+    snap_start_distance_m: 0,
+    snap_end_distance_m: 0,
+  };
+}
+
+function parseLinestringPath(wkt) {
+  const match = /^\s*LINESTRING\s*\((.*)\)\s*$/i.exec(wkt || "");
+  if (!match) return [];
+  return match[1].split(",").map((pair) => {
+    const parts = pair.trim().split(/\s+/);
+    return [Number(parts[0]), Number(parts[1])];
+  }).filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
+}
+
 function loadHistory() {
   try {
     return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
@@ -631,6 +811,7 @@ function saveHistory(route, result, options = {}) {
     id,
     route,
     result: compactResult,
+    label: options.label || (existingIndex >= 0 ? history[existingIndex].label : ""),
     visible: options.visible !== undefined ? options.visible : true,
     style: existingIndex >= 0 && history[existingIndex].style ? history[existingIndex].style : defaultRouteStyle(history.length),
     created_at: new Date().toISOString(),
@@ -702,11 +883,13 @@ function renderHistory() {
     const card = document.createElement("div");
     card.className = "list-item route-card";
     const when = new Date(item.created_at).toLocaleString();
+    const label = item.label ? `<span class="route-label">${item.label}</span>` : "";
     card.innerHTML = `
       <div class="route-card-header">
         <input type="checkbox" ${item.visible ? "checked" : ""} aria-label="${t("showRoute")}" />
         <div class="route-card-main">
           <strong>${item.result.distance_m.toFixed(1)} m</strong>
+          ${label}
           <span class="muted">${when}<br>${formatRoute(item.route)}</span>
         </div>
       </div>
@@ -804,6 +987,7 @@ el.langZhBtn.addEventListener("click", () => setLanguage("zh"));
 el.uploadBtn.addEventListener("click", uploadNetwork);
 el.routeBtn.addEventListener("click", calculateRoute);
 el.batchBtn.addEventListener("click", runBatch);
+el.batchRouteStartBtn.addEventListener("click", startBatchRouteFileJob);
 el.refreshNetworkBtn.addEventListener("click", () => loadNetworkPreview().catch((error) => setStatus(localizeError(error.message), true)));
 el.showNetworkLayer.addEventListener("change", () => {
   if (el.showNetworkLayer.checked) {

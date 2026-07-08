@@ -74,3 +74,25 @@ class UploadJobStatus(BaseModel):
     edges: int = 0
     error: str = ""
     network: Optional[NetworkStatus] = None
+
+
+class BatchRouteStartResponse(BaseModel):
+    job_id: str
+
+
+class BatchRouteJobStatus(BaseModel):
+    job_id: str
+    state: str
+    progress: float = 0.0
+    completed: int = 0
+    total: int = 0
+    success: int = 0
+    failed: int = 0
+    skipped_by_threshold: int = 0
+    message: str = ""
+    error: str = ""
+    download_ready: bool = False
+
+
+class BatchRoutePreviewResponse(BaseModel):
+    rows: List[Dict[str, str]]
