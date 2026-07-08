@@ -2,38 +2,70 @@
 
 ## 1. 测试范围
 
-本轮新增独立 `DT_test` 测试目录，覆盖：
+本报告覆盖批量源宿文件路由计算的功能正确性和性能表现：
 
 - 批量源宿 CSV 读取。
-- 输出 CSV 字段和行顺序。
-- 成功路由距离与 `LINESTRING` 输出。
+- 成功/失败结果写出。
+- 路由 `LINESTRING(...)` 输出。
 - 直线距离阈值跳过。
-- 非法经纬度。
-- 起点无法在 1km 内吸附到路网。
-- 批量任务进度回调。
-- 可复现合成大规模路网性能测试。
+- 预览搜索与结果 CSV 一致性。
+- 中等路网下 SciPy 批量 Dijkstra 加速。
+- 大路网下自动回退低内存流式寻路。
 
-## 2. 功能测试结果
+## 2. 功能测试
 
 执行命令：
 
 ```powershell
-python -m pytest DT_test tests -rs
+python -m pytest DT_test tests -q
 ```
 
 结果：
 
 ```text
-9 passed, 2 skipped, 2 warnings
+11 passed, 2 skipped, 2 warnings
 ```
 
 说明：
 
-- `DT_test/test_batch_route_functional.py` 中 3 个算法 DT 用例已通过。
-- `tests/` 中原有 6 个基础测试已通过。
-- 2 个 FastAPI `TestClient` 接口测试被跳过，原因是当前本地 Python 环境缺少可用的 `httpx` 包；`requirements.txt` 已声明 `httpx>=0.24`，依赖完整安装后会自动执行。
+- 2 个 FastAPI `TestClient` 测试因当前环境缺少可用 `httpx` 被跳过。
+- `requirements.txt` 已声明 `httpx>=0.24`，完整安装依赖后会自动执行接口测试。
 
-## 3. 大规模性能 DT
+## 3. 曼谷真实路网 300 对源宿性能对比
+
+测试文件：
+
+```text
+data/osm_bangkok_roads.csv
+data/bangkok_source_sink_pairs.csv
+```
+
+路网规模：
+
+```text
+nodes=97016
+edges=103865
+source_sink_pairs=300
+```
+
+对比结果：
+
+| Metric | Legacy Python Dijkstra | Optimized Adaptive Batch |
+| --- | ---: | ---: |
+| total seconds | 35.598 | 6.594 |
+| avg ms per pair | 118.660 | 21.981 |
+| success | 300 | 300 |
+| failed | 0 | 0 |
+| distance mismatches | 0 | 0 |
+| speedup | - | 5.398x |
+
+结论：
+
+- 曼谷 300 对源宿从约 35.6 秒优化到约 6.6 秒。
+- 距离结果完全一致。
+- 加速来自 SciPy C 实现的批量 Dijkstra，而不是 Python 线程并发。
+
+## 4. 合成大规模路网 DT
 
 执行命令：
 
@@ -41,7 +73,7 @@ python -m pytest DT_test tests -rs
 python DT_test\performance_dt.py --grid-size 500 --pairs 200 --workers 4
 ```
 
-测试数据是离线合成 WKT 网格路网，不依赖外网。
+结果：
 
 | Metric | Value |
 | --- | ---: |
@@ -52,41 +84,40 @@ python DT_test\performance_dt.py --grid-size 500 --pairs 200 --workers 4
 | pairs | 200 |
 | workers | 4 |
 | threshold km | 30.0 |
-| generation seconds | 1.137 |
-| load seconds | 5.883 |
-| batch seconds | 3.854 |
-| avg ms per pair | 19.269 |
+| generation seconds | 1.109 |
+| load seconds | 5.849 |
+| batch seconds | 5.280 |
+| avg ms per pair | 26.398 |
 | success | 200 |
 | failed | 0 |
 | skipped by threshold | 0 |
 | result csv MB | 0.32 |
 
-## 4. 中等规模回归性能 DT
+说明：
 
-执行命令：
+- 25 万节点合成大图不启用 SciPy 批量矩阵方案。
+- 系统自动回退到低内存流式寻路，避免一次生成过大的距离矩阵和前驱矩阵。
 
-```powershell
-python DT_test\performance_dt.py --grid-size 180 --pairs 1000 --workers 4
+## 5. 自适应策略
+
+当前批量计算策略：
+
+```text
+if total_rows <= 20000 and node_count <= 150000:
+    use SciPy batch Dijkstra
+else:
+    use streaming Python bidirectional Dijkstra
 ```
 
-| Metric | Value |
-| --- | ---: |
-| WKT rows | 64440 |
-| nodes | 32400 |
-| undirected edges | 64440 |
-| pairs | 1000 |
-| workers | 4 |
-| threshold km | 30.0 |
-| load seconds | 0.847 |
-| batch seconds | 15.141 |
-| avg ms per pair | 15.141 |
-| success | 1000 |
-| failed | 0 |
-| skipped by threshold | 0 |
+原因：
 
-## 5. 结论
+- 中等路网下，SciPy 批量 Dijkstra 可以显著减少 Python heapq 循环开销。
+- 超大路网下，SciPy 会生成 `source_count x node_count` 的距离矩阵和前驱矩阵，内存和耗时可能反而增加。
+- 因此需要按任务规模和路网规模自适应选择引擎。
 
-- 批量计算模块可以在不复制路网图的前提下，使用 4 个线程 worker 共享同一份 CSR 图和空间索引。
-- 49.9 万 WKT 边的合成大路网加载耗时约 5.9 秒，批量 200 对源宿平均约 19.3 ms/对。
-- 输出文件采用流式写入，适合几百 MB 结果文件。
-- 当前线程并发主要优化吞吐和工程稳定性；如果未来要对几十万对长距离源宿进行极限加速，应进一步实现 mmap/shared-memory CSR 和多进程 worker。
+## 6. 后续优化方向
+
+- 增加可配置批量引擎参数：`auto / scipy / streaming`。
+- 对超大路网引入 A* 或 ALT landmark，减少搜索节点扩展。
+- 对高频相同源节点任务做分组单源多终点优化。
+- 将 CSR 数组 mmap 化，再做真正多进程共享内存并行。

@@ -591,3 +591,88 @@ passed
 python -m pytest DT_test tests -q
 11 passed, 2 skipped, 2 warnings
 ```
+
+## 2026-07-08 Iteration 10：批量寻路自适应性能优化
+
+### 问题
+
+曼谷 300 对源宿批量计算仍需要十几秒到三十秒，主要瓶颈在每一对源宿都独立执行 Python `heapq` 双向 Dijkstra。线程并发受 GIL 影响，无法充分利用多核。
+
+### 过程
+
+先尝试低风险优化：
+
+- Dijkstra workspace 复用。
+- 批量吸附缓存。
+
+实测发现该方案没有带来收益，原因是当前图规模下 NumPy 全量初始化不是主瓶颈，Python 层 touched-node 重置和线程开销反而抵消收益。
+
+随后改为引入 SciPy C 实现批量 Dijkstra：
+
+- 将 CSR 图转换为 `scipy.sparse.csr_matrix`。
+- 对同一批源节点使用 `scipy.sparse.csgraph.dijkstra` 批量计算。
+- 使用返回的 predecessor 矩阵还原每条路径。
+- 保持输出 `Distance` 和 `Route` 与原算法一致。
+
+### 自适应策略
+
+不是所有路网都适合 SciPy 批量矩阵方案。对于超大路网，`source_count x node_count` 距离矩阵和前驱矩阵可能过大。因此当前策略为：
+
+```text
+if total_rows <= 20000 and node_count <= 150000:
+    use SciPy batch Dijkstra
+else:
+    use streaming Python bidirectional Dijkstra
+```
+
+### 曼谷 300 对验证
+
+```text
+network=data/osm_bangkok_roads.csv
+pairs=data/bangkok_source_sink_pairs.csv
+nodes=97016
+edges=103865
+pairs=300
+```
+
+结果：
+
+```text
+legacy_s=35.598
+optimized_s=6.594
+speedup=5.398x
+avg_ms_per_pair=21.981
+success=300
+failed=0
+distance_mismatches=0
+```
+
+### 大图 DT 验证
+
+```text
+python DT_test\performance_dt.py --grid-size 500 --pairs 200 --workers 4
+```
+
+结果：
+
+```text
+WKT rows=499000
+nodes=250000
+edges=499000
+batch_seconds=5.280
+avg_ms_per_pair=26.398
+success=200
+failed=0
+```
+
+该图超过 `SCIPY_BATCH_MAX_NODES=150000`，因此自动回退到低内存流式路径。
+
+### 验证
+
+```text
+python -m pytest tests DT_test -q
+11 passed, 2 skipped, 2 warnings
+
+python -m compileall road_network app DT_test scripts
+passed
+```

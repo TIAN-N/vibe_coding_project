@@ -23,9 +23,48 @@ class RouteResult:
     snap_end_distance_m: float
 
 
+class DijkstraWorkspace:
+    def __init__(self, node_count: int):
+        self.dist_f = np.full(node_count, np.inf, dtype=np.float64)
+        self.dist_b = np.full(node_count, np.inf, dtype=np.float64)
+        self.prev_f = np.full(node_count, -1, dtype=np.int64)
+        self.prev_b = np.full(node_count, -1, dtype=np.int64)
+        self.settled_f = np.zeros(node_count, dtype=np.bool_)
+        self.settled_b = np.zeros(node_count, dtype=np.bool_)
+        self.touched_f = []
+        self.touched_b = []
+
+    def reset(self):
+        for node in self.touched_f:
+            self.dist_f[node] = np.inf
+            self.prev_f[node] = -1
+            self.settled_f[node] = False
+        for node in self.touched_b:
+            self.dist_b[node] = np.inf
+            self.prev_b[node] = -1
+            self.settled_b[node] = False
+        self.touched_f.clear()
+        self.touched_b.clear()
+
+    def set_forward(self, node: int, distance: float, previous: int):
+        if math.isinf(self.dist_f[node]):
+            self.touched_f.append(node)
+        self.dist_f[node] = distance
+        self.prev_f[node] = previous
+
+    def set_backward(self, node: int, distance: float, previous: int):
+        if math.isinf(self.dist_b[node]):
+            self.touched_b.append(node)
+        self.dist_b[node] = distance
+        self.prev_b[node] = previous
+
+
 class RoadDistanceCalculator:
     def __init__(self, network: RoadNetwork):
         self.network = network
+
+    def create_workspace(self) -> DijkstraWorkspace:
+        return DijkstraWorkspace(self.network.node_count)
 
     def shortest_path(
         self,
@@ -62,8 +101,30 @@ class RoadDistanceCalculator:
                 snap_end_distance_m=float(end_snap_distance),
             )
 
+        return self.shortest_path_between_nodes(
+            start_node,
+            end_node,
+            float(start_snap_distance),
+            float(end_snap_distance),
+            snap_ms=snap_ms,
+            total_started=total_started,
+            workspace=None,
+        )
+
+    def shortest_path_between_nodes(
+        self,
+        start_node: int,
+        end_node: int,
+        start_snap_distance: float = 0.0,
+        end_snap_distance: float = 0.0,
+        snap_ms: float = 0.0,
+        total_started=None,
+        workspace: Optional[DijkstraWorkspace] = None,
+    ) -> RouteResult:
+        if total_started is None:
+            total_started = time.perf_counter()
         search_started = time.perf_counter()
-        distance, node_path = self._bidirectional_dijkstra(start_node, end_node)
+        distance, node_path = self._bidirectional_dijkstra(start_node, end_node, workspace=workspace)
         search_ms = (time.perf_counter() - search_started) * 1000.0
 
         if math.isinf(distance):
@@ -93,20 +154,29 @@ class RoadDistanceCalculator:
             snap_end_distance_m=float(end_snap_distance),
         )
 
-    def _bidirectional_dijkstra(self, start: int, target: int) -> Tuple[float, List[int]]:
+    def _bidirectional_dijkstra(
+        self,
+        start: int,
+        target: int,
+        workspace: Optional[DijkstraWorkspace] = None,
+    ) -> Tuple[float, List[int]]:
         if start == target:
             return 0.0, [start]
 
-        n = self.network.node_count
-        dist_f = np.full(n, np.inf, dtype=np.float64)
-        dist_b = np.full(n, np.inf, dtype=np.float64)
-        prev_f = np.full(n, -1, dtype=np.int64)
-        prev_b = np.full(n, -1, dtype=np.int64)
-        settled_f = np.zeros(n, dtype=np.bool_)
-        settled_b = np.zeros(n, dtype=np.bool_)
+        if workspace is None:
+            workspace = self.create_workspace()
+        else:
+            workspace.reset()
 
-        dist_f[start] = 0.0
-        dist_b[target] = 0.0
+        dist_f = workspace.dist_f
+        dist_b = workspace.dist_b
+        prev_f = workspace.prev_f
+        prev_b = workspace.prev_b
+        settled_f = workspace.settled_f
+        settled_b = workspace.settled_b
+
+        workspace.set_forward(start, 0.0, -1)
+        workspace.set_backward(target, 0.0, -1)
         heap_f = [(0.0, start)]
         heap_b = [(0.0, target)]
         best = math.inf
@@ -126,7 +196,7 @@ class RoadDistanceCalculator:
                 if settled_b[node] and dist + dist_b[node] < best:
                     best = dist + dist_b[node]
                     meeting = node
-                self._relax(node, dist, dist_f, prev_f, heap_f, dist_b, best, meeting)
+                self._relax(node, dist, workspace, forward=True, heap_this=heap_f)
                 best, meeting = self._scan_cross(node, dist_f, dist_b, best, meeting)
             else:
                 dist, node = heapq.heappop(heap_b)
@@ -136,23 +206,26 @@ class RoadDistanceCalculator:
                 if settled_f[node] and dist + dist_f[node] < best:
                     best = dist + dist_f[node]
                     meeting = node
-                self._relax(node, dist, dist_b, prev_b, heap_b, dist_f, best, meeting)
+                self._relax(node, dist, workspace, forward=False, heap_this=heap_b)
                 best, meeting = self._scan_cross(node, dist_f, dist_b, best, meeting)
 
         if meeting < 0:
             return math.inf, []
         return best, self._reconstruct_path(start, target, meeting, prev_f, prev_b)
 
-    def _relax(self, node, dist, dist_this, prev_this, heap_this, dist_other, best, meeting):
+    def _relax(self, node, dist, workspace, forward: bool, heap_this):
         offsets = self.network.offsets
         neighbors = self.network.neighbors
         weights = self.network.weights
+        dist_this = workspace.dist_f if forward else workspace.dist_b
         for pos in range(int(offsets[node]), int(offsets[node + 1])):
             nb = int(neighbors[pos])
             nd = dist + float(weights[pos])
             if nd < dist_this[nb]:
-                dist_this[nb] = nd
-                prev_this[nb] = node
+                if forward:
+                    workspace.set_forward(nb, nd, node)
+                else:
+                    workspace.set_backward(nb, nd, node)
                 heapq.heappush(heap_this, (nd, nb))
 
     def _scan_cross(self, node, dist_f, dist_b, best, meeting):
