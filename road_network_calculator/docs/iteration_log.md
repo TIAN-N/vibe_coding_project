@@ -539,3 +539,55 @@ passed
 python -m pytest DT_test tests -q
 10 passed, 2 skipped, 2 warnings
 ```
+
+## 2026-07-08 Iteration 9：批量结果预览搜索可靠性与网元名称联想
+
+### 问题
+
+- 用户用 `BKK_SRC_00002` 和 `BKK_SINK_00002` 点击 `Search Preview Routes` 后，前端没有显示 GIS 路径，也没有写入 History。
+- 下载的结果 CSV 中该源宿对已经成功计算，说明问题出在预览检索链路，而不是寻路算法。
+- 旧实现的预览接口只查询后端内存中的 `preview_rows`，没有以最终结果 CSV 为准；一旦内存预览样本缺失或前端任务状态不完整，预览查询就可能查不到下载文件中已有的成功路由。
+
+### 实现
+
+- `GET /api/batch-routes/preview/{job_id}` 改为优先扫描已生成的结果 CSV。
+- 预览查询现在与下载 CSV 保持一致：下载文件中存在的成功路由，搜索预览也能返回并在 GIS 地图显示。
+- 预览响应新增：
+  - `matched_tasks`
+  - `message`
+- 当源宿对不存在于任务清单中时，前端显示：
+
+```text
+输入的源宿对不在给定的任务清单中。
+```
+
+- 当源宿对存在但没有成功路线时，前端显示：
+
+```text
+该源宿对在任务清单中，但没有成功算出的路由。
+```
+
+- 新增名称联想接口：
+
+```text
+GET /api/batch-routes/names/{job_id}?src=...&sink=...
+```
+
+- 前端 `Search Src Name` 和 `Search Sink Name` 增加 `datalist`。
+- 用户输入 `BKK` 时，会自动浮现源网元/宿网元候选名称。
+- 名称候选从最终结果 CSV 中解析，避免只依赖前端缓存。
+
+### 验证
+
+新增 DT 用例验证 `BKK_SRC_00002 / BKK_SINK_00002` 这类记录可以从结果 CSV 被预览扫描命中，并且名称联想能返回对应候选。
+
+```text
+node --check web\app.js
+passed
+
+python -m compileall app road_network DT_test scripts
+passed
+
+python -m pytest DT_test tests -q
+11 passed, 2 skipped, 2 warnings
+```

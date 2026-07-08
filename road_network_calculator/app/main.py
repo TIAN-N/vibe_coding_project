@@ -1,4 +1,5 @@
 import os
+import csv
 import tempfile
 import threading
 import time
@@ -16,7 +17,7 @@ from road_network.batch_router import BatchRouteCalculator
 
 import numpy as np
 
-from .schemas import BatchRouteItem, BatchRouteJobStatus, BatchRoutePreviewResponse, BatchRouteRequest, BatchRouteResponse, BatchRouteStartResponse, NetworkPreview, NetworkStatus, NetworkViewport, RouteRequest, RouteResponse, UploadJobStatus, UploadStartResponse
+from .schemas import BatchRouteItem, BatchRouteJobStatus, BatchRouteNameOptionsResponse, BatchRoutePreviewResponse, BatchRouteRequest, BatchRouteResponse, BatchRouteStartResponse, NetworkPreview, NetworkStatus, NetworkViewport, RouteRequest, RouteResponse, UploadJobStatus, UploadStartResponse
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 WEB_DIR = BASE_DIR / "web"
@@ -369,20 +370,37 @@ def batch_route_download(job_id: str):
 
 
 @app.get("/api/batch-routes/preview/{job_id}", response_model=BatchRoutePreviewResponse)
-def batch_route_preview(job_id: str, src: str = "", sink: str = "", limit: int = Query(50, ge=1, le=200)):
+def batch_route_preview(job_id: str, src: str = "", sink: str = "", limit: int = Query(50, ge=1, le=500)):
     with _batch_jobs_lock:
         job = _batch_jobs.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Batch route job was not found")
-        rows = list(job.get("preview_rows") or [])
+        job_copy = dict(job)
 
-    src_l = src.strip().lower()
-    sink_l = sink.strip().lower()
-    if src_l:
-        rows = [row for row in rows if src_l in str(row.get("Src NE Name", "")).lower()]
-    if sink_l:
-        rows = [row for row in rows if sink_l in str(row.get("Sink NE Name", "")).lower()]
-    return BatchRoutePreviewResponse(rows=rows[:limit])
+    rows, matched_tasks = _find_batch_preview_rows(job_copy, src, sink, limit)
+    if matched_tasks == 0:
+        message = "source-sink pair is not in task list"
+    elif not rows:
+        message = "matched source-sink pair has no successful route"
+    else:
+        message = ""
+    return BatchRoutePreviewResponse(rows=rows, matched_tasks=matched_tasks, message=message)
+
+
+@app.get("/api/batch-routes/names/{job_id}", response_model=BatchRouteNameOptionsResponse)
+def batch_route_names(
+    job_id: str,
+    src: str = "",
+    sink: str = "",
+    limit: int = Query(100, ge=1, le=500),
+):
+    with _batch_jobs_lock:
+        job = _batch_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Batch route job was not found")
+        job_copy = dict(job)
+    src_names, sink_names = _find_batch_name_options(job_copy, src, sink, limit)
+    return BatchRouteNameOptionsResponse(src_names=src_names, sink_names=sink_names)
 
 
 def _run_batch_route_job(job_id, input_path, output_path, threshold_km, workers, network_ref, calculator_ref):
@@ -450,6 +468,100 @@ def _public_batch_job(job):
 
 def _timestamped_batch_filename():
     return f"batch_route_result_{datetime.now().strftime('%Y%m%d%H%M')}.csv"
+
+
+def _find_batch_preview_rows(job, src, sink, limit):
+    output_path = job.get("output_path")
+    if job.get("state") == "done" and output_path and os.path.exists(output_path):
+        return _scan_batch_result_preview(output_path, src, sink, limit)
+
+    rows = list(job.get("preview_rows") or [])
+    src_l = src.strip().lower()
+    sink_l = sink.strip().lower()
+    matched = []
+    for row in rows:
+        if _batch_row_matches(row, src_l, sink_l):
+            matched.append(row)
+    return matched[:limit], len(matched)
+
+
+def _scan_batch_result_preview(output_path, src, sink, limit):
+    src_l = src.strip().lower()
+    sink_l = sink.strip().lower()
+    rows = []
+    matched_tasks = 0
+    with open(output_path, "r", encoding="utf-8-sig", newline="") as fp:
+        reader = csv.DictReader(fp)
+        for row in reader:
+            if not _batch_row_matches(row, src_l, sink_l):
+                continue
+            matched_tasks += 1
+            if row.get("Error Detail") or not row.get("Route"):
+                continue
+            if len(rows) < limit:
+                rows.append(row)
+    return rows, matched_tasks
+
+
+def _find_batch_name_options(job, src, sink, limit):
+    output_path = job.get("output_path")
+    if job.get("state") == "done" and output_path and os.path.exists(output_path):
+        return _scan_batch_result_names(output_path, src, sink, limit)
+
+    rows = list(job.get("preview_rows") or [])
+    return _collect_name_options(rows, src, sink, limit)
+
+
+def _scan_batch_result_names(output_path, src, sink, limit):
+    src_l = src.strip().lower()
+    sink_l = sink.strip().lower()
+    src_names = []
+    sink_names = []
+    seen_src = set()
+    seen_sink = set()
+    with open(output_path, "r", encoding="utf-8-sig", newline="") as fp:
+        reader = csv.DictReader(fp)
+        for row in reader:
+            src_name = str(row.get("Src NE Name", ""))
+            sink_name = str(row.get("Sink NE Name", ""))
+            if len(src_names) < limit and _name_matches(src_name, src_l) and src_name not in seen_src:
+                src_names.append(src_name)
+                seen_src.add(src_name)
+            if len(sink_names) < limit and _name_matches(sink_name, sink_l) and sink_name not in seen_sink:
+                sink_names.append(sink_name)
+                seen_sink.add(sink_name)
+            if len(src_names) >= limit and len(sink_names) >= limit:
+                break
+    return src_names, sink_names
+
+
+def _collect_name_options(rows, src, sink, limit):
+    src_l = src.strip().lower()
+    sink_l = sink.strip().lower()
+    src_names = []
+    sink_names = []
+    seen_src = set()
+    seen_sink = set()
+    for row in rows:
+        src_name = str(row.get("Src NE Name", ""))
+        sink_name = str(row.get("Sink NE Name", ""))
+        if len(src_names) < limit and _name_matches(src_name, src_l) and src_name not in seen_src:
+            src_names.append(src_name)
+            seen_src.add(src_name)
+        if len(sink_names) < limit and _name_matches(sink_name, sink_l) and sink_name not in seen_sink:
+            sink_names.append(sink_name)
+            seen_sink.add(sink_name)
+    return src_names, sink_names
+
+
+def _batch_row_matches(row, src_l, sink_l):
+    src_name = str(row.get("Src NE Name", "")).lower()
+    sink_name = str(row.get("Sink NE Name", "")).lower()
+    return (not src_l or src_l in src_name) and (not sink_l or sink_l in sink_name)
+
+
+def _name_matches(name, query_l):
+    return not query_l or query_l in name.lower()
 
 
 @app.post("/api/route", response_model=RouteResponse)

@@ -16,7 +16,7 @@ else:
     TEST_CLIENT_ERROR = ""
 
 from app.main import app
-from app.main import _timestamped_batch_filename
+from app.main import _find_batch_name_options, _find_batch_preview_rows, _timestamped_batch_filename
 
 
 def write_network_csv(path):
@@ -116,6 +116,51 @@ def test_linestring_export_format():
 
 def test_batch_download_filename_uses_minute_timestamp():
     assert re.fullmatch(r"batch_route_result_\d{12}\.csv", _timestamped_batch_filename())
+
+
+def test_preview_search_reads_final_result_csv(tmp_path):
+    output_path = tmp_path / "batch_result.csv"
+    with output_path.open("w", encoding="utf-8-sig", newline="") as fp:
+        writer = csv.DictWriter(fp, fieldnames=OUTPUT_COLUMNS)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "Src NE Name": "BKK_SRC_00001",
+                "Sink NE Name": "BKK_SINK_00001",
+                "Src Lon": "100.0",
+                "Src Lat": "13.0",
+                "Sink Lon": "100.1",
+                "Sink Lat": "13.1",
+                "Straight Distance": "1000.0",
+                "Distance": "1200.0",
+                "Route": "LINESTRING(100.0000000 13.0000000,100.1000000 13.1000000)",
+                "Error Detail": "",
+            }
+        )
+        writer.writerow(
+            {
+                "Src NE Name": "BKK_SRC_00002",
+                "Sink NE Name": "BKK_SINK_00002",
+                "Src Lon": "100.2",
+                "Src Lat": "13.2",
+                "Sink Lon": "100.3",
+                "Sink Lat": "13.3",
+                "Straight Distance": "1000.0",
+                "Distance": "1300.0",
+                "Route": "LINESTRING(100.2000000 13.2000000,100.3000000 13.3000000)",
+                "Error Detail": "",
+            }
+        )
+
+    job = {"state": "done", "output_path": str(output_path)}
+    rows, matched = _find_batch_preview_rows(job, "BKK_SRC_00002", "BKK_SINK_00002", 50)
+    src_names, sink_names = _find_batch_name_options(job, "BKK", "BKK", 100)
+
+    assert matched == 1
+    assert rows[0]["Src NE Name"] == "BKK_SRC_00002"
+    assert rows[0]["Route"].startswith("LINESTRING(")
+    assert "BKK_SRC_00002" in src_names
+    assert "BKK_SINK_00002" in sink_names
 
 
 def test_batch_route_api_end_to_end(tmp_path):

@@ -47,6 +47,8 @@ const i18n = {
     batchRouteDone: "Batch route calculation completed",
     noPreviewRoutes: "No preview routes matched",
     previewRouteShown: "Preview route shown: {src} -> {sink}",
+    taskPairNotFound: "The source-sink pair is not in the uploaded task list.",
+    taskPairNoRoute: "The source-sink pair exists, but no successful route is available.",
     result: "Result",
     distance: "Distance",
     snapTime: "Snap Time",
@@ -118,6 +120,8 @@ const i18n = {
     batchRouteDone: "批量路由计算完成",
     noPreviewRoutes: "没有匹配的预览路由",
     previewRouteShown: "已显示预览路由：{src} -> {sink}",
+    taskPairNotFound: "输入的源宿对不在给定的任务清单中。",
+    taskPairNoRoute: "该源宿对在任务清单中，但没有成功算出的路由。",
     result: "计算结果",
     distance: "距离",
     snapTime: "吸附耗时",
@@ -156,6 +160,8 @@ let networkLoaded = false;
 let networkBounds = null;
 let viewportLoadTimer = null;
 let routeOverlays = {};
+let currentBatchRouteJobId = "";
+let batchNameLoadTimer = null;
 
 const map = L.map("map", {
   center: THAILAND_CENTER,
@@ -225,6 +231,8 @@ const el = {
   batchPreviewSink: document.getElementById("batchPreviewSink"),
   batchPreviewBtn: document.getElementById("batchPreviewBtn"),
   batchPreviewResults: document.getElementById("batchPreviewResults"),
+  batchPreviewSrcOptions: document.getElementById("batchPreviewSrcOptions"),
+  batchPreviewSinkOptions: document.getElementById("batchPreviewSinkOptions"),
   historyList: document.getElementById("historyList"),
   uploadProgress: document.getElementById("uploadProgress"),
   uploadProgressText: document.getElementById("uploadProgressText"),
@@ -285,6 +293,8 @@ function clearRouteCache() {
   if (el.historyList) renderHistory();
   if (el.batchResults) el.batchResults.innerHTML = "";
   if (el.batchPreviewResults) el.batchPreviewResults.innerHTML = "";
+  currentBatchRouteJobId = "";
+  clearBatchNameOptions();
 }
 
 function getLineOptions() {
@@ -708,12 +718,14 @@ async function pollBatchRouteJob(jobId) {
     if (!response.ok) throw new Error(data.detail || "Failed to read batch route status");
     updateBatchRouteProgress(data);
     if (data.state === "done") {
+      currentBatchRouteJobId = jobId;
       el.batchRouteDownloadBtn.classList.remove("hidden");
       el.batchPreviewBtn.classList.remove("hidden");
       el.batchRouteDownloadBtn.onclick = () => {
         window.location.href = `/api/batch-routes/download/${encodeURIComponent(jobId)}`;
       };
       el.batchPreviewBtn.onclick = () => searchBatchRoutePreview(jobId);
+      loadBatchRouteNameOptions(jobId).catch((error) => setStatus(error.message, true));
       setStatus(data.message || t("batchRouteDone"));
       return;
     }
@@ -757,6 +769,10 @@ async function searchBatchRoutePreview(jobId) {
   renderBatchRoutePreview(rows);
   if (rows.length) {
     showBatchPreviewRoute(rows[0]);
+  } else if (data.matched_tasks === 0) {
+    showBatchPreviewMessage(t("taskPairNotFound"), true);
+  } else {
+    showBatchPreviewMessage(t("taskPairNoRoute"), true);
   }
 }
 
@@ -797,6 +813,51 @@ function showBatchPreviewRoute(row) {
   addOrUpdateRouteOverlay(routeId, route, result, { visible: true, fit: true });
   updateResultPanel(result);
   setStatus(t("previewRouteShown", { src: row["Src NE Name"], sink: row["Sink NE Name"] }));
+}
+
+function showBatchPreviewMessage(message, isError = false) {
+  el.batchPreviewResults.innerHTML = "";
+  const item = document.createElement("div");
+  item.className = isError ? "muted error" : "muted";
+  item.textContent = message;
+  el.batchPreviewResults.appendChild(item);
+  setStatus(message, isError);
+}
+
+async function loadBatchRouteNameOptions(jobId) {
+  if (!jobId) return;
+  const params = new URLSearchParams({
+    src: el.batchPreviewSrc.value || "",
+    sink: el.batchPreviewSink.value || "",
+    limit: 100,
+  });
+  const response = await fetch(`/api/batch-routes/names/${encodeURIComponent(jobId)}?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.detail || "Failed to load source-sink names");
+  renderDatalist(el.batchPreviewSrcOptions, data.src_names || []);
+  renderDatalist(el.batchPreviewSinkOptions, data.sink_names || []);
+}
+
+function scheduleBatchNameOptionsLoad() {
+  if (!currentBatchRouteJobId) return;
+  clearTimeout(batchNameLoadTimer);
+  batchNameLoadTimer = setTimeout(() => {
+    loadBatchRouteNameOptions(currentBatchRouteJobId).catch((error) => setStatus(error.message, true));
+  }, 250);
+}
+
+function renderDatalist(node, values) {
+  node.innerHTML = "";
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    node.appendChild(option);
+  });
+}
+
+function clearBatchNameOptions() {
+  if (el.batchPreviewSrcOptions) el.batchPreviewSrcOptions.innerHTML = "";
+  if (el.batchPreviewSinkOptions) el.batchPreviewSinkOptions.innerHTML = "";
 }
 
 function resultFromBatchPreviewRow(row) {
@@ -1017,6 +1078,8 @@ el.uploadBtn.addEventListener("click", uploadNetwork);
 el.routeBtn.addEventListener("click", calculateRoute);
 el.batchBtn.addEventListener("click", runBatch);
 el.batchRouteStartBtn.addEventListener("click", startBatchRouteFileJob);
+el.batchPreviewSrc.addEventListener("input", scheduleBatchNameOptionsLoad);
+el.batchPreviewSink.addEventListener("input", scheduleBatchNameOptionsLoad);
 el.refreshNetworkBtn.addEventListener("click", () => loadNetworkPreview().catch((error) => setStatus(localizeError(error.message), true)));
 el.showNetworkLayer.addEventListener("change", () => {
   if (el.showNetworkLayer.checked) {

@@ -111,9 +111,11 @@
           </div>
           <button id="batchRouteDownloadBtn" type="button" class="hidden" data-i18n="downloadResult">Download Result CSV</button>
           <div class="grid">
-            <label><span data-i18n="searchSrcName">Search Src Name</span><input id="batchPreviewSrc" type="text" /></label>
-            <label><span data-i18n="searchSinkName">Search Sink Name</span><input id="batchPreviewSink" type="text" /></label>
+            <label><span data-i18n="searchSrcName">Search Src Name</span><input id="batchPreviewSrc" type="text" list="batchPreviewSrcOptions" /></label>
+            <label><span data-i18n="searchSinkName">Search Sink Name</span><input id="batchPreviewSink" type="text" list="batchPreviewSinkOptions" /></label>
           </div>
+          <datalist id="batchPreviewSrcOptions"></datalist>
+          <datalist id="batchPreviewSinkOptions"></datalist>
           <button id="batchPreviewBtn" type="button" class="hidden" data-i18n="searchPreview">Search Preview Routes</button>
           <div id="batchPreviewResults" class="list"></div>
         </section>

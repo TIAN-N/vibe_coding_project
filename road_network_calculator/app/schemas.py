@@ -96,3 +96,10 @@ class BatchRouteJobStatus(BaseModel):
 
 class BatchRoutePreviewResponse(BaseModel):
     rows: List[Dict[str, str]]
+    matched_tasks: int = 0
+    message: str = ""
+
+
+class BatchRouteNameOptionsResponse(BaseModel):
+    src_names: List[str]
+    sink_names: List[str]
