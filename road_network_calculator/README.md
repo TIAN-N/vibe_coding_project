@@ -345,3 +345,49 @@ python DT_test\performance_dt.py --grid-size 500 --pairs 200 --workers 4
 ```text
 docs/batch_route_performance_dt_report.md
 ```
+
+## 17. 曼谷真实路网批量验证数据
+
+为了避免源宿点不在曼谷路网覆盖范围内，项目新增一份从曼谷路网真实节点随机抽样生成的批量源宿对文件：
+
+```text
+data/bangkok_source_sink_pairs.csv
+```
+
+推荐端到端测试方式：
+
+1. 在 `Road Data` 上传并加载：
+
+```text
+data/osm_bangkok_roads.csv
+```
+
+2. 路网加载完成后，在 `Batch Route File` 上传：
+
+```text
+data/bangkok_source_sink_pairs.csv
+```
+
+3. 参数保持默认：
+
+```text
+Threshold km = 30
+Workers = 4
+```
+
+这份文件包含 300 对源宿点，全部来自 `data/osm_bangkok_roads.csv` 的最大连通分量路网节点，直线距离控制在 0.5km 到 25km。后端算法校验结果为：
+
+```text
+total=300
+success=300
+failed=0
+skipped_by_threshold=0
+```
+
+如果需要重新生成，可执行：
+
+```powershell
+python scripts\generate_source_sink_pairs.py --network-csv data\osm_bangkok_roads.csv --output data\bangkok_source_sink_pairs.csv --count 300 --min-distance-km 0.5 --max-distance-km 25 --seed 20260708
+```
+
+页面缓存说明：当后端显示当前没有加载路网，或新路网加载完成时，前端会自动清空历史路线和地图上的旧路线，避免服务重启后残留旧路由。

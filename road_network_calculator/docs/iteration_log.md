@@ -443,3 +443,61 @@ failed=0
 ```text
 docs/batch_route_performance_dt_report.md
 ```
+
+## 2026-07-08 Iteration 7：曼谷路网节点源宿对与前端历史缓存清理
+
+### 问题
+
+- 之前用于 HTML 端到端测试的合成源宿对不在曼谷真实路网附近，上传曼谷路网后无法有效验证批量路由计算。
+- 服务重启后，前端 `localStorage` 中仍保留旧历史路由；即使后端当前未加载路网，地图仍可能显示之前的历史路径。
+
+### 实现
+
+- 新增脚本：
+
+```text
+scripts/generate_source_sink_pairs.py
+```
+
+- 脚本读取指定 WKT 路网 CSV，构建路网图后计算最大连通分量，并从真实路网节点中随机抽样源宿点。
+- 生成的源宿点直接落在路网节点上，吸附距离为 0，并且来自同一连通分量。
+- 默认控制直线距离在 0.5km 到 25km，避免被 30km 默认阈值过滤。
+- 新增曼谷批量源宿测试文件：
+
+```text
+data/bangkok_source_sink_pairs.csv
+```
+
+- 前端新增 `clearRouteCache()`：
+  - 清空地图上的历史 route overlay。
+  - 清空 `localStorage` 中的历史路由。
+  - 清空批量查询结果和批量文件预览结果。
+- `GET /api/network/status` 返回未加载路网时，自动清理旧缓存。
+- 新路网加载完成时，也自动清理旧路由，避免不同路网的历史结果混用。
+
+### 验证
+
+生成命令：
+
+```text
+python scripts\generate_source_sink_pairs.py --network-csv data\osm_bangkok_roads.csv --output data\bangkok_source_sink_pairs.csv --count 300 --min-distance-km 0.5 --max-distance-km 25 --seed 20260708
+```
+
+生成结果：
+
+```text
+network nodes=97016
+edges=103865
+largest component nodes=94891
+wrote pairs=300
+```
+
+批量算法校验：
+
+```text
+total=300
+success=300
+failed=0
+skipped_by_threshold=0
+elapsed_s=30.81
+```

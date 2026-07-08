@@ -263,9 +263,26 @@ async function refreshStatus() {
     networkBounds = metadataToBounds(data.metadata);
     setStatus(t("loaded", { nodes: data.nodes.toLocaleString(), edges: data.edges.toLocaleString() }));
   } else {
+    clearRouteCache();
+    networkBounds = null;
+    networkPreview = null;
+    networkLayer.clearLayers();
     setStatus(t("notLoaded"));
   }
   updateNetworkSections();
+}
+
+function clearRouteCache() {
+  routeOverlayLayer.clearLayers();
+  routeOverlays = {};
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch {
+    // Ignore storage cleanup failures.
+  }
+  if (el.historyList) renderHistory();
+  if (el.batchResults) el.batchResults.innerHTML = "";
+  if (el.batchPreviewResults) el.batchPreviewResults.innerHTML = "";
 }
 
 function getLineOptions() {
@@ -385,6 +402,7 @@ async function pollUploadJob(jobId) {
     updateUploadProgress(data);
 
     if (data.state === "done") {
+      clearRouteCache();
       networkLoaded = true;
       const network = data.network;
       networkBounds = metadataToBounds(network.metadata);
