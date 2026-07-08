@@ -16,9 +16,10 @@ from .geometry import haversine_m
 from .graph import RoadNetwork
 
 INPUT_COLUMNS = ["Src NE Name", "Sink NE Name", "Src Lon", "Src Lat", "Sink Lon", "Sink Lat"]
-OUTPUT_COLUMNS = INPUT_COLUMNS + ["Straight Distance", "Distance", "Route", "Error Detail"]
+ROUTE_WKT_COLUMN = "Route WKT"
+OUTPUT_COLUMNS = INPUT_COLUMNS + ["Straight Distance", "Distance", ROUTE_WKT_COLUMN, "Error Detail"]
 SCIPY_BATCH_MAX_ROWS = 20000
-SCIPY_BATCH_MAX_NODES = 150000
+SCIPY_BATCH_MAX_NODES = 500000
 
 
 @dataclass
@@ -236,7 +237,7 @@ class BatchRouteCalculator:
                         )
                         path = [(float(self.network.node_lons[n]), float(self.network.node_lats[n])) for n in node_path]
                         output["Distance"] = f"{round(distance, 1):.1f}"
-                        output["Route"] = path_to_linestring(path)
+                        output[ROUTE_WKT_COLUMN] = path_to_linestring(path)
                         success += 1
                         if len(preview_rows) < preview_limit:
                             preview = dict(output)
@@ -269,7 +270,7 @@ class BatchRouteCalculator:
         output = {column: row.get(column, "") for column in INPUT_COLUMNS}
         output["Straight Distance"] = ""
         output["Distance"] = ""
-        output["Route"] = ""
+        output[ROUTE_WKT_COLUMN] = ""
         output["Error Detail"] = ""
 
         try:
@@ -358,7 +359,7 @@ class BatchRouteCalculator:
         output = {column: row.get(column, "") for column in INPUT_COLUMNS}
         output["Straight Distance"] = ""
         output["Distance"] = ""
-        output["Route"] = ""
+        output[ROUTE_WKT_COLUMN] = ""
         output["Error Detail"] = ""
         skipped_by_threshold = False
 
@@ -394,7 +395,7 @@ class BatchRouteCalculator:
             output["Error Detail"] = "unreachable"
         else:
             output["Distance"] = f"{result.distance_m:.1f}"
-            output["Route"] = path_to_linestring(result.path)
+            output[ROUTE_WKT_COLUMN] = path_to_linestring(result.path)
 
         preview = None
         if not output["Error Detail"]:

@@ -861,7 +861,7 @@ function clearBatchNameOptions() {
 }
 
 function resultFromBatchPreviewRow(row) {
-  const path = parseLinestringPath(row.Route || "");
+  const path = parseLinestringPath(row["Route WKT"] || row.Route || "");
   return {
     distance_m: Number(row.Distance) || 0,
     path,

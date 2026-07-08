@@ -496,7 +496,7 @@ def _scan_batch_result_preview(output_path, src, sink, limit):
             if not _batch_row_matches(row, src_l, sink_l):
                 continue
             matched_tasks += 1
-            if row.get("Error Detail") or not row.get("Route"):
+            if row.get("Error Detail") or not row.get("Route WKT"):
                 continue
             if len(rows) < limit:
                 rows.append(row)

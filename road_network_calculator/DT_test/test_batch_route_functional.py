@@ -5,7 +5,7 @@ import time
 import pytest
 
 from road_network import RoadDistanceCalculator, RoadNetworkLoader
-from road_network.batch_router import BatchRouteCalculator, OUTPUT_COLUMNS, path_to_linestring
+from road_network.batch_router import BatchRouteCalculator, OUTPUT_COLUMNS, ROUTE_WKT_COLUMN, path_to_linestring
 
 try:
     from fastapi.testclient import TestClient
@@ -78,7 +78,7 @@ def test_batch_route_csv_success_threshold_and_order(tmp_path):
     assert rows[1]["Src NE Name"] == "C"
     assert rows[2]["Error Detail"] == "straight distance is longer than threshold"
     assert rows[3]["Error Detail"] == "invalid coordinate"
-    assert rows[0]["Route"].startswith("LINESTRING(")
+    assert rows[0][ROUTE_WKT_COLUMN].startswith("LINESTRING(")
     assert float(rows[0]["Distance"]) > 0
     assert list(rows[0].keys()) == OUTPUT_COLUMNS
     assert summary.total == 4
@@ -133,7 +133,7 @@ def test_preview_search_reads_final_result_csv(tmp_path):
                 "Sink Lat": "13.1",
                 "Straight Distance": "1000.0",
                 "Distance": "1200.0",
-                "Route": "LINESTRING(100.0000000 13.0000000,100.1000000 13.1000000)",
+                ROUTE_WKT_COLUMN: "LINESTRING(100.0000000 13.0000000,100.1000000 13.1000000)",
                 "Error Detail": "",
             }
         )
@@ -147,7 +147,7 @@ def test_preview_search_reads_final_result_csv(tmp_path):
                 "Sink Lat": "13.3",
                 "Straight Distance": "1000.0",
                 "Distance": "1300.0",
-                "Route": "LINESTRING(100.2000000 13.2000000,100.3000000 13.3000000)",
+                ROUTE_WKT_COLUMN: "LINESTRING(100.2000000 13.2000000,100.3000000 13.3000000)",
                 "Error Detail": "",
             }
         )
@@ -158,7 +158,7 @@ def test_preview_search_reads_final_result_csv(tmp_path):
 
     assert matched == 1
     assert rows[0]["Src NE Name"] == "BKK_SRC_00002"
-    assert rows[0]["Route"].startswith("LINESTRING(")
+    assert rows[0][ROUTE_WKT_COLUMN].startswith("LINESTRING(")
     assert "BKK_SRC_00002" in src_names
     assert "BKK_SINK_00002" in sink_names
 
@@ -209,7 +209,7 @@ def test_batch_route_api_end_to_end(tmp_path):
     assert response.status_code == 200
     rows = response.json()["rows"]
     assert rows[0]["Src NE Name"] == "API_SRC"
-    assert rows[0]["Route"].startswith("LINESTRING(")
+    assert rows[0][ROUTE_WKT_COLUMN].startswith("LINESTRING(")
 
     response = client.get(f"/api/batch-routes/download/{job_id}")
     assert response.status_code == 200

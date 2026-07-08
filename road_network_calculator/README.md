@@ -314,7 +314,7 @@ SiteA,SiteB,100.000000,13.000000,100.002000,13.000000
 ```text
 Straight Distance
 Distance
-Route
+Route WKT
 Error Detail
 ```
 

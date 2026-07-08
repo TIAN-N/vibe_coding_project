@@ -20,7 +20,7 @@ Sink Lat
 ```text
 Straight Distance
 Distance
-Route
+Route WKT
 Error Detail
 ```
 
@@ -28,7 +28,7 @@ Error Detail
 
 - `Straight Distance`：输入两点的球面直线距离，单位米，保留 1 位小数。
 - `Distance`：路网最短距离，单位米，保留 1 位小数。
-- `Route`：成功时输出 `LINESTRING(lon lat,lon lat,...)`。
+- `Route WKT`：成功时输出 `LINESTRING(lon lat,lon lat,...)`。
 - `Error Detail`：成功时为空；失败时写入原因。
 - 不再输出 `Status` 列，避免“成功/失败状态”和错误原因重复表达。
 
@@ -148,7 +148,7 @@ batch_route_result_{job_id}.csv
 GET /api/batch-routes/preview/{job_id}?src=SRC&sink=SINK&limit=50
 ```
 
-第一版为了控制内存，只保存前 1000 条成功路由作为内存预览样本。用户可以按 `Src NE Name` 和 `Sink NE Name` 搜索这些样本，点击后解析 `Route` 的 `LINESTRING` 并显示到 GIS 地图，同时写入历史路由清单。
+第一版为了控制内存，只保存前 1000 条成功路由作为内存预览样本。用户可以按 `Src NE Name` 和 `Sink NE Name` 搜索这些样本，点击后解析 `Route WKT` 的 `LINESTRING` 并显示到 GIS 地图，同时写入历史路由清单。
 
 后续如果需要任意行检索，建议把结果同时写入 SQLite 或 Parquet 索引文件。
 
