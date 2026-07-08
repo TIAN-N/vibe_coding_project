@@ -3,6 +3,7 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
@@ -306,6 +307,7 @@ async def start_batch_routes(
 
     BATCH_RESULT_DIR.mkdir(parents=True, exist_ok=True)
     job_id = uuid.uuid4().hex
+    output_filename = _timestamped_batch_filename()
     input_path = str(BATCH_RESULT_DIR / f"batch_route_input_{job_id}.csv")
     output_path = str(BATCH_RESULT_DIR / f"batch_route_result_{job_id}.csv")
 
@@ -329,6 +331,7 @@ async def start_batch_routes(
         error="",
         download_ready=False,
         output_path=output_path,
+        output_filename=output_filename,
         input_path=input_path,
         preview_rows=[],
     )
@@ -359,9 +362,10 @@ def batch_route_download(job_id: str):
         if job is None:
             raise HTTPException(status_code=404, detail="Batch route job was not found")
         output_path = job.get("output_path")
+        output_filename = job.get("output_filename") or _timestamped_batch_filename()
         if job.get("state") != "done" or not output_path or not os.path.exists(output_path):
             raise HTTPException(status_code=400, detail="Batch route result is not ready")
-    return FileResponse(output_path, media_type="text/csv", filename=f"batch_route_result_{job_id}.csv")
+    return FileResponse(output_path, media_type="text/csv", filename=output_filename)
 
 
 @app.get("/api/batch-routes/preview/{job_id}", response_model=BatchRoutePreviewResponse)
@@ -442,6 +446,10 @@ def _public_batch_job(job):
         "error": job.get("error", ""),
         "download_ready": bool(job.get("download_ready", False)),
     }
+
+
+def _timestamped_batch_filename():
+    return f"batch_route_result_{datetime.now().strftime('%Y%m%d%H%M')}.csv"
 
 
 @app.post("/api/route", response_model=RouteResponse)

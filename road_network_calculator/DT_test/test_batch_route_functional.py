@@ -1,4 +1,5 @@
 import csv
+import re
 import time
 
 import pytest
@@ -15,6 +16,7 @@ else:
     TEST_CLIENT_ERROR = ""
 
 from app.main import app
+from app.main import _timestamped_batch_filename
 
 
 def write_network_csv(path):
@@ -110,6 +112,10 @@ def test_batch_route_snap_failure(tmp_path):
 
 def test_linestring_export_format():
     assert path_to_linestring([(100.0, 13.0), (100.001, 13.0)]) == "LINESTRING(100.0000000 13.0000000,100.0010000 13.0000000)"
+
+
+def test_batch_download_filename_uses_minute_timestamp():
+    assert re.fullmatch(r"batch_route_result_\d{12}\.csv", _timestamped_batch_filename())
 
 
 def test_batch_route_api_end_to_end(tmp_path):

@@ -501,3 +501,41 @@ failed=0
 skipped_by_threshold=0
 elapsed_s=30.81
 ```
+
+## 2026-07-08 Iteration 8：批量预览自动上图与下载文件名优化
+
+### 问题
+
+- 用户点击 `Search Preview Routes` 后，页面只在左侧生成匹配结果列表；需要再点击列表项才会在 GIS 地图显示路线。
+- 这个交互不够直接，容易误判为预览查询没有返回路由。
+- 批量结果下载文件名使用 job uuid，不方便人工识别生成时间。
+
+### 实现
+
+- `Search Preview Routes` 查询成功后，如果返回至少一条预览结果，前端自动将第一条匹配路由显示到 GIS 地图。
+- 列表仍然保留，用户可以点击其他预览结果切换地图显示。
+- 自动显示时同步写入 History，并显示源宿网元名称标签。
+- 下载文件名改为分钟级时间戳：
+
+```text
+batch_route_result_YYYYMMDDHHMM.csv
+```
+
+示例：
+
+```text
+batch_route_result_202607081240.csv
+```
+
+### 验证
+
+```text
+node --check web\app.js
+passed
+
+python -m compileall app road_network DT_test scripts
+passed
+
+python -m pytest DT_test tests -q
+10 passed, 2 skipped, 2 warnings
+```

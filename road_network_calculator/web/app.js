@@ -46,6 +46,7 @@ const i18n = {
     uploadingBatchRoutes: "Uploading batch route CSV",
     batchRouteDone: "Batch route calculation completed",
     noPreviewRoutes: "No preview routes matched",
+    previewRouteShown: "Preview route shown: {src} -> {sink}",
     result: "Result",
     distance: "Distance",
     snapTime: "Snap Time",
@@ -116,6 +117,7 @@ const i18n = {
     uploadingBatchRoutes: "正在上传批量路由 CSV",
     batchRouteDone: "批量路由计算完成",
     noPreviewRoutes: "没有匹配的预览路由",
+    previewRouteShown: "已显示预览路由：{src} -> {sink}",
     result: "计算结果",
     distance: "距离",
     snapTime: "吸附耗时",
@@ -751,7 +753,11 @@ async function searchBatchRoutePreview(jobId) {
     setStatus(data.detail || "Failed to load preview routes", true);
     return;
   }
-  renderBatchRoutePreview(data.rows || []);
+  const rows = data.rows || [];
+  renderBatchRoutePreview(rows);
+  if (rows.length) {
+    showBatchPreviewRoute(rows[0]);
+  }
 }
 
 function renderBatchRoutePreview(rows) {
@@ -768,24 +774,29 @@ function renderBatchRoutePreview(rows) {
     button.type = "button";
     button.className = "list-item";
     button.innerHTML = `<strong>${row["Src NE Name"]} -> ${row["Sink NE Name"]}</strong><span class="muted">${row.Distance} m</span>`;
-    button.addEventListener("click", () => {
-      const route = {
-        start_lon: Number(row["Src Lon"]),
-        start_lat: Number(row["Src Lat"]),
-        end_lon: Number(row["Sink Lon"]),
-        end_lat: Number(row["Sink Lat"]),
-      };
-      const result = resultFromBatchPreviewRow(row);
-      const historyItem = saveHistory(route, result, {
-        visible: true,
-        label: `${row["Src NE Name"]} -> ${row["Sink NE Name"]}`,
-      });
-      const routeId = historyItem ? historyItem.id : routeKey(route);
-      addOrUpdateRouteOverlay(routeId, route, result, { visible: true, fit: true });
-      updateResultPanel(result);
-    });
+    button.addEventListener("click", () => showBatchPreviewRoute(row));
     el.batchPreviewResults.appendChild(button);
   });
+}
+
+function showBatchPreviewRoute(row) {
+  const route = {
+    start_lon: Number(row["Src Lon"]),
+    start_lat: Number(row["Src Lat"]),
+    end_lon: Number(row["Sink Lon"]),
+    end_lat: Number(row["Sink Lat"]),
+  };
+  const result = resultFromBatchPreviewRow(row);
+  if (!result.reachable) {
+    setStatus(t("noPreviewRoutes"), true);
+    return;
+  }
+  const label = `${row["Src NE Name"]} -> ${row["Sink NE Name"]}`;
+  const historyItem = saveHistory(route, result, { visible: true, label });
+  const routeId = historyItem ? historyItem.id : routeKey(route);
+  addOrUpdateRouteOverlay(routeId, route, result, { visible: true, fit: true });
+  updateResultPanel(result);
+  setStatus(t("previewRouteShown", { src: row["Src NE Name"], sink: row["Sink NE Name"] }));
 }
 
 function resultFromBatchPreviewRow(row) {
