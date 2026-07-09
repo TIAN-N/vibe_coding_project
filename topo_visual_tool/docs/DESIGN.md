@@ -497,16 +497,18 @@ After a ring/chain table is uploaded:
 Highlight and filter rules now support a condition source per rule group:
 
 - Device fields: match device rows directly, preserving previous behavior.
+- Link fields: match link rows directly, then resolve matched links to their source and sink devices.
 - Ring/chain fields: match ring/chain rows first, then union all valid devices from matched rows' `Member_path`.
 
 The downstream behavior is shared:
 
 - Filter keeps matched devices and links whose source and sink are both in the matched device set.
 - Highlight preserves matched devices and links whose source and sink are both in the matched device set; unmatched elements are dimmed by user contrast.
+- For link-field conditions, matched links are restricted to the link rows that satisfy the condition group. Their source and sink devices form the matched device set.
 
 Ring/chain style rules are shown only after a ring/chain table exists. They reuse the compound condition card with the source fixed to ring/chain fields. A matched rule only styles adjacent `Member_path` segments, for example `A->B->C` affects `A-B` and `B-C`. If multiple ring/chain style rules match the same link, later applied rules override earlier ones.
 
-Condition value suggestions continue to merge current data enumerations with cached history. Device rules read values from the device table, link style rules read values from the link table, and ring/chain rules read values from the ring/chain table.
+Condition value suggestions continue to merge current data enumerations with cached history. Device rules read values from the device table, link-field highlight/filter rules and link style rules read values from the link table, and ring/chain rules read values from the ring/chain table.
 
 ## 13. Project Name Record
 
@@ -537,16 +539,19 @@ Successful parsing also refreshes the project name field with a timestamp. The p
 Highlight and filter condition groups have exactly one source:
 
 - `nodes`: match device rows.
+- `links`: match link rows, then resolve matched rows to endpoint devices through `Src NE Name` and `Sink NE Name`.
 - `ringChains`: match ring/chain rows, then resolve matched rows to devices through `Member_path`.
 
-Mixed device and ring/chain conditions in the same condition group are intentionally not supported. This keeps `all` and `any` semantics clear and avoids implicit joins between unrelated row models.
+Mixed device, link, and ring/chain conditions in the same condition group are intentionally not supported. This keeps `all` and `any` semantics clear and avoids implicit joins between unrelated row models.
 
 ### 14.3 Highlight and Filter Contract
 
-Both highlight and filter use the same two-step resolution:
+Device-field and ring/chain-field highlight/filter use the same two-step resolution:
 
 1. Resolve a matched device set.
 2. Resolve matched links as links whose `Src NE Name` and `Sink NE Name` are both in the matched device set.
+
+Link-field highlight/filter resolves matched links first from the link table. The matched device set is the union of those links' endpoints. Filter renders those matched links and endpoint devices. Highlight preserves those matched links and endpoint devices while dimming the remaining rendered topology by contrast.
 
 Filter removes non-matched devices and non-matched links from the rendered data. Highlight keeps the current rendered data but dims non-matched devices and links according to the configured contrast. Matched devices and links keep their existing node/link/ring-chain styles.
 

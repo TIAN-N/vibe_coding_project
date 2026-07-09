@@ -1,7 +1,7 @@
 const REQUIRED_NE = ["NE Name", "Role", "Longitude", "Latitude"];
 const REQUIRED_LINK = ["Src NE Name", "Sink NE Name"];
 const REQUIRED_RING_CHAIN = ["Category", "Name", "Root1", "Root2", "Label", "Member_num", "Member_path", "Uplink_pair", "Belong_agg"];
-const CONDITION_SOURCES = { NODES: "nodes", RING_CHAINS: "ringChains" };
+const CONDITION_SOURCES = { NODES: "nodes", LINKS: "links", RING_CHAINS: "ringChains" };
 const ROLE_ORDER = ["CSG", "ASG", "PE"];
 const SHAPES = ["circle", "square", "diamond", "triangle"];
 const DEFAULT_ROLE_STYLES = {
@@ -203,6 +203,7 @@ const I18N = {
     noRingChainStyleRule: "暂无环链样式规则",
     conditionSource: "条件来源",
     conditionSourceNodes: "网元字段",
+    conditionSourceLinks: "链路字段",
     conditionSourceRingChains: "环链字段",
     nodeRuleField: "字段",
     nodeRuleOp: "条件",
@@ -368,6 +369,7 @@ const I18N = {
     noRingChainStyleRule: "No ring/chain style rules",
     conditionSource: "Condition Source",
     conditionSourceNodes: "Device Fields",
+    conditionSourceLinks: "Link Fields",
     conditionSourceRingChains: "Ring/Chain Fields",
     nodeRuleField: "Field",
     nodeRuleOp: "Condition",
@@ -1111,6 +1113,7 @@ function cloneRuleList(rules) {
 function addLinkStyleRule() {
   const field = firstConfigurableLinkField();
   state.linkStyleRules.push({
+    source: CONDITION_SOURCES.LINKS,
     field,
     op: "eq",
     value: "",
@@ -1343,6 +1346,7 @@ function pruneLinkStyleRules() {
   const available = new Set(state.linkFields);
   const fallback = firstConfigurableLinkField();
   [...state.linkStyleRules, ...state.appliedLinkStyleRules].forEach(rule => {
+    rule.source = CONDITION_SOURCES.LINKS;
     if (!available.has(rule.field)) {
       rule.field = fallback;
       rule.value = "";
@@ -1840,7 +1844,11 @@ function updateRuleSummaries() {
 function ruleSummary(rule) {
   const group = normalizeRuleGroup(rule);
   if (!group) return t("noConditionRule");
-  const prefix = group.source === CONDITION_SOURCES.RING_CHAINS ? `${t("conditionSourceRingChains")} / ` : "";
+  const sourceLabels = {
+    [CONDITION_SOURCES.LINKS]: "conditionSourceLinks",
+    [CONDITION_SOURCES.RING_CHAINS]: "conditionSourceRingChains"
+  };
+  const prefix = sourceLabels[group.source] ? `${t(sourceLabels[group.source])} / ` : "";
   if (group.conditions.length === 1) {
     const condition = group.conditions[0];
     return `${prefix}${condition.field} ${operatorLabel(condition.op)} ${condition.value || ""}`.trim();
@@ -1924,7 +1932,9 @@ function normalizeRuleGroup(rule) {
 }
 
 function normalizeConditionSource(source) {
-  return source === CONDITION_SOURCES.RING_CHAINS ? CONDITION_SOURCES.RING_CHAINS : CONDITION_SOURCES.NODES;
+  if (source === CONDITION_SOURCES.LINKS) return CONDITION_SOURCES.LINKS;
+  if (source === CONDITION_SOURCES.RING_CHAINS) return CONDITION_SOURCES.RING_CHAINS;
+  return CONDITION_SOURCES.NODES;
 }
 
 function pruneRuleGroupFields(rule, available, fallback) {
@@ -1975,7 +1985,11 @@ function matchesCondition(row, rule) {
 function openConditionModal(type, index = null) {
   state.conditionModalType = type;
   state.conditionModalTarget = { type, index };
-  const initialSource = type === "ringChainStyle" ? CONDITION_SOURCES.RING_CHAINS : CONDITION_SOURCES.NODES;
+  const initialSource = type === "ringChainStyle"
+    ? CONDITION_SOURCES.RING_CHAINS
+    : type === "linkStyle"
+      ? CONDITION_SOURCES.LINKS
+      : CONDITION_SOURCES.NODES;
   state.conditionDraft = cloneRuleGroup(conditionTargetRule(type, index)) || quickRuleGroupForTarget(type) || emptyRuleGroup("", initialSource);
   const fields = conditionFieldsForTarget(type);
   if (!state.conditionDraft.conditions[0].field) state.conditionDraft.conditions[0].field = fields[0] || "";
@@ -2006,18 +2020,21 @@ function quickRuleGroupForTarget(type) {
 function conditionFieldsForTarget(type) {
   const source = conditionSourceForTarget(type);
   if (type === "linkStyle") return state.linkFields;
+  if (source === CONDITION_SOURCES.LINKS) return state.linkFields;
   if (source === CONDITION_SOURCES.RING_CHAINS) return state.ringChainFields;
   return state.nodeFields;
 }
 
 function conditionSourceForTarget(type) {
+  if (type === "linkStyle") return CONDITION_SOURCES.LINKS;
   if (type === "ringChainStyle") return CONDITION_SOURCES.RING_CHAINS;
   return normalizeConditionSource(state.conditionDraft && state.conditionDraft.source);
 }
 
 function conditionSourceOptions(selected) {
   const options = [
-    [CONDITION_SOURCES.NODES, "conditionSourceNodes"]
+    [CONDITION_SOURCES.NODES, "conditionSourceNodes"],
+    [CONDITION_SOURCES.LINKS, "conditionSourceLinks"]
   ];
   if (state.ringChains.length) options.push([CONDITION_SOURCES.RING_CHAINS, "conditionSourceRingChains"]);
   return options
@@ -2026,7 +2043,7 @@ function conditionSourceOptions(selected) {
 }
 
 function canChooseConditionSource(type) {
-  return (type === "highlight" || type === "filter") && state.ringChains.length > 0;
+  return type === "highlight" || type === "filter";
 }
 
 function emptyRuleGroup(field = "", source = CONDITION_SOURCES.NODES) {
@@ -2082,6 +2099,8 @@ function conditionValueOptions(field) {
     ? state.links
     : source === CONDITION_SOURCES.RING_CHAINS
       ? state.ringChains
+      : source === CONDITION_SOURCES.LINKS
+        ? state.links
       : state.nodes;
   const history = type === "filter"
     ? state.searchHistory.filter
@@ -2312,10 +2331,19 @@ function intersectSets(a, b) {
   return out;
 }
 
-function nodeNamesForRule(rule, sourceRows = state.nodes) {
+function nodeNamesForRule(rule, sourceRows = state.nodes, linkRows = state.links) {
   const group = normalizeRuleGroup(rule);
   const names = new Set();
   if (!group) return names;
+
+  if (group.source === CONDITION_SOURCES.LINKS) {
+    linkRows.forEach(link => {
+      if (!matchesRule(link, group)) return;
+      names.add(link["Src NE Name"]);
+      names.add(link["Sink NE Name"]);
+    });
+    return names;
+  }
 
   if (group.source === CONDITION_SOURCES.RING_CHAINS) {
     state.ringChains.forEach((row, index) => {
@@ -2333,6 +2361,17 @@ function nodeNamesForRule(rule, sourceRows = state.nodes) {
   return names;
 }
 
+function linkKeysForRule(rule, linkRows = state.links) {
+  const group = normalizeRuleGroup(rule);
+  const keys = new Set();
+  if (!group || group.source !== CONDITION_SOURCES.LINKS) return keys;
+
+  linkRows.forEach(link => {
+    if (matchesRule(link, group)) keys.add(linkKey(link));
+  });
+  return keys;
+}
+
 function ringChainRowsForRule(rule) {
   const group = normalizeRuleGroup(rule);
   if (!group || group.source !== CONDITION_SOURCES.RING_CHAINS) return [];
@@ -2345,10 +2384,13 @@ function getVisibleData() {
   const filteredRingChains = filterGroup && filterGroup.source === CONDITION_SOURCES.RING_CHAINS
     ? ringChainRowsForRule(filterGroup)
     : null;
+  const filterLinkKeys = filterGroup && filterGroup.source === CONDITION_SOURCES.LINKS
+    ? linkKeysForRule(filterGroup, state.links)
+    : null;
   const filterMatchNames = new Set(state.nodes.map(node => node["NE Name"]));
   if (state.filterRule) {
     filterMatchNames.clear();
-    nodeNamesForRule(state.filterRule, state.nodes).forEach(name => filterMatchNames.add(name));
+    nodeNamesForRule(state.filterRule, state.nodes, state.links).forEach(name => filterMatchNames.add(name));
   }
   const queryMatchNames = state.bulkQuery ? state.bulkQuery.matchNames : null;
   const activeSeedNames = queryMatchNames
@@ -2358,9 +2400,10 @@ function getVisibleData() {
   let links = state.links;
   if (hasFiltering) {
     if (state.filterRule) {
-      links = state.links.filter(link =>
-        activeSeedNames.has(link["Src NE Name"]) && activeSeedNames.has(link["Sink NE Name"])
-      );
+      links = state.links.filter(link => {
+        if (!activeSeedNames.has(link["Src NE Name"]) || !activeSeedNames.has(link["Sink NE Name"])) return false;
+        return filterLinkKeys ? filterLinkKeys.has(linkKey(link)) : true;
+      });
     } else {
       const seen = new Set();
       links = [];
@@ -2396,11 +2439,17 @@ function getVisibleData() {
   const selectedLinkKeys = new Set();
 
   if (state.highlightRule) {
-    nodeNamesForRule(state.highlightRule, nodes).forEach(name => {
+    const highlightGroup = normalizeRuleGroup(state.highlightRule);
+    const highlightRuleLinkKeys = highlightGroup && highlightGroup.source === CONDITION_SOURCES.LINKS
+      ? linkKeysForRule(highlightGroup, links)
+      : null;
+    nodeNamesForRule(state.highlightRule, nodes, links).forEach(name => {
       if (visibleNames.has(name)) highlightNames.add(name);
     });
     links.forEach(link => {
-      if (highlightNames.has(link["Src NE Name"]) && highlightNames.has(link["Sink NE Name"])) {
+      const endpointsHighlighted = highlightNames.has(link["Src NE Name"]) && highlightNames.has(link["Sink NE Name"]);
+      const linkHighlighted = highlightRuleLinkKeys ? highlightRuleLinkKeys.has(linkKey(link)) && endpointsHighlighted : endpointsHighlighted;
+      if (linkHighlighted) {
         highlightLinkKeys.add(linkKey(link));
       }
     });
