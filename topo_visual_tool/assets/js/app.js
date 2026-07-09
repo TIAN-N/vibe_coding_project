@@ -440,7 +440,6 @@ const state = {
   mapMoving: false,
   lightBasemap: false,
   mapLayers: { nodes: [], links: [], routes: [] },
-  routeLayer: null,
   routeHitEntries: [],
   ringChainStyleCache: {
     key: "",
@@ -483,15 +482,15 @@ function initMap() {
     return;
   }
 
-  ensureRouteCanvasLayerClass();
   state.map = L.map("map", {
     zoomControl: true,
     preferCanvas: true,
-    renderer: L.canvas({ padding: 0.75 })
+    renderer: L.canvas({ padding: 0.35 })
   }).setView([13.7563, 100.5018], 10);
   installOnlineTileLayer();
   state.map.on("movestart zoomstart", () => {
     state.mapMoving = true;
+    clearRouteLayers();
   });
   state.map.on("moveend zoomend", () => {
     state.mapMoving = false;
@@ -515,52 +514,6 @@ function installOnlineTileLayer() {
     crossOrigin: true
   }).addTo(state.map);
   state.tileLayer.on("tileerror", onTileError);
-}
-
-function ensureRouteCanvasLayerClass() {
-  if (!window.L || L.RouteCanvasLayer) return;
-
-  L.RouteCanvasLayer = L.Layer.extend({
-    initialize(options = {}) {
-      L.setOptions(this, options);
-      this._entries = [];
-      this._data = null;
-      this._canvas = null;
-      this._ctx = null;
-    },
-    onAdd(map) {
-      this._map = map;
-      this._canvas = L.DomUtil.create("canvas", "route-canvas-layer");
-      this._canvas.style.pointerEvents = "none";
-      this._canvas.style.zIndex = "350";
-      map.getPanes().overlayPane.appendChild(this._canvas);
-      map.on("moveend zoomend resize viewreset", this.redraw, this);
-      this.redraw();
-    },
-    onRemove(map) {
-      map.off("moveend zoomend resize viewreset", this.redraw, this);
-      if (this._canvas) {
-        this._canvas.remove();
-        this._canvas = null;
-        this._ctx = null;
-      }
-      this._map = null;
-    },
-    setData(entries, data) {
-      this._entries = entries || [];
-      this._data = data || null;
-      this.redraw();
-      return this;
-    },
-    getEntries() {
-      return this._entries || [];
-    },
-    redraw() {
-      if (!this._map || !this._canvas) return this;
-      drawRouteCanvasLayer(this._map, this._canvas, this._entries || [], this._data);
-      return this;
-    }
-  });
 }
 
 function onTileError() {
@@ -601,12 +554,7 @@ function scheduleMapRender(delay = MAP_RENDER_DEBOUNCE_MS) {
 }
 
 function clearRouteLayers() {
-  if (state.routeLayer && state.map) {
-    state.map.removeLayer(state.routeLayer);
-    state.routeLayer = null;
-  } else {
-    state.mapLayers.routes.forEach(layer => layer.remove());
-  }
+  state.mapLayers.routes.forEach(layer => layer.remove());
   state.mapLayers.routes = [];
   state.routeHitEntries = [];
 }
@@ -1754,7 +1702,7 @@ function setData(nodes, links, ringChains = []) {
   state.selectedLinkKey = "";
   state.selectedRouteKey = "";
   state.selectedCoordinateKey = "";
-  clearRouteLayers();
+  state.routeHitEntries = [];
   state.highlightRule = null;
   state.filterRule = null;
   state.bulkQuery = null;
@@ -2557,8 +2505,8 @@ function renderMap(data) {
 
   state.mapLayers.nodes.forEach(layer => layer.remove());
   state.mapLayers.links.forEach(layer => layer.remove());
-  state.mapLayers.nodes = [];
-  state.mapLayers.links = [];
+  state.mapLayers.routes.forEach(layer => layer.remove());
+  state.mapLayers = { nodes: [], links: [], routes: [] };
 
   const hasHighlight = data.highlightNames.size > 0;
   const dimLinkBaseOpacity = highlightDimOpacity("linkBase");
@@ -2570,11 +2518,14 @@ function renderMap(data) {
   const mapNodes = shouldClip
     ? data.nodes.filter(node => hasCoord(node) && bounds.contains([Number(node.Latitude), Number(node.Longitude)])).slice(0, PERF.mapNodeLimit)
     : data.nodes;
+  const mapNodeNames = new Set(mapNodes.map(node => node["NE Name"]));
   const mapLinks = shouldClip
     ? data.links.filter(link => {
+      if (mapNodeNames.has(link["Src NE Name"]) || mapNodeNames.has(link["Sink NE Name"])) return true;
       const src = data.nodeByName.get(link["Src NE Name"]);
       const sink = data.nodeByName.get(link["Sink NE Name"]);
-      return linkIntersectsBounds(src, sink, bounds);
+      return src && sink && hasCoord(src) && hasCoord(sink)
+        && (bounds.contains([Number(src.Latitude), Number(src.Longitude)]) || bounds.contains([Number(sink.Latitude), Number(sink.Longitude)]));
     }).slice(0, PERF.mapLinkLimit)
     : data.links;
   const degreeMap = getNodeDegreeMap(mapLinks);
@@ -2582,7 +2533,7 @@ function renderMap(data) {
   if (state.routePathStyle.visible) {
     renderRouteCanvas(mapLinks, data);
   } else {
-    clearRouteLayers();
+    state.routeHitEntries = [];
   }
 
   mapLinks.forEach(link => {
@@ -2661,14 +2612,6 @@ function renderMap(data) {
     });
     state.mapLayers.nodes.push(marker);
   });
-}
-
-function linkIntersectsBounds(src, sink, bounds) {
-  if (!src || !sink || !hasCoord(src) || !hasCoord(sink) || !bounds) return false;
-  const srcPoint = [Number(src.Latitude), Number(src.Longitude)];
-  const sinkPoint = [Number(sink.Latitude), Number(sink.Longitude)];
-  if (bounds.contains(srcPoint) || bounds.contains(sinkPoint)) return true;
-  return L.latLngBounds(srcPoint, sinkPoint).intersects(bounds);
 }
 
 function groupNodesByCoordinate(nodes) {
@@ -2760,32 +2703,27 @@ function renderRouteCanvas(mapLinks, data) {
     .map(link => ({ link, key: linkKey(link), points: routePointsForLink(link) }))
     .filter(entry => entry.points.length > 1);
   state.routeHitEntries = entries;
-  if (!entries.length || !state.routePathStyle.visible) {
-    clearRouteLayers();
-    return;
-  }
+  if (!entries.length) return;
 
-  if (!state.routeLayer) {
-    state.routeLayer = new L.RouteCanvasLayer();
-    state.routeLayer.addTo(state.map);
-    state.mapLayers.routes = [state.routeLayer];
-  }
-  state.routeLayer.setData(entries, data);
-}
-
-function drawRouteCanvasLayer(map, canvas, entries, data) {
-  if (!map || !canvas || !entries.length || !data) return;
-  const size = map.getSize();
-  const topLeft = map.containerPointToLayerPoint([0, 0]);
+  const canvas = document.createElement("canvas");
+  const size = state.map.getSize();
+  const topLeft = state.map.containerPointToLayerPoint([0, 0]);
   const pixelRatio = window.devicePixelRatio || 1;
   canvas.width = Math.round(size.x * pixelRatio);
   canvas.height = Math.round(size.y * pixelRatio);
   canvas.style.width = `${size.x}px`;
   canvas.style.height = `${size.y}px`;
+  canvas.className = "route-canvas-layer";
+  canvas.style.pointerEvents = "none";
+  canvas.style.zIndex = "350";
   L.DomUtil.setPosition(canvas, topLeft);
+  state.map.getPanes().overlayPane.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) {
+    canvas.remove();
+    return;
+  }
   ctx.scale(pixelRatio, pixelRatio);
 
   const selectedKey = state.selectedRouteKey || state.selectedLinkKey;
@@ -2812,6 +2750,8 @@ function drawRouteCanvasLayer(map, canvas, entries, data) {
       drawRouteEndpointGuides(ctx, selected.link, selected.points, data.nodeByName, topLeft);
     }
   }
+
+  state.mapLayers.routes.push({ remove: () => canvas.remove() });
 }
 
 function drawRoutePath(ctx, points, topLeft, color, width, opacity) {
