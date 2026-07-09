@@ -485,7 +485,7 @@ function initMap() {
   state.map = L.map("map", {
     zoomControl: true,
     preferCanvas: true,
-    renderer: L.canvas({ padding: 0.35 })
+    renderer: L.canvas({ padding: 0.75 })
   }).setView([13.7563, 100.5018], 10);
   installOnlineTileLayer();
   state.map.on("movestart zoomstart", () => {
@@ -2518,14 +2518,11 @@ function renderMap(data) {
   const mapNodes = shouldClip
     ? data.nodes.filter(node => hasCoord(node) && bounds.contains([Number(node.Latitude), Number(node.Longitude)])).slice(0, PERF.mapNodeLimit)
     : data.nodes;
-  const mapNodeNames = new Set(mapNodes.map(node => node["NE Name"]));
   const mapLinks = shouldClip
     ? data.links.filter(link => {
-      if (mapNodeNames.has(link["Src NE Name"]) || mapNodeNames.has(link["Sink NE Name"])) return true;
       const src = data.nodeByName.get(link["Src NE Name"]);
       const sink = data.nodeByName.get(link["Sink NE Name"]);
-      return src && sink && hasCoord(src) && hasCoord(sink)
-        && (bounds.contains([Number(src.Latitude), Number(src.Longitude)]) || bounds.contains([Number(sink.Latitude), Number(sink.Longitude)]));
+      return linkIntersectsBounds(src, sink, bounds);
     }).slice(0, PERF.mapLinkLimit)
     : data.links;
   const degreeMap = getNodeDegreeMap(mapLinks);
@@ -2612,6 +2609,14 @@ function renderMap(data) {
     });
     state.mapLayers.nodes.push(marker);
   });
+}
+
+function linkIntersectsBounds(src, sink, bounds) {
+  if (!src || !sink || !hasCoord(src) || !hasCoord(sink) || !bounds) return false;
+  const srcPoint = [Number(src.Latitude), Number(src.Longitude)];
+  const sinkPoint = [Number(sink.Latitude), Number(sink.Longitude)];
+  if (bounds.contains(srcPoint) || bounds.contains(sinkPoint)) return true;
+  return L.latLngBounds(srcPoint, sinkPoint).intersects(bounds);
 }
 
 function groupNodesByCoordinate(nodes) {
