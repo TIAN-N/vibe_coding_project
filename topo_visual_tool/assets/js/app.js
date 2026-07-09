@@ -15,7 +15,6 @@ const DEFAULT_ROUTE_PATH_STYLE = { visible: true, color: "#7a5c2e", lineStyle: "
 const DEFAULT_HIGHLIGHT_CONTRAST = 0.72;
 const ROUTE_WKT_FIELD = "Route WKT";
 const ROUTE_HIT_TOLERANCE_PX = 8;
-const LINK_HIT_TOLERANCE_PX = 7;
 const ROUTE_POINTS_CACHE = new WeakMap();
 const LINK_STYLE_OPS = ["eq", "contains", "neq"];
 const LINE_STYLE_VALUES = ["solid", "dash", "dot"];
@@ -442,7 +441,6 @@ const state = {
   lightBasemap: false,
   mapLayers: { nodes: [], links: [], routes: [] },
   routeHitEntries: [],
-  linkHitEntries: [],
   ringChainStyleCache: {
     key: "",
     styles: new Map()
@@ -487,11 +485,12 @@ function initMap() {
   state.map = L.map("map", {
     zoomControl: true,
     preferCanvas: true,
-    renderer: L.canvas({ padding: 1.2 })
+    renderer: L.canvas({ padding: 0.35 })
   }).setView([13.7563, 100.5018], 10);
   installOnlineTileLayer();
   state.map.on("movestart zoomstart", () => {
     state.mapMoving = true;
+    clearRouteLayers();
   });
   state.map.on("moveend zoomend", () => {
     state.mapMoving = false;
@@ -508,9 +507,9 @@ function installOnlineTileLayer() {
     maxNativeZoom: 19,
     opacity: 1,
     attribution: "&copy; OpenStreetMap",
-    updateWhenIdle: true,
-    updateWhenZooming: false,
-    keepBuffer: 6,
+    updateWhenIdle: false,
+    updateWhenZooming: true,
+    keepBuffer: 4,
     detectRetina: true,
     crossOrigin: true
   }).addTo(state.map);
@@ -565,13 +564,6 @@ function onMapClick(event) {
   if (routeHit) {
     state.selectedRouteKey = routeHit.key;
     showLinkDetails(routeHit.link, { route: true });
-    renderTopologies();
-    return;
-  }
-
-  const linkHit = findLinkHit(event.containerPoint);
-  if (linkHit) {
-    showLinkDetails(linkHit.link);
     renderTopologies();
     return;
   }
@@ -1711,7 +1703,6 @@ function setData(nodes, links, ringChains = []) {
   state.selectedRouteKey = "";
   state.selectedCoordinateKey = "";
   state.routeHitEntries = [];
-  state.linkHitEntries = [];
   state.highlightRule = null;
   state.filterRule = null;
   state.bulkQuery = null;
@@ -2516,32 +2507,69 @@ function renderMap(data) {
   state.mapLayers.links.forEach(layer => layer.remove());
   state.mapLayers.routes.forEach(layer => layer.remove());
   state.mapLayers = { nodes: [], links: [], routes: [] };
-  state.linkHitEntries = [];
 
   const hasHighlight = data.highlightNames.size > 0;
+  const dimLinkBaseOpacity = highlightDimOpacity("linkBase");
+  const dimLinkLineOpacity = highlightDimOpacity("linkLine");
   const dimNodeFillOpacity = highlightDimOpacity("nodeFill");
   const dimNodeOpacity = highlightDimOpacity("node");
-  const bounds = state.map.getBounds().pad(0.55);
+  const bounds = state.map.getBounds().pad(0.18);
   const shouldClip = data.nodes.length > PERF.mapNodeLimit || data.links.length > PERF.mapLinkLimit;
   const mapNodes = shouldClip
     ? data.nodes.filter(node => hasCoord(node) && bounds.contains([Number(node.Latitude), Number(node.Longitude)])).slice(0, PERF.mapNodeLimit)
     : data.nodes;
+  const mapNodeNames = new Set(mapNodes.map(node => node["NE Name"]));
   const mapLinks = shouldClip
     ? data.links.filter(link => {
+      if (mapNodeNames.has(link["Src NE Name"]) || mapNodeNames.has(link["Sink NE Name"])) return true;
       const src = data.nodeByName.get(link["Src NE Name"]);
       const sink = data.nodeByName.get(link["Sink NE Name"]);
-      return linkIntersectsBounds(src, sink, bounds);
+      return src && sink && hasCoord(src) && hasCoord(sink)
+        && (bounds.contains([Number(src.Latitude), Number(src.Longitude)]) || bounds.contains([Number(sink.Latitude), Number(sink.Longitude)]));
     }).slice(0, PERF.mapLinkLimit)
     : data.links;
   const degreeMap = getNodeDegreeMap(mapLinks);
-
-  renderLinkCanvas(mapLinks, data);
 
   if (state.routePathStyle.visible) {
     renderRouteCanvas(mapLinks, data);
   } else {
     state.routeHitEntries = [];
   }
+
+  mapLinks.forEach(link => {
+    const src = data.nodeByName.get(link["Src NE Name"]);
+    const sink = data.nodeByName.get(link["Sink NE Name"]);
+    if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return;
+
+    const selectedLink = data.selectedLinkKeys.has(linkKey(link));
+    const related = data.highlightLinkKeys.has(linkKey(link)) || selectedLink;
+    const userStyle = resolveLinkStyle(link);
+    const visualStyle = selectedLink
+      ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
+      : userStyle;
+    const points = [[Number(src.Latitude), Number(src.Longitude)], [Number(sink.Latitude), Number(sink.Longitude)]];
+    const base = L.polyline(points, {
+      color: "#ffffff",
+      weight: visualStyle.weight + 3,
+      opacity: hasHighlight && !related ? dimLinkBaseOpacity : 0.82
+    }).addTo(state.map);
+    const line = L.polyline(points, {
+      color: visualStyle.color,
+      weight: visualStyle.weight,
+      dashArray: visualStyle.dashArray,
+      opacity: hasHighlight && !related ? dimLinkLineOpacity : 0.86
+    }).addTo(state.map);
+
+    line.bindTooltip(`${link["Src NE Name"]} ⇄ ${link["Sink NE Name"]}`);
+    const onLinkClick = event => {
+      if (window.L && event) L.DomEvent.stop(event);
+      showLinkDetails(link);
+      renderTopologies();
+    };
+    base.on("click", onLinkClick);
+    line.on("click", onLinkClick);
+    state.mapLayers.links.push(base, line);
+  });
 
   groupNodesByCoordinate(mapNodes).forEach(group => {
     if (group.nodes.length > 1) {
@@ -2584,106 +2612,6 @@ function renderMap(data) {
     });
     state.mapLayers.nodes.push(marker);
   });
-}
-
-function renderLinkCanvas(mapLinks, data) {
-  const entries = mapLinks
-    .map(link => {
-      const src = data.nodeByName.get(link["Src NE Name"]);
-      const sink = data.nodeByName.get(link["Sink NE Name"]);
-      if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return null;
-      return {
-        link,
-        key: linkKey(link),
-        points: [
-          [Number(src.Latitude), Number(src.Longitude)],
-          [Number(sink.Latitude), Number(sink.Longitude)]
-        ]
-      };
-    })
-    .filter(Boolean);
-  state.linkHitEntries = entries;
-  if (!entries.length) return;
-
-  const canvas = document.createElement("canvas");
-  const size = state.map.getSize();
-  const topLeft = state.map.containerPointToLayerPoint([0, 0]);
-  const pixelRatio = window.devicePixelRatio || 1;
-  canvas.width = Math.round(size.x * pixelRatio);
-  canvas.height = Math.round(size.y * pixelRatio);
-  canvas.style.width = `${size.x}px`;
-  canvas.style.height = `${size.y}px`;
-  canvas.className = "link-canvas-layer";
-  canvas.style.pointerEvents = "none";
-  canvas.style.zIndex = "330";
-  L.DomUtil.setPosition(canvas, topLeft);
-  state.map.getPanes().overlayPane.appendChild(canvas);
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    canvas.remove();
-    return;
-  }
-  ctx.scale(pixelRatio, pixelRatio);
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-
-  const selectedEntries = [];
-  entries.forEach(entry => {
-    if (data.selectedLinkKeys.has(entry.key)) {
-      selectedEntries.push(entry);
-      return;
-    }
-    drawCanvasLink(ctx, entry, topLeft, data, false);
-  });
-  selectedEntries.forEach(entry => drawCanvasLink(ctx, entry, topLeft, data, true));
-
-  state.mapLayers.links.push({ remove: () => canvas.remove() });
-}
-
-function drawCanvasLink(ctx, entry, topLeft, data, selected) {
-  const hasHighlight = data.highlightNames.size > 0;
-  const related = data.highlightLinkKeys.has(entry.key) || selected;
-  const userStyle = resolveLinkStyle(entry.link);
-  const visualStyle = selected
-    ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
-    : userStyle;
-  const baseOpacity = hasHighlight && !related ? highlightDimOpacity("linkBase") : 0.82;
-  const lineOpacity = hasHighlight && !related ? highlightDimOpacity("linkLine") : 0.86;
-
-  drawCanvasLineSegment(ctx, entry.points, topLeft, "#ffffff", visualStyle.weight + 3, "", baseOpacity);
-  drawCanvasLineSegment(ctx, entry.points, topLeft, visualStyle.color, visualStyle.weight, visualStyle.dashArray, lineOpacity);
-}
-
-function drawCanvasLineSegment(ctx, points, topLeft, color, width, dashArray, opacity) {
-  const a = state.map.latLngToLayerPoint(points[0]);
-  const b = state.map.latLngToLayerPoint(points[1]);
-  ctx.save();
-  ctx.globalAlpha = opacity;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  applyCanvasDashArray(ctx, dashArray);
-  ctx.beginPath();
-  ctx.moveTo(a.x - topLeft.x, a.y - topLeft.y);
-  ctx.lineTo(b.x - topLeft.x, b.y - topLeft.y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function applyCanvasDashArray(ctx, dashArray) {
-  if (!dashArray) {
-    ctx.setLineDash([]);
-    return;
-  }
-  ctx.setLineDash(String(dashArray).split(/\s+/).map(Number).filter(Number.isFinite));
-}
-
-function linkIntersectsBounds(src, sink, bounds) {
-  if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return false;
-  const srcPoint = [Number(src.Latitude), Number(src.Longitude)];
-  const sinkPoint = [Number(sink.Latitude), Number(sink.Longitude)];
-  if (bounds.contains(srcPoint) || bounds.contains(sinkPoint)) return true;
-  return L.latLngBounds(srcPoint, sinkPoint).intersects(bounds);
 }
 
 function groupNodesByCoordinate(nodes) {
@@ -2880,21 +2808,6 @@ function findRouteHit(containerPoint) {
   let best = null;
   let bestDistance = ROUTE_HIT_TOLERANCE_PX;
   state.routeHitEntries.forEach(entry => {
-    const distance = routeDistanceToContainerPoint(entry.points, containerPoint);
-    if (distance <= bestDistance) {
-      best = entry;
-      bestDistance = distance;
-    }
-  });
-  return best;
-}
-
-function findLinkHit(containerPoint) {
-  if (!state.linkHitEntries.length || !state.map) return null;
-
-  let best = null;
-  let bestDistance = LINK_HIT_TOLERANCE_PX;
-  state.linkHitEntries.forEach(entry => {
     const distance = routeDistanceToContainerPoint(entry.points, containerPoint);
     if (distance <= bestDistance) {
       best = entry;
