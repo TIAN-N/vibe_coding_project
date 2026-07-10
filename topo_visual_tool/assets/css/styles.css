@@ -60,6 +60,27 @@ button.danger {
   border-color: #efc6c6;
   background: #fff;
 }
+.button-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+}
+.button-like:hover {
+  border-color: #a9bac6;
+  box-shadow: 0 2px 8px rgba(29, 51, 68, .08);
+}
+.button-like input[type="file"] {
+  display: none;
+}
 
 input, select {
   height: 34px;

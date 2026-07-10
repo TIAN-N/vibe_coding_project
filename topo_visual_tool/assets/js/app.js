@@ -34,6 +34,8 @@ const MAP_TILE_ERROR_WINDOW_MS = 15000;
 const MAP_RENDER_DEBOUNCE_MS = 180;
 const SEARCH_HISTORY_KEY = "topo_visual_tool_search_history_v1";
 const CONDITION_HISTORY_KEY = "topo_visual_tool_condition_history_v1";
+const STYLE_TEMPLATE_SCHEMA = "topo_visual_tool_style_template";
+const STYLE_TEMPLATE_VERSION = 1;
 const SEARCH_HISTORY_LIMIT = 12;
 const CONDITION_HISTORY_LIMIT = 8;
 const OPS = [
@@ -152,6 +154,15 @@ const I18N = {
     endpointMissing: "端点缺失：{count}",
     linkEndpointsOk: "端点完整",
     sectionStyle: "样式设置",
+    styleTemplate: "样式配置模板",
+    exportStyleTemplate: "保存当前样式设置",
+    importStyleTemplate: "上传样式配置文件",
+    styleTemplateExported: "样式配置已导出。",
+    styleTemplateImported: "样式配置已导入并应用。",
+    styleTemplateImportedWithAdjustments: "样式配置已导入并应用；{adjusted} 条规则字段已按当前数据调整，{skipped} 条无效规则已忽略。",
+    styleTemplateInvalid: "样式配置文件格式不正确。",
+    styleTemplateUnsupported: "样式配置版本不支持。",
+    styleTemplateReadFail: "样式配置文件读取失败。",
     highlightStyle: "高亮节点样式",
     roleStyle: "角色图例样式",
     nodeStyleRules: "节点样式规则",
@@ -323,6 +334,15 @@ const I18N = {
     endpointMissing: "Missing endpoints: {count}",
     linkEndpointsOk: "Endpoints OK",
     sectionStyle: "Style Settings",
+    styleTemplate: "Style Template",
+    exportStyleTemplate: "Save Current Styles",
+    importStyleTemplate: "Upload Style Config",
+    styleTemplateExported: "Style config exported.",
+    styleTemplateImported: "Style config imported and applied.",
+    styleTemplateImportedWithAdjustments: "Style config imported and applied; {adjusted} rule fields adjusted for current data, {skipped} invalid rules ignored.",
+    styleTemplateInvalid: "Invalid style config file.",
+    styleTemplateUnsupported: "Unsupported style config version.",
+    styleTemplateReadFail: "Failed to read style config file.",
     highlightStyle: "Highlight Node Style",
     roleStyle: "Role Legend Style",
     nodeStyleRules: "Node Style Rules",
@@ -930,6 +950,8 @@ function initStyleControls() {
   el.highlightContrastInput.value = state.highlightContrast;
   el.highlightContrastInput.addEventListener("input", updateHighlightContrastFromControl);
   el.highlightContrastInput.addEventListener("change", updateHighlightContrastFromControl);
+  el.exportStyleTemplateBtn.addEventListener("click", exportStyleTemplate);
+  el.styleTemplateFile.addEventListener("change", importStyleTemplateFromFile);
   el.resetStyleBtn.addEventListener("click", resetStyleControls);
   updateNodeLegend();
   renderNodeStyleRules();
@@ -974,6 +996,206 @@ function updateHighlightContrastFromControl() {
   const value = Number(el.highlightContrastInput.value);
   state.highlightContrast = clamp(Number.isFinite(value) ? value : DEFAULT_HIGHLIGHT_CONTRAST, 0, 1);
   renderTopologies();
+}
+
+function exportStyleTemplate() {
+  const template = {
+    schema: STYLE_TEMPLATE_SCHEMA,
+    version: STYLE_TEMPLATE_VERSION,
+    exportedAt: new Date().toISOString(),
+    projectName: state.projectName || "",
+    styles: {
+      roleStyles: cloneStyles(state.roleStyles),
+      nodeStyleRules: cloneRuleList(state.nodeStyleRules),
+      appliedNodeStyleRules: cloneRuleList(state.appliedNodeStyleRules),
+      linkStyleRules: cloneRuleList(state.linkStyleRules),
+      appliedLinkStyleRules: cloneRuleList(state.appliedLinkStyleRules),
+      ringChainStyleRules: cloneRuleList(state.ringChainStyleRules),
+      appliedRingChainStyleRules: cloneRuleList(state.appliedRingChainStyleRules),
+      routePathStyle: { ...state.routePathStyle }
+    }
+  };
+  const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${safeFileName(state.projectName || "topo")}-style-template.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setMessage(el.styleTemplateMessage, t("styleTemplateExported"), "ok");
+}
+
+function importStyleTemplateFromFile(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const template = JSON.parse(String(reader.result || ""));
+      importStyleTemplate(template);
+    } catch (error) {
+      setMessage(el.styleTemplateMessage, t("styleTemplateInvalid"), "error");
+    } finally {
+      event.target.value = "";
+    }
+  };
+  reader.onerror = () => {
+    setMessage(el.styleTemplateMessage, t("styleTemplateReadFail"), "error");
+    event.target.value = "";
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function importStyleTemplate(template) {
+  if (!template || template.schema !== STYLE_TEMPLATE_SCHEMA || !template.styles || typeof template.styles !== "object") {
+    setMessage(el.styleTemplateMessage, t("styleTemplateInvalid"), "error");
+    return;
+  }
+  if (Number(template.version) > STYLE_TEMPLATE_VERSION) {
+    setMessage(el.styleTemplateMessage, t("styleTemplateUnsupported"), "error");
+    return;
+  }
+
+  const report = { adjusted: 0, skipped: 0 };
+  const styles = template.styles;
+  state.roleStyles = sanitizeRoleStyles(styles.roleStyles);
+  state.nodeStyleRules = sanitizeStyleRuleList(styles.nodeStyleRules, "node", report);
+  state.appliedNodeStyleRules = cloneRuleList(state.nodeStyleRules);
+  state.linkStyleRules = sanitizeStyleRuleList(styles.linkStyleRules, "link", report);
+  state.appliedLinkStyleRules = cloneRuleList(state.linkStyleRules);
+  state.ringChainStyleRules = sanitizeStyleRuleList(styles.ringChainStyleRules, "ringChain", report);
+  state.appliedRingChainStyleRules = cloneRuleList(state.ringChainStyleRules);
+  state.routePathStyle = sanitizeRoutePathStyle(styles.routePathStyle);
+
+  pruneNodeStyleRules();
+  pruneLinkStyleRules();
+  pruneRingChainStyleRules();
+  clearRingChainStyleCache();
+  syncStyleControlsFromState();
+  setMessage(
+    el.styleTemplateMessage,
+    report.adjusted || report.skipped
+      ? t("styleTemplateImportedWithAdjustments", { adjusted: report.adjusted, skipped: report.skipped })
+      : t("styleTemplateImported"),
+    report.skipped ? "warning" : "ok"
+  );
+  renderTopologies();
+}
+
+function syncStyleControlsFromState() {
+  el.routePathVisibleInput.checked = Boolean(state.routePathStyle.visible);
+  el.routePathColorInput.value = state.routePathStyle.color;
+  el.routePathWidthSelect.innerHTML = lineWidthOptions(state.routePathStyle.width);
+  el.routePathLineStyleSelect.innerHTML = lineStyleOptions(state.routePathStyle.lineStyle);
+  el.routePathOpacityInput.value = state.routePathStyle.opacity;
+  renderRoleStyleEditor();
+  updateNodeLegend();
+  renderNodeStyleRules();
+  renderLinkStyleRules();
+  renderRingChainStyleRules();
+}
+
+function sanitizeRoleStyles(roleStyles) {
+  const result = cloneStyles(DEFAULT_ROLE_STYLES);
+  ROLE_ORDER.concat("OTHER").forEach(role => {
+    const input = roleStyles && roleStyles[role] || {};
+    const fallback = DEFAULT_ROLE_STYLES[role] || DEFAULT_ROLE_STYLES.OTHER;
+    result[role] = {
+      color: normalizeColor(input.color, fallback.color),
+      size: clamp(Number(input.size) || fallback.size, 4, 40),
+      shape: normalizeShape(input.shape, fallback.shape)
+    };
+  });
+  return result;
+}
+
+function sanitizeStyleRuleList(rules, type, report) {
+  if (!Array.isArray(rules)) return [];
+  return rules
+    .map(rule => sanitizeStyleRule(rule, type, report))
+    .filter(Boolean);
+}
+
+function sanitizeStyleRule(rule, type, report) {
+  if (!rule || typeof rule !== "object") {
+    report.skipped += 1;
+    return null;
+  }
+  const config = styleRuleConfig(type);
+  const group = normalizeRuleGroup({ ...rule, source: config.source });
+  if (!group) {
+    report.skipped += 1;
+    return null;
+  }
+  const sanitizedConditions = group.conditions.map(condition => {
+    if (!config.available.has(condition.field)) {
+      report.adjusted += 1;
+      return { field: config.fallback, op: normalizeOp(condition.op), value: "" };
+    }
+    return { field: condition.field, op: normalizeOp(condition.op), value: String(condition.value || "") };
+  });
+  const first = sanitizedConditions[0];
+  if (type === "node") {
+    return {
+      source: config.source,
+      mode: group.mode,
+      conditions: sanitizedConditions,
+      field: first.field,
+      op: first.op,
+      value: first.value,
+      color: normalizeColor(rule.color, DEFAULT_NODE_STYLE.color),
+      size: clamp(Number(rule.size) || DEFAULT_NODE_STYLE.size, 4, 40),
+      shape: normalizeShape(rule.shape, DEFAULT_NODE_STYLE.shape),
+      label: String(rule.label || "")
+    };
+  }
+  return {
+    source: config.source,
+    mode: group.mode,
+    conditions: sanitizedConditions,
+    field: first.field,
+    op: first.op,
+    value: first.value,
+    color: normalizeColor(rule.color, DEFAULT_LINK_STYLE.color),
+    lineStyle: LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : DEFAULT_LINK_STYLE.lineStyle,
+    width: LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : DEFAULT_LINK_STYLE.width
+  };
+}
+
+function styleRuleConfig(type) {
+  if (type === "link") {
+    return { source: CONDITION_SOURCES.LINKS, available: new Set(state.linkFields), fallback: firstConfigurableLinkField() };
+  }
+  if (type === "ringChain") {
+    return { source: CONDITION_SOURCES.RING_CHAINS, available: new Set(state.ringChainFields), fallback: firstConfigurableRingChainField() };
+  }
+  return { source: CONDITION_SOURCES.NODES, available: new Set(state.nodeFields), fallback: firstConfigurableNodeField() };
+}
+
+function normalizeOp(op) {
+  return OPS.some(([value]) => value === op) ? op : "contains";
+}
+
+function sanitizeRoutePathStyle(style) {
+  const input = style && typeof style === "object" ? style : {};
+  return {
+    visible: input.visible !== false,
+    color: normalizeColor(input.color, DEFAULT_ROUTE_PATH_STYLE.color),
+    width: LINE_WIDTH_VALUES.includes(input.width) ? input.width : DEFAULT_ROUTE_PATH_STYLE.width,
+    lineStyle: LINE_STYLE_VALUES.includes(input.lineStyle) ? input.lineStyle : DEFAULT_ROUTE_PATH_STYLE.lineStyle,
+    opacity: clamp(Number(input.opacity) || DEFAULT_ROUTE_PATH_STYLE.opacity, 0.1, 1)
+  };
+}
+
+function safeFileName(value) {
+  return String(value || "topo")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, "-")
+    .slice(0, 80) || "topo";
 }
 
 function resetStyleControls() {

@@ -78,6 +78,17 @@
           <h2 data-i18n="sectionStyle">样式设置</h2>
           <div class="style-config">
             <div class="style-group">
+              <div class="style-title" data-i18n="styleTemplate">样式配置模板</div>
+              <div class="row">
+                <button id="exportStyleTemplateBtn" class="grow" type="button" data-i18n="exportStyleTemplate">保存当前样式设置</button>
+                <label class="button-like grow">
+                  <span data-i18n="importStyleTemplate">上传样式配置文件</span>
+                  <input id="styleTemplateFile" type="file" accept=".json,application/json">
+                </label>
+              </div>
+              <div id="styleTemplateMessage" class="message"></div>
+            </div>
+            <div class="style-group">
               <div class="style-title" data-i18n="roleStyle">角色图例样式</div>
               <div id="roleStyleEditor" class="role-style-editor"></div>
             </div>
