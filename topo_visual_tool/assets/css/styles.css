@@ -71,7 +71,6 @@ button.danger {
   background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
   color: var(--text);
   cursor: pointer;
-  font-size: 12px;
   text-align: center;
 }
 .button-like:hover {
