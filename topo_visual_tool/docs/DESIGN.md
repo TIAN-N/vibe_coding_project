@@ -559,6 +559,22 @@ Filter removes non-matched devices and non-matched links from the rendered data.
 
 When the active filter source is `ringChains`, the matched ring/chain row list is also carried into the statistics layer. `Category=Ring` rows are counted as visible rings, and `Category=Link` rows are counted as visible chains. These visible ring/chain statistics are hidden for device-field filters and for non-filtered views.
 
+### 14.3.1 Locate Rule Contract
+
+Device locating supports the same condition group model as highlight and filter. The quick locate input is treated as `nodes / NE Name / contains`, while the advanced locate modal can choose device fields, link fields, or ring/chain fields.
+
+Locate evaluation is scoped to the current visible topology result. If a filter or bulk query is active, locate rules only match devices and links that are still visible.
+
+Locate source behavior:
+
+- `nodes`: match device rows, then locate matched devices.
+- `links`: match link rows, then locate the matched links' endpoint devices and emphasize those matched links.
+- `ringChains`: match ring/chain rows, then locate valid devices parsed from `Member_path`.
+
+GIS focus uses the matched devices' valid coordinates. One coordinate uses `setView`; multiple coordinates use a padded `fitBounds`. Logic Topo focus uses existing layout positions and adjusts pan/zoom around the matched device bounding box. If no device matches, the locate message shows an error and the topology is not refocused.
+
+Matched locate devices and locate links are rendered as a temporary visual state. They are emphasized with stronger stroke/weight while preserving existing node and link colors. Locate state is independent from highlight and filter rules and can be cleared separately.
+
 ### 14.4 Style Priority Contract
 
 Link visual style is resolved in this order:

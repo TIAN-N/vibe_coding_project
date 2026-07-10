@@ -126,7 +126,11 @@
           <div class="form-grid">
             <input id="searchInput" list="neSuggestions" placeholder="输入网元名称" data-i18n-placeholder="searchPlaceholder">
             <datalist id="neSuggestions"></datalist>
-            <button id="locateBtn" class="primary" type="button" data-i18n="locateDevice">定位网元</button>
+            <div class="row">
+              <button id="locateBtn" class="primary grow" type="button" data-i18n="locateDevice">定位网元</button>
+              <button id="advancedLocateBtn" type="button" data-i18n="advancedCondition">复合条件</button>
+              <button id="clearLocateBtn" type="button" data-i18n="clear">清除</button>
+            </div>
             <div id="locateMessage" class="message"></div>
           </div>
         </section>

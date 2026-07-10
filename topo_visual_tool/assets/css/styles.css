@@ -966,6 +966,9 @@ th.delete-cell {
   stroke-width: 3.6;
   opacity: 1;
 }
+.logic-link.located {
+  opacity: 1;
+}
 .logic-link.dim { opacity: var(--logic-link-dim-opacity, .13); }
 .logic-node .core {
   stroke: #fff;
@@ -987,4 +990,8 @@ th.delete-cell {
 .logic-node.neighbor .core {
   stroke: var(--primary);
   stroke-width: 3;
+}
+.logic-node.located .core {
+  stroke: var(--primary-dark);
+  stroke-width: 3.4;
 }

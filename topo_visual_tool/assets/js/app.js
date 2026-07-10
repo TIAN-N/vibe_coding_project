@@ -127,8 +127,13 @@ const I18N = {
     mockLoaded: "Mock 数据已加载：{devices} 个网元，{links} 条链路。",
     tableEmpty: "{name}为空。",
     missingFields: "{name}缺少字段：{fields}",
-    locateMissing: "未找到匹配网元。",
+    locateMissing: "未定位到符合条件网元。",
+    locateNoData: "请先上传或加载数据。",
+    locateNoCondition: "请输入定位条件。",
+    locateMissingCoord: "已命中 {devices} 个网元，但缺少有效经纬度，无法定位地图。",
     located: "已定位：{name}",
+    locatedBatch: "已定位 {devices} 个网元，{links} 条内部链路。",
+    complexLocateTitle: "复合定位条件",
     unnamedDevice: "未命名网元",
     viewStatus: "显示 {visibleDevices}/{devices} 网元，{visibleLinks}/{links} 链路",
     invalidCoord: "{count} 个网元坐标无效",
@@ -293,8 +298,13 @@ const I18N = {
     mockLoaded: "Mock data loaded: {devices} devices, {links} links.",
     tableEmpty: "{name} is empty.",
     missingFields: "{name} is missing fields: {fields}",
-    locateMissing: "No matching device found.",
+    locateMissing: "No matching devices found.",
+    locateNoData: "Upload or load data first.",
+    locateNoCondition: "Enter locate conditions.",
+    locateMissingCoord: "{devices} devices matched, but none has valid coordinates for map locating.",
     located: "Located: {name}",
+    locatedBatch: "Located {devices} devices and {links} internal links.",
+    complexLocateTitle: "Advanced Locate Conditions",
     unnamedDevice: "Unnamed device",
     viewStatus: "Showing {visibleDevices}/{devices} devices, {visibleLinks}/{links} links",
     invalidCoord: "{count} devices have invalid coordinates",
@@ -400,6 +410,9 @@ const state = {
   selectedCoordinateKey: "",
   highlightRule: null,
   filterRule: null,
+  locateRule: null,
+  locatedNames: new Set(),
+  locatedLinkKeys: new Set(),
   bulkQuery: null,
   roleStyles: cloneStyles(DEFAULT_ROLE_STYLES),
   nodeStyleRules: [],
@@ -583,6 +596,8 @@ function bindEvents() {
   el.mockBtn.addEventListener("click", loadMockData);
   el.loadFilesBtn.addEventListener("click", loadUploadedFiles);
   el.locateBtn.addEventListener("click", locateNode);
+  el.advancedLocateBtn.addEventListener("click", () => openConditionModal("locate"));
+  el.clearLocateBtn.addEventListener("click", clearLocateRule);
   bindSearchHistoryInput(el.searchInput, "locate");
   bindSearchHistoryInput(el.highlightValue, "highlight");
   bindSearchHistoryInput(el.filterValue, "filter");
@@ -1705,6 +1720,9 @@ function setData(nodes, links, ringChains = []) {
   state.routeHitEntries = [];
   state.highlightRule = null;
   state.filterRule = null;
+  state.locateRule = null;
+  state.locatedNames = new Set();
+  state.locatedLinkKeys = new Set();
   state.bulkQuery = null;
   setDefaultProjectName();
   state.ringChainStyleRules = state.ringChains.length ? state.ringChainStyleRules : [];
@@ -2005,6 +2023,7 @@ function closeConditionModal() {
 }
 
 function conditionTargetRule(type, index = null) {
+  if (type === "locate") return state.locateRule;
   if (type === "highlight" || type === "filter") return state[`${type}Rule`];
   if (type === "nodeStyle") return state.nodeStyleRules[index];
   if (type === "linkStyle") return state.linkStyleRules[index];
@@ -2013,6 +2032,7 @@ function conditionTargetRule(type, index = null) {
 }
 
 function quickRuleGroupForTarget(type) {
+  if (type === "locate") return locateRuleFromQuickInput();
   if (type === "highlight" || type === "filter") return ruleGroupFromQuickControls(type);
   return null;
 }
@@ -2043,7 +2063,7 @@ function conditionSourceOptions(selected) {
 }
 
 function canChooseConditionSource(type) {
-  return type === "highlight" || type === "filter";
+  return type === "locate" || type === "highlight" || type === "filter";
 }
 
 function emptyRuleGroup(field = "", source = CONDITION_SOURCES.NODES) {
@@ -2106,6 +2126,8 @@ function conditionValueOptions(field) {
     ? state.searchHistory.filter
     : type === "highlight"
       ? state.searchHistory.highlight
+      : type === "locate"
+        ? state.searchHistory.locate
       : conditionValueHistory(type, field);
   return mergeSuggestionValues(collectValueOptions(rows, field), history)
     .map(value => `<option value="${escapeAttr(value)}"></option>`)
@@ -2149,6 +2171,7 @@ function updateConditionRowSuggestions(event) {
 }
 
 function conditionModalTitle(type) {
+  if (type === "locate") return t("complexLocateTitle");
   if (type === "filter") return t("complexFilterTitle");
   if (type === "nodeStyle") return t("nodeStyleRules");
   if (type === "linkStyle") return t("linkStyleRules");
@@ -2158,6 +2181,10 @@ function conditionModalTitle(type) {
 
 function applyRuleGroupToTarget(target, group) {
   if (!target) return;
+  if (target.type === "locate") {
+    state.locateRule = group;
+    return;
+  }
   if (target.type === "highlight" || target.type === "filter") {
     state[`${target.type}Rule`] = group;
     return;
@@ -2250,6 +2277,13 @@ function applyConditionModal() {
   const type = target.type;
   const group = normalizeRuleGroup(state.conditionDraft);
   applyRuleGroupToTarget(target, group);
+  if (group && type === "locate") {
+    group.conditions.forEach(condition => rememberSearchHistory("locate", condition.value));
+    rememberConditionHistory(type, group);
+    closeConditionModal();
+    applyLocateRule(group);
+    return;
+  }
   if (group && (type === "highlight" || type === "filter") && group.source === CONDITION_SOURCES.NODES) {
     const first = group.conditions[0];
     el[`${type}Field`].value = first.field;
@@ -2473,7 +2507,20 @@ function getVisibleData() {
     }
   }
 
-  return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, filteredRingChains, highlightNames, highlightLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
+  const locatedNames = new Set();
+  state.locatedNames.forEach(name => {
+    if (visibleNames.has(name)) locatedNames.add(name);
+  });
+  const locatedLinkKeys = new Set();
+  if (locatedNames.size > 1) {
+    links.forEach(link => {
+      const key = linkKey(link);
+      const endpointsLocated = locatedNames.has(link["Src NE Name"]) && locatedNames.has(link["Sink NE Name"]);
+      if (endpointsLocated && state.locatedLinkKeys.has(key)) locatedLinkKeys.add(key);
+    });
+  }
+
+  return { nodes, links, visibleNames, filterMatchNames: activeSeedNames, filteredRingChains, highlightNames, highlightLinkKeys, locatedNames, locatedLinkKeys, selectedNeighborNames, selectedLinkKeys, nodeByName };
 }
 
 function highlightDimOpacity(kind) {
@@ -2539,10 +2586,13 @@ function renderMap(data) {
     if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return;
 
     const selectedLink = data.selectedLinkKeys.has(linkKey(link));
-    const related = data.highlightLinkKeys.has(linkKey(link)) || selectedLink;
+    const locatedLink = data.locatedLinkKeys.has(linkKey(link));
+    const related = data.highlightLinkKeys.has(linkKey(link)) || selectedLink || locatedLink;
     const userStyle = resolveLinkStyle(link);
     const visualStyle = selectedLink
       ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
+      : locatedLink
+        ? { ...userStyle, weight: Math.max(userStyle.weight + 1.4, 3.2) }
       : userStyle;
     const points = [[Number(src.Latitude), Number(src.Longitude)], [Number(sink.Latitude), Number(sink.Longitude)]];
     const base = L.polyline(points, {
@@ -2589,13 +2639,14 @@ function renderMap(data) {
     const selected = state.selectedName === name;
     const neighbor = data.selectedNeighborNames.has(name);
     const highlighted = data.highlightNames.has(name);
-    const active = selected || neighbor;
+    const located = data.locatedNames.has(name);
+    const active = selected || neighbor || located;
     const dim = hasHighlight && !highlighted && !active;
     const radius = mapNodeRadius(degreeMap.get(name) || 0, node, active);
     const point = [Number(node.Latitude), Number(node.Longitude)];
     const marker = createMapNodeLayer(point, radius, nodeShape(node), {
       fillColor: nodeFill(node),
-      color: selected ? "#245a6e" : neighbor ? "#2f6f86" : "#ffffff",
+      color: selected ? "#245a6e" : neighbor ? "#2f6f86" : located ? "#245a6e" : "#ffffff",
       weight: active ? 3 : 2.4,
       fillOpacity: dim ? dimNodeFillOpacity : 0.95,
       opacity: dim ? dimNodeOpacity : 1
@@ -2650,7 +2701,8 @@ function createColocatedNodeLayer(group, data, degreeMap, options) {
   const selected = group.nodes.some(node => state.selectedName === node["NE Name"]) || state.selectedCoordinateKey === group.key;
   const neighbor = group.nodes.some(node => data.selectedNeighborNames.has(node["NE Name"]));
   const highlighted = group.nodes.some(node => data.highlightNames.has(node["NE Name"]));
-  const active = selected || neighbor;
+  const located = group.nodes.some(node => data.locatedNames.has(node["NE Name"]));
+  const active = selected || neighbor || located;
   const dim = options.hasHighlight && !highlighted && !active;
   const maxDegree = group.nodes.reduce((max, node) => Math.max(max, degreeMap.get(node["NE Name"]) || 0), 0);
   const size = clamp(22 + Math.sqrt(group.nodes.length) * 4 + Math.sqrt(maxDegree), 24, 42);
@@ -2899,11 +2951,14 @@ function renderLogic(data = getVisibleData()) {
     if (!src || !sink) return "";
 
     const selectedLink = data.selectedLinkKeys.has(linkKey(link));
-    const related = data.highlightLinkKeys.has(linkKey(link)) || selectedLink;
-    const cls = `logic-link ${selectedLink ? "selected" : ""} ${related ? "highlight" : ""} ${hasHighlight && !related ? "dim" : ""}`;
+    const locatedLink = data.locatedLinkKeys.has(linkKey(link));
+    const related = data.highlightLinkKeys.has(linkKey(link)) || selectedLink || locatedLink;
+    const cls = `logic-link ${selectedLink ? "selected" : ""} ${locatedLink ? "located" : ""} ${related ? "highlight" : ""} ${hasHighlight && !related ? "dim" : ""}`;
     const userStyle = resolveLinkStyle(link);
     const visualStyle = selectedLink
       ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
+      : locatedLink
+        ? { ...userStyle, weight: Math.max(userStyle.weight + 1.4, 3.2) }
       : userStyle;
     const style = ` style="stroke:${escapeAttr(visualStyle.color)};stroke-width:${visualStyle.weight};${visualStyle.dashArray ? `stroke-dasharray:${escapeAttr(visualStyle.dashArray)};` : ""}"`;
     return `<line class="${cls}"${style} x1="${src.x}" y1="${src.y}" x2="${sink.x}" y2="${sink.y}" data-link="${index}"></line>`;
@@ -2917,8 +2972,9 @@ function renderLogic(data = getVisibleData()) {
     const selected = state.selectedName === name;
     const neighbor = data.selectedNeighborNames.has(name);
     const highlighted = data.highlightNames.has(name);
+    const located = data.locatedNames.has(name);
     const radius = logicNodeRadius(degreeMap.get(name) || 0, node);
-    const cls = `logic-node ${selected ? "selected" : ""} ${neighbor ? "neighbor" : ""} ${highlighted ? "highlight" : ""} ${hasHighlight && !highlighted && !selected && !neighbor ? "dim" : ""}`;
+    const cls = `logic-node ${selected ? "selected" : ""} ${neighbor ? "neighbor" : ""} ${located ? "located" : ""} ${highlighted ? "highlight" : ""} ${hasHighlight && !highlighted && !selected && !neighbor && !located ? "dim" : ""}`;
     const shapeMarkup = svgShapeMarkup(nodeShape(node), radius, nodeFill(node));
     const style = "";
     return `<g class="${cls}"${style} data-node="${escapeAttr(name)}" transform="translate(${position.x},${position.y})">
@@ -3297,40 +3353,130 @@ function applySpringLayout(positions, width, height, layoutNodes, layoutLinks) {
   }
 }
 
-function locateNode() {
+function locateRuleFromQuickInput() {
   const rawKeyword = el.searchInput.value.trim();
-  const keyword = rawKeyword.toLowerCase();
-  const exactName = state.indexes.upperNameToName.get(keyword.toUpperCase());
-  const node = exactName
-    ? state.indexes.nodeByName.get(exactName)
-    : state.nodes.find(item => String(item["NE Name"]).toLowerCase().includes(keyword));
+  if (!rawKeyword) return null;
+  return normalizeRuleGroup({
+    source: CONDITION_SOURCES.NODES,
+    mode: "all",
+    conditions: [{ field: "NE Name", op: "contains", value: rawKeyword }]
+  });
+}
 
-  if (!node) {
-    setMessage(el.locateMessage, t("locateMissing"), "error");
+function locateNode() {
+  if (!state.nodes.length) {
+    setMessage(el.locateMessage, t("locateNoData"), "error");
     return;
   }
 
-  state.selectedName = node["NE Name"];
+  const rule = locateRuleFromQuickInput();
+  if (!rule) {
+    setMessage(el.locateMessage, t("locateNoCondition"), "error");
+    return;
+  }
+
+  applyLocateRule(rule, true);
+}
+
+function applyLocateRule(rule, syncQuickInput = false) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) {
+    setMessage(el.locateMessage, t("locateNoCondition"), "error");
+    return;
+  }
+
+  const result = locateMatchesForRule(group);
+  state.locateRule = group;
+  state.locatedNames = result.names;
+  state.locatedLinkKeys = result.linkKeys;
+  state.selectedName = "";
   state.selectedLinkKey = "";
   state.selectedRouteKey = "";
-  rememberSearchHistory("locate", rawKeyword || node["NE Name"]);
-  setMessage(el.locateMessage, t("located", { name: node["NE Name"] }), "ok");
+  state.selectedCoordinateKey = "";
 
-  if (state.view === "gis") {
-    if (state.map && hasCoord(node)) state.map.setView([Number(node.Latitude), Number(node.Longitude)], 14);
-  } else {
-    centerLogicOn(node["NE Name"]);
+  if (!result.names.size) {
+    setMessage(el.locateMessage, t("locateMissing"), "error");
+    renderTopologies();
+    return;
   }
 
-  if (state.view === "gis" && hasCoord(node)) {
-    const visibleNodes = getVisibleData().nodes;
-    const colocated = visibleNodes.filter(item => hasCoord(item) && coordinateKey(item) === coordinateKey(node));
-    if (colocated.length > 1) showColocatedDetails({ key: coordinateKey(node), lat: Number(node.Latitude), lng: Number(node.Longitude), nodes: colocated }, node["NE Name"]);
-    else showDetails(node);
+  group.conditions.forEach(condition => rememberSearchHistory("locate", condition.value));
+  if (syncQuickInput) rememberConditionHistory("locate", group);
+
+  const firstName = [...result.names][0];
+  const firstNode = state.indexes.nodeByName.get(firstName);
+  if (result.names.size === 1 && firstNode) {
+    state.selectedName = firstName;
+    setMessage(el.locateMessage, t("located", { name: firstName }), "ok");
   } else {
-    showDetails(node);
+    setMessage(el.locateMessage, t("locatedBatch", { devices: result.names.size, links: result.linkKeys.size }), "ok");
+  }
+
+  focusLocatedNodes(result.nodes);
+
+  if (result.names.size === 1 && state.view === "gis" && firstNode && hasCoord(firstNode)) {
+    const visibleNodes = getVisibleData().nodes;
+    const colocated = visibleNodes.filter(item => hasCoord(item) && coordinateKey(item) === coordinateKey(firstNode));
+    if (colocated.length > 1) showColocatedDetails({ key: coordinateKey(firstNode), lat: Number(firstNode.Latitude), lng: Number(firstNode.Longitude), nodes: colocated }, firstName);
+    else showDetails(firstNode);
+  } else if (result.names.size === 1 && firstNode) {
+    showDetails(firstNode);
   }
   renderTopologies();
+}
+
+function locateMatchesForRule(rule) {
+  const group = normalizeRuleGroup(rule);
+  const visibleData = getVisibleData();
+  const rawNames = nodeNamesForRule(group, visibleData.nodes, visibleData.links);
+  const names = intersectSets(rawNames, visibleData.visibleNames);
+  const nodes = [...names].map(name => state.indexes.nodeByName.get(name)).filter(Boolean);
+  const linkKeys = new Set();
+
+  if (names.size > 1) {
+    if (group && group.source === CONDITION_SOURCES.LINKS) {
+      linkKeysForRule(group, visibleData.links).forEach(key => linkKeys.add(key));
+    } else {
+      visibleData.links.forEach(link => {
+        if (names.has(link["Src NE Name"]) && names.has(link["Sink NE Name"])) {
+          linkKeys.add(linkKey(link));
+        }
+      });
+    }
+  }
+
+  return { names, nodes, linkKeys };
+}
+
+function clearLocateRule() {
+  state.locateRule = null;
+  state.locatedNames = new Set();
+  state.locatedLinkKeys = new Set();
+  state.selectedName = "";
+  state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
+  state.selectedCoordinateKey = "";
+  el.searchInput.value = "";
+  setMessage(el.locateMessage, "", "");
+  renderTopologies();
+}
+
+function focusLocatedNodes(nodes) {
+  const validNodes = nodes.filter(hasCoord);
+  if (state.view === "gis") {
+    if (!state.map) return;
+    const points = validNodes.map(node => [Number(node.Latitude), Number(node.Longitude)]);
+    if (!points.length) {
+      setMessage(el.locateMessage, t("locateMissingCoord", { devices: nodes.length }), "warning");
+    } else if (points.length === 1) {
+      state.map.setView(points[0], 14);
+    } else {
+      state.map.fitBounds(points, { padding: [70, 70], maxZoom: 14 });
+    }
+    return;
+  }
+
+  focusLogicOnNodes(nodes);
 }
 
 function centerLogicOn(name) {
@@ -3341,6 +3487,34 @@ function centerLogicOn(name) {
   state.logic.panX = rect.width / 2 - position.x * state.logic.zoom;
   state.logic.panY = rect.height / 2 - position.y * state.logic.zoom;
 }
+
+function focusLogicOnNodes(nodes) {
+  const names = nodes.map(node => node["NE Name"]).filter(Boolean);
+  if (!names.length) return;
+  const data = getVisibleData();
+  if (!names.every(name => state.logic.positions.has(name))) {
+    renderLogic(data);
+  }
+  if (names.length === 1) {
+    centerLogicOn(names[0]);
+    return;
+  }
+
+  const points = names.map(name => state.logic.positions.get(name)).filter(Boolean);
+  if (!points.length) return;
+  const minX = Math.min(...points.map(point => point.x));
+  const maxX = Math.max(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const maxY = Math.max(...points.map(point => point.y));
+  const rect = el.logicCanvas.getBoundingClientRect();
+  const boxWidth = Math.max(80, maxX - minX);
+  const boxHeight = Math.max(80, maxY - minY);
+  const nextZoom = clamp(Math.min((rect.width - 120) / boxWidth, (rect.height - 120) / boxHeight), 0.35, 2.2);
+  state.logic.zoom = Number.isFinite(nextZoom) ? nextZoom : 1;
+  state.logic.panX = rect.width / 2 - ((minX + maxX) / 2) * state.logic.zoom;
+  state.logic.panY = rect.height / 2 - ((minY + maxY) / 2) * state.logic.zoom;
+}
+
 
 function fitCurrentView() {
   if (state.view === "gis") fitMap();
