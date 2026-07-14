@@ -3300,13 +3300,15 @@ function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLin
   const height = Math.max(820, el.logicCanvas.clientHeight || 820);
   const layoutHeight = Math.max(320, height - reservedBottomHeight);
   const positions = new Map();
-  const hasRingModel = layoutNodes.some(node => node["Ring ID"]);
-  if (hasRingModel) {
-    computeRingAwareLayout(positions, width, layoutHeight, layoutNodes);
+
+  computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+  if (layoutNodes.length <= 120) {
+    applyKamadaKawaiLikeLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
   } else {
-    computeFallbackLayeredLayout(positions, width, layoutHeight, layoutNodes);
+    applySpringLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
   }
-  applySpringLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+  resolveLogicNodeOverlap(positions, width, layoutHeight, layoutNodes, layoutLinks, 8);
+  normalizeLogicPositions(positions, width, layoutHeight, layoutNodes);
 
   state.logic.positions = positions;
   if (resetTransform) {
@@ -3314,6 +3316,166 @@ function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLin
     state.logic.panX = 0;
     state.logic.panY = 0;
   }
+}
+
+function computeStructureAwareInitialLayout(positions, width, height, layoutNodes, layoutLinks) {
+  const nodeSet = new Set(layoutNodes.map(node => node["NE Name"]));
+  const accum = new Map();
+  const paths = logicRingChainPaths(nodeSet);
+
+  if (paths.length) {
+    placeRingChainInitialPositions(accum, paths, width, height);
+    accum.forEach((items, name) => {
+      const total = items.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+      positions.set(name, { x: total.x / items.length, y: total.y / items.length });
+    });
+  }
+
+  const remaining = layoutNodes.filter(node => !positions.has(node["NE Name"]));
+  placeRemainingComponents(positions, remaining, layoutLinks, width, height);
+
+  layoutNodes.forEach((node, index) => {
+    const name = node["NE Name"];
+    if (positions.has(name)) return;
+    const angle = (Math.PI * 2 * index) / Math.max(1, layoutNodes.length);
+    const r = Math.min(width, height) * 0.32;
+    positions.set(name, {
+      x: width / 2 + Math.cos(angle) * r,
+      y: height / 2 + Math.sin(angle) * r
+    });
+  });
+}
+
+function logicRingChainPaths(nodeSet) {
+  if (!state.ringChains.length) return [];
+  const paths = [];
+  state.ringChains.forEach((row, index) => {
+    const rowKey = ringChainRowKey(row, index);
+    const members = (state.indexes.ringChainMembersByName.get(rowKey) || parseMemberPath(row.Member_path))
+      .filter(name => nodeSet.has(name));
+    const uniqueMembers = members.filter((name, memberIndex) => memberIndex === 0 || name !== members[memberIndex - 1]);
+    if (uniqueMembers.length < 2) return;
+    const category = String(row.Category || "").trim().toLowerCase() === "ring" ? "ring" : "link";
+    paths.push({
+      category,
+      name: row.Name || row.Label || rowKey,
+      members: uniqueMembers
+    });
+  });
+  return paths.sort((a, b) => {
+    if (a.category !== b.category) return a.category === "ring" ? -1 : 1;
+    return b.members.length - a.members.length || String(a.name).localeCompare(String(b.name));
+  });
+}
+
+function placeRingChainInitialPositions(accum, paths, width, height) {
+  const count = paths.length;
+  const columns = Math.max(1, Math.ceil(Math.sqrt(count * (width / Math.max(1, height)))));
+  const rows = Math.max(1, Math.ceil(count / columns));
+  const cellW = width / columns;
+  const cellH = height / rows;
+  const padX = Math.min(70, cellW * 0.18);
+  const padY = Math.min(54, cellH * 0.18);
+
+  paths.forEach((path, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const cx = col * cellW + cellW / 2;
+    const cy = row * cellH + cellH / 2;
+    const rx = Math.max(52, cellW / 2 - padX);
+    const ry = Math.max(42, cellH / 2 - padY);
+    if (path.category === "ring") {
+      placePathAsRing(accum, path.members, cx, cy, rx, ry);
+    } else {
+      placePathAsChain(accum, path.members, cx, cy, rx, ry);
+    }
+  });
+}
+
+function placePathAsRing(accum, members, cx, cy, rx, ry) {
+  members.forEach((name, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(1, members.length);
+    addPositionCandidate(accum, name, {
+      x: cx + Math.cos(angle) * rx,
+      y: cy + Math.sin(angle) * ry
+    });
+  });
+}
+
+function placePathAsChain(accum, members, cx, cy, rx, ry) {
+  members.forEach((name, index) => {
+    const ratio = members.length === 1 ? 0.5 : index / (members.length - 1);
+    const x = cx - rx + ratio * rx * 2;
+    const wave = Math.sin(ratio * Math.PI) * ry * 0.36;
+    const y = cy + (index % 2 ? -wave : wave) * 0.42;
+    addPositionCandidate(accum, name, { x, y });
+  });
+}
+
+function addPositionCandidate(accum, name, point) {
+  if (!accum.has(name)) accum.set(name, []);
+  accum.get(name).push(point);
+}
+
+function placeRemainingComponents(positions, nodes, links, width, height) {
+  if (!nodes.length) return;
+  const nodeSet = new Set(nodes.map(node => node["NE Name"]));
+  const components = logicConnectedComponents(nodes, links)
+    .sort((a, b) => b.length - a.length || String(a[0]["NE Name"]).localeCompare(String(b[0]["NE Name"])));
+  const count = components.length;
+  const columns = Math.max(1, Math.ceil(Math.sqrt(count * (width / Math.max(1, height)))));
+  const rows = Math.max(1, Math.ceil(count / columns));
+  const cellW = width / columns;
+  const cellH = height / rows;
+
+  components.forEach((component, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    const cx = col * cellW + cellW / 2;
+    const cy = row * cellH + cellH / 2;
+    const radius = Math.max(46, Math.min(cellW, cellH) * 0.32);
+    const sorted = component.slice().sort((a, b) => String(a["NE Name"]).localeCompare(String(b["NE Name"])));
+    sorted.forEach((node, nodeIndex) => {
+      if (!nodeSet.has(node["NE Name"])) return;
+      const angle = -Math.PI / 2 + (Math.PI * 2 * nodeIndex) / Math.max(1, sorted.length);
+      positions.set(node["NE Name"], {
+        x: cx + Math.cos(angle) * radius,
+        y: cy + Math.sin(angle) * radius
+      });
+    });
+  });
+}
+
+function logicConnectedComponents(nodes, links) {
+  const nodeByName = new Map(nodes.map(node => [node["NE Name"], node]));
+  const adjacency = new Map(nodes.map(node => [node["NE Name"], new Set()]));
+  buildLogicLayoutEdges(nodes, links).forEach(edge => {
+    if (!adjacency.has(edge.srcName) || !adjacency.has(edge.sinkName)) return;
+    adjacency.get(edge.srcName).add(edge.sinkName);
+    adjacency.get(edge.sinkName).add(edge.srcName);
+  });
+
+  const seen = new Set();
+  const components = [];
+  nodes.forEach(node => {
+    const start = node["NE Name"];
+    if (seen.has(start)) return;
+    const queue = [start];
+    const component = [];
+    seen.add(start);
+    while (queue.length) {
+      const name = queue.shift();
+      const item = nodeByName.get(name);
+      if (item) component.push(item);
+      (adjacency.get(name) || []).forEach(next => {
+        if (seen.has(next)) return;
+        seen.add(next);
+        queue.push(next);
+      });
+    }
+    components.push(component);
+  });
+  return components;
 }
 
 function computeRingAwareLayout(positions, width, height, layoutNodes) {
@@ -3428,9 +3590,15 @@ function hasPositionsFor(nodes) {
 }
 
 function logicLayoutKey(nodes, links, isolatedCount) {
+  const layoutVersion = "logic-v2-ring-chain-first";
   const names = nodes.map(node => node["NE Name"]).sort().join("|");
   const edgeKeys = links.map(link => linkKey(link)).sort().join("|");
-  return `${nodes.length}:${links.length}:${isolatedCount}:${names}:${edgeKeys}`;
+  const nodeSet = new Set(nodes.map(node => node["NE Name"]));
+  const pathKeys = logicRingChainPaths(nodeSet)
+    .map(path => `${path.category}:${path.name}:${path.members.join(">")}`)
+    .sort()
+    .join("|");
+  return `${layoutVersion}:${nodes.length}:${links.length}:${isolatedCount}:${names}:${edgeKeys}:${pathKeys}`;
 }
 
 function getIsolatedLayoutMetrics(count, width, height, connectedCount) {
@@ -3491,23 +3659,118 @@ function svgShapeMarkup(shape, radius, fill) {
   return `<circle ${common} r="${radius}"></circle>`;
 }
 
+function buildLogicLayoutEdges(layoutNodes, layoutLinks) {
+  const nodeSet = new Set(layoutNodes.map(node => node["NE Name"]));
+  const edges = [];
+  const seen = new Set();
+  const addEdge = (srcName, sinkName, type, virtual = false) => {
+    if (!nodeSet.has(srcName) || !nodeSet.has(sinkName) || srcName === sinkName) return;
+    const key = [srcName, sinkName].sort().join("::");
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push({ srcName, sinkName, type, virtual });
+  };
+
+  layoutLinks.forEach(link => {
+    addEdge(link["Src NE Name"], link["Sink NE Name"], link["Link Type"] || "Link", false);
+  });
+  logicRingChainPaths(nodeSet).forEach(path => {
+    for (let i = 1; i < path.members.length; i++) {
+      addEdge(path.members[i - 1], path.members[i], path.category === "ring" ? "RingChain-Ring" : "RingChain-Link", true);
+    }
+    if (path.category === "ring" && path.members.length > 2) {
+      addEdge(path.members[path.members.length - 1], path.members[0], "RingChain-Ring", true);
+    }
+  });
+  return edges;
+}
+
+function applyKamadaKawaiLikeLayout(positions, width, height, layoutNodes, layoutLinks) {
+  const nodes = layoutNodes.filter(node => positions.has(node["NE Name"]));
+  const names = nodes.map(node => node["NE Name"]);
+  if (names.length < 2) return;
+
+  const distances = logicGraphDistances(names, buildLogicLayoutEdges(layoutNodes, layoutLinks));
+  const area = width * height;
+  const baseLength = Math.sqrt(area / Math.max(1, names.length)) * 0.82;
+  const iterations = names.length > 80 ? 120 : 170;
+  let temperature = Math.min(width, height) * 0.055;
+
+  for (let step = 0; step < iterations; step++) {
+    const disp = new Map(names.map(name => [name, { x: 0, y: 0 }]));
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        const aName = names[i];
+        const bName = names[j];
+        const a = positions.get(aName);
+        const b = positions.get(bName);
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        dx /= dist;
+        dy /= dist;
+        const graphDistance = distances.get([aName, bName].sort().join("::")) || 4;
+        const ideal = Math.min(baseLength * graphDistance, baseLength * 4.2);
+        const strength = 1 / Math.max(1, graphDistance * graphDistance);
+        const force = (dist - ideal) * strength * 0.18;
+        disp.get(aName).x += dx * force;
+        disp.get(aName).y += dy * force;
+        disp.get(bName).x -= dx * force;
+        disp.get(bName).y -= dy * force;
+      }
+    }
+    moveLogicPositions(positions, names, disp, width, height, temperature);
+    temperature *= 0.975;
+  }
+}
+
+function logicGraphDistances(names, edges) {
+  const adjacency = new Map(names.map(name => [name, new Set()]));
+  edges.forEach(edge => {
+    if (!adjacency.has(edge.srcName) || !adjacency.has(edge.sinkName)) return;
+    adjacency.get(edge.srcName).add(edge.sinkName);
+    adjacency.get(edge.sinkName).add(edge.srcName);
+  });
+
+  const distances = new Map();
+  names.forEach(start => {
+    const queue = [start];
+    const seen = new Map([[start, 0]]);
+    while (queue.length) {
+      const name = queue.shift();
+      const distance = seen.get(name);
+      (adjacency.get(name) || []).forEach(next => {
+        if (seen.has(next)) return;
+        seen.set(next, distance + 1);
+        queue.push(next);
+      });
+    }
+    names.forEach(end => {
+      if (start === end) return;
+      const key = [start, end].sort().join("::");
+      if (!distances.has(key)) distances.set(key, seen.get(end) || 5);
+    });
+  });
+  return distances;
+}
+
 function applySpringLayout(positions, width, height, layoutNodes, layoutLinks) {
   const nodes = layoutNodes.filter(node => positions.has(node["NE Name"]));
   const names = nodes.map(node => node["NE Name"]);
-  const nodeByName = new Map(nodes.map(node => [node["NE Name"], node]));
-  const edges = layoutLinks
-    .filter(link => positions.has(link["Src NE Name"]) && positions.has(link["Sink NE Name"]))
-    .map(link => ({ srcName: link["Src NE Name"], sinkName: link["Sink NE Name"], type: link["Link Type"] }));
+  const edges = buildLogicLayoutEdges(layoutNodes, layoutLinks)
+    .filter(edge => positions.has(edge.srcName) && positions.has(edge.sinkName));
   if (!nodes.length) return;
 
   const area = width * height;
-  const k = Math.sqrt(area / Math.max(1, nodes.length)) * 0.72;
+  const k = Math.sqrt(area / Math.max(1, nodes.length)) * 0.78;
   const ideal = {
     "PE-FullMesh": k * 1.35,
     "ASG-Ring": k * 0.92,
     "CSG-Ring": k * 0.72,
     "ASG-Uplink": k * 1.28,
-    "CSG-Uplink": k * 1.05
+    "CSG-Uplink": k * 1.05,
+    "RingChain-Ring": k * 0.82,
+    "RingChain-Link": k * 0.95
   };
   const anchors = new Map();
   nodes.forEach(node => {
@@ -3554,25 +3817,104 @@ function applySpringLayout(positions, width, height, layoutNodes, layoutLinks) {
     });
 
     names.forEach(name => {
-      const node = nodeByName.get(name);
       const p = positions.get(name);
       const d = disp.get(name);
       const anchor = anchors.get(name);
-      const role = String(node.Role || "").toUpperCase();
-      const targetY = role === "PE" ? height * 0.16 : role === "ASG" ? height * 0.38 : role === "CSG" ? height * 0.68 : height * 0.82;
-      d.y += (targetY - p.y) * 0.35;
-      d.x += (anchor.x - p.x) * 0.045;
-      d.y += (anchor.y - p.y) * 0.055;
-
-      const len = Math.sqrt(d.x * d.x + d.y * d.y) || 0.01;
-      const limited = Math.min(len, temperature);
-      const labelPad = 130;
-      p.x = clamp(p.x + (d.x / len) * limited, 42, width - labelPad);
-      p.y = clamp(p.y + (d.y / len) * limited, 42, height - 46);
+      d.x += (anchor.x - p.x) * 0.035;
+      d.y += (anchor.y - p.y) * 0.035;
     });
 
+    moveLogicPositions(positions, names, disp, width, height, temperature);
     temperature *= 0.965;
   }
+}
+
+function moveLogicPositions(positions, names, disp, width, height, temperature) {
+  names.forEach(name => {
+    const p = positions.get(name);
+    const d = disp.get(name);
+    const len = Math.sqrt(d.x * d.x + d.y * d.y) || 0.01;
+    const limited = Math.min(len, temperature);
+    const labelPad = logicLabelWidth(name);
+    p.x = clamp(p.x + (d.x / len) * limited, 42, width - labelPad);
+    p.y = clamp(p.y + (d.y / len) * limited, 42, height - 46);
+  });
+}
+
+function resolveLogicNodeOverlap(positions, width, height, layoutNodes, layoutLinks, rounds = 6) {
+  const nodes = layoutNodes.filter(node => positions.has(node["NE Name"]));
+  const names = nodes.map(node => node["NE Name"]);
+  if (names.length < 2) return;
+  const degreeLinks = buildLogicLayoutEdges(layoutNodes, layoutLinks).map(edge => ({
+    "Src NE Name": edge.srcName,
+    "Sink NE Name": edge.sinkName
+  }));
+  const degreeMap = getNodeDegreeMap(degreeLinks);
+
+  for (let round = 0; round < rounds; round++) {
+    let moved = false;
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        const aName = names[i];
+        const bName = names[j];
+        const a = positions.get(aName);
+        const b = positions.get(bName);
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (!dist) {
+          dx = ((i % 3) - 1) || 1;
+          dy = ((j % 3) - 1) || -1;
+          dist = Math.sqrt(dx * dx + dy * dy);
+        }
+        const minDistance = logicNodeRadius(degreeMap.get(aName) || 0, nodes[i])
+          + logicNodeRadius(degreeMap.get(bName) || 0, nodes[j])
+          + Math.min(92, (logicLabelWidth(aName) + logicLabelWidth(bName)) * 0.22)
+          + 12;
+        if (dist >= minDistance) continue;
+        const push = (minDistance - dist) / 2 + 0.5;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        a.x = clamp(a.x - ux * push, 42, width - logicLabelWidth(aName));
+        a.y = clamp(a.y - uy * push, 42, height - 46);
+        b.x = clamp(b.x + ux * push, 42, width - logicLabelWidth(bName));
+        b.y = clamp(b.y + uy * push, 42, height - 46);
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+}
+
+function normalizeLogicPositions(positions, width, height, layoutNodes) {
+  const nodes = layoutNodes.filter(node => positions.has(node["NE Name"]));
+  if (!nodes.length) return;
+  const xs = nodes.map(node => positions.get(node["NE Name"]).x);
+  const ys = nodes.map(node => positions.get(node["NE Name"]).y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const pad = 64;
+  const labelPad = 150;
+  const rangeX = Math.max(1, maxX - minX);
+  const rangeY = Math.max(1, maxY - minY);
+  const scale = Math.min((width - pad * 2 - labelPad) / rangeX, (height - pad * 2) / rangeY);
+  const safeScale = Number.isFinite(scale) && scale > 0 ? Math.min(scale, 1.8) : 1;
+  const usedW = rangeX * safeScale;
+  const usedH = rangeY * safeScale;
+  const offsetX = pad + Math.max(0, (width - labelPad - pad * 2 - usedW) / 2);
+  const offsetY = pad + Math.max(0, (height - pad * 2 - usedH) / 2);
+  nodes.forEach(node => {
+    const name = node["NE Name"];
+    const point = positions.get(name);
+    point.x = offsetX + (point.x - minX) * safeScale;
+    point.y = offsetY + (point.y - minY) * safeScale;
+  });
+}
+
+function logicLabelWidth(name) {
+  return clamp(String(name || "").length * 6.5 + 42, 90, 190);
 }
 
 function locateRuleFromQuickInput() {

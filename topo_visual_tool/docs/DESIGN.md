@@ -151,6 +151,28 @@ Mock 数据不再只覆盖小规模功能验证，而是生成上百个网元和
 
 该算法不是直接运行 Python NetworkX，而是在浏览器端实现同类 spring layout 思路，以保持本地 HTML 直接打开的交付形态。
 
+### 2.8.1 Ring/Chain First Logic Layout
+
+Logic Topo layout now prioritizes ring/chain business structure over role hierarchy. When a ring/chain table exists, valid `Member_path` sequences are used as the first layout seed:
+
+- `Category=Ring` rows are initialized as ellipse/circle paths according to member order.
+- `Category=Link` rows are initialized as chain paths according to member order.
+- Adjacent `Member_path` pairs are added as virtual layout edges even when they are not styled, so the force model preserves ring/chain continuity.
+- Devices not covered by ring/chain paths are placed by connected components, then refined together with the rest of the graph.
+
+The role rows `PE / ASG / CSG` are no longer hard layout constraints. Role still affects visual style and node size, but layout clarity is driven by ring/chain paths and link relationships.
+
+The layout pipeline is:
+
+1. Build a visible layout graph from current nodes, links, and valid ring/chain member paths.
+2. Generate ring/chain-first deterministic seed coordinates.
+3. For small graphs, run a browser-side Kamada-Kawai-like optimization based on graph shortest-path distance.
+4. For medium graphs, run an enhanced spring layout using real links and ring/chain virtual edges.
+5. Resolve node and label overlap with repeated pairwise separation.
+6. Normalize final coordinates into the available SVG viewport.
+
+Large graph protection remains unchanged. Logic Topo still requires users to reduce the visible result when the current view exceeds the configured node/link threshold.
+
 ### 2.9 批量网元/链路查询过滤
 
 页面新增自适应批量查询框，支持用户从 Word、Excel、CSV 或其他三方软件复制内容后直接粘贴：
