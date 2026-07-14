@@ -306,6 +306,7 @@ topo_visual_tool.html
 - `device.csv`：当前网元测试表。
 - `link.csv`：当前链路测试表，包含扩展链路属性和 `Route WKT`。
 - `ring_chain_sample.csv`：环链识别测试表，覆盖 `Ring`、`Link` 和缺失成员 warning 场景。
+- `logic_layout_mid_device.csv` / `logic_layout_mid_link.csv` / `logic_layout_mid_ring_chain.csv`：Logic Topo 中小规模布局测试数据，包含 50 个 ASG、250 个 CSG、25 个接入环和 17 条环上链。
 - `colocated_device_sample.csv` / `colocated_link_sample.csv`：同经纬度共址网元测试表，覆盖同角色共址、混合角色共址和 PE/ASG/CSG 混合共址。
 - `thailand_colocated_large_device.csv` / `thailand_colocated_large_link.csv`：泰国境内大规模共站点压测数据，包含 60 个 ASG、1100 个 CSG、500 个经纬度站点和 1160 条链路。
 

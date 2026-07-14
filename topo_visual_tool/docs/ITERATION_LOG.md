@@ -913,3 +913,14 @@
 - 新增布局后的节点和标签重叠消解，并将最终坐标归一化到 SVG 可视区域。
 - 大图保护阈值保持不变，仍要求先通过定位、过滤或批量查询缩小范围。
 - README 和 DESIGN.md 已同步记录新的环链优先布局契约。
+
+## 2026-07-14 Logic Topo 中小规模布局测试数据
+
+本轮新增一组用于验证 Logic Topo 环链优先布局效果的中小规模测试数据。
+
+- 新增 `logic_layout_mid_device.csv`，包含 50 个 ASG 和 250 个 CSG，共 300 个网元。
+- 新增 `logic_layout_mid_link.csv`，包含 300 条链路，每对 ASG 汇聚 10 个 CSG 并形成接入环。
+- 新增 `logic_layout_mid_ring_chain.csv`，包含 25 条 `Category=Ring` 记录和 17 条 `Category=Link` 记录。
+- 每条 Ring 的 `Member_path` 按 `ASG-A -> 10 个 CSG -> ASG-B` 顺序构造，用于测试环形/椭圆初始布局。
+- 部分环补充 1-2 条 Link 记录，用于测试环上链式路径对 Logic Topo 布局的约束效果。
+- 校验结果：源宿断链数为 0，`Member_path` 缺失成员数为 0。
