@@ -3302,8 +3302,8 @@ function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLin
   const positions = new Map();
 
   computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
-  if (layoutNodes.length <= 120) {
-    applyKamadaKawaiLikeLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+  if (layoutNodes.length <= 300) {
+    applyKamadaKawaiLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
   } else {
     applySpringLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
   }
@@ -3685,43 +3685,133 @@ function buildLogicLayoutEdges(layoutNodes, layoutLinks) {
   return edges;
 }
 
-function applyKamadaKawaiLikeLayout(positions, width, height, layoutNodes, layoutLinks) {
-  const nodes = layoutNodes.filter(node => positions.has(node["NE Name"]));
-  const names = nodes.map(node => node["NE Name"]);
+function applyKamadaKawaiLayout(positions, width, height, layoutNodes, layoutLinks) {
+  const positioned = layoutNodes.filter(node => positions.has(node["NE Name"]));
+  if (positioned.length < 2) return;
+
+  const edges = buildLogicLayoutEdges(layoutNodes, layoutLinks)
+    .filter(edge => positions.has(edge.srcName) && positions.has(edge.sinkName));
+  const components = logicConnectedComponents(positioned, edges.map(edge => ({
+    "Src NE Name": edge.srcName,
+    "Sink NE Name": edge.sinkName,
+    "Link Type": edge.type
+  }))).filter(component => component.length > 1);
+
+  components.forEach(component => {
+    const names = component.map(node => node["NE Name"]);
+    const componentEdges = edges.filter(edge => names.includes(edge.srcName) && names.includes(edge.sinkName));
+    optimizeKamadaKawaiComponent(positions, names, componentEdges, width, height);
+  });
+}
+
+function optimizeKamadaKawaiComponent(positions, names, edges, width, height) {
   if (names.length < 2) return;
-
-  const distances = logicGraphDistances(names, buildLogicLayoutEdges(layoutNodes, layoutLinks));
+  const distances = logicGraphDistances(names, edges);
   const area = width * height;
-  const baseLength = Math.sqrt(area / Math.max(1, names.length)) * 0.82;
-  const iterations = names.length > 80 ? 120 : 170;
-  let temperature = Math.min(width, height) * 0.055;
+  const baseLength = Math.sqrt(area / Math.max(1, names.length)) * 0.46;
+  const matrices = buildKamadaKawaiMatrices(names, distances, baseLength);
+  const maxOuter = names.length > 120 ? 180 : 260;
+  const maxInner = 16;
+  const epsilon = 0.08;
 
-  for (let step = 0; step < iterations; step++) {
-    const disp = new Map(names.map(name => [name, { x: 0, y: 0 }]));
+  for (let outer = 0; outer < maxOuter; outer++) {
+    let targetIndex = -1;
+    let targetDelta = 0;
     for (let i = 0; i < names.length; i++) {
-      for (let j = i + 1; j < names.length; j++) {
-        const aName = names[i];
-        const bName = names[j];
-        const a = positions.get(aName);
-        const b = positions.get(bName);
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-        dx /= dist;
-        dy /= dist;
-        const graphDistance = distances.get([aName, bName].sort().join("::")) || 4;
-        const ideal = Math.min(baseLength * graphDistance, baseLength * 4.2);
-        const strength = 1 / Math.max(1, graphDistance * graphDistance);
-        const force = (dist - ideal) * strength * 0.18;
-        disp.get(aName).x += dx * force;
-        disp.get(aName).y += dy * force;
-        disp.get(bName).x -= dx * force;
-        disp.get(bName).y -= dy * force;
+      const gradient = kamadaKawaiGradient(positions, names, matrices, i);
+      if (gradient.delta > targetDelta) {
+        targetDelta = gradient.delta;
+        targetIndex = i;
       }
     }
-    moveLogicPositions(positions, names, disp, width, height, temperature);
-    temperature *= 0.975;
+    if (targetIndex < 0 || targetDelta < epsilon) break;
+
+    for (let inner = 0; inner < maxInner; inner++) {
+      const step = kamadaKawaiNewtonStep(positions, names, matrices, targetIndex);
+      if (!step || Math.abs(step.dx) + Math.abs(step.dy) < 0.01) break;
+      const point = positions.get(names[targetIndex]);
+      point.x = clamp(point.x + step.dx, 42, width - logicLabelWidth(names[targetIndex]));
+      point.y = clamp(point.y + step.dy, 42, height - 46);
+      const gradient = kamadaKawaiGradient(positions, names, matrices, targetIndex);
+      if (gradient.delta < epsilon) break;
+    }
   }
+}
+
+function buildKamadaKawaiMatrices(names, distances, baseLength) {
+  const length = new Map();
+  const strength = new Map();
+  names.forEach((a, i) => {
+    for (let j = i + 1; j < names.length; j++) {
+      const b = names[j];
+      const key = [a, b].sort().join("::");
+      const graphDistance = Math.max(1, distances.get(key) || 5);
+      length.set(key, Math.min(baseLength * graphDistance, baseLength * 5));
+      strength.set(key, 1 / (graphDistance * graphDistance));
+    }
+  });
+  return { length, strength };
+}
+
+function kamadaKawaiGradient(positions, names, matrices, index) {
+  const name = names[index];
+  const point = positions.get(name);
+  let gx = 0;
+  let gy = 0;
+  for (let i = 0; i < names.length; i++) {
+    if (i === index) continue;
+    const otherName = names[i];
+    const other = positions.get(otherName);
+    const key = [name, otherName].sort().join("::");
+    const k = matrices.strength.get(key) || 0;
+    const l = matrices.length.get(key) || 1;
+    const dx = point.x - other.x;
+    const dy = point.y - other.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+    const factor = k * (1 - l / dist);
+    gx += factor * dx;
+    gy += factor * dy;
+  }
+  return { gx, gy, delta: Math.sqrt(gx * gx + gy * gy) };
+}
+
+function kamadaKawaiNewtonStep(positions, names, matrices, index) {
+  const name = names[index];
+  const point = positions.get(name);
+  let gx = 0;
+  let gy = 0;
+  let hxx = 0;
+  let hyy = 0;
+  let hxy = 0;
+  for (let i = 0; i < names.length; i++) {
+    if (i === index) continue;
+    const otherName = names[i];
+    const other = positions.get(otherName);
+    const key = [name, otherName].sort().join("::");
+    const k = matrices.strength.get(key) || 0;
+    const l = matrices.length.get(key) || 1;
+    const dx = point.x - other.x;
+    const dy = point.y - other.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+    const dist3 = Math.max(0.000001, dist * dist * dist);
+    const factor = k * (1 - l / dist);
+    gx += factor * dx;
+    gy += factor * dy;
+    hxx += k * (1 - (l * dy * dy) / dist3);
+    hyy += k * (1 - (l * dx * dx) / dist3);
+    hxy += k * ((l * dx * dy) / dist3);
+  }
+  const det = hxx * hyy - hxy * hxy;
+  if (!Number.isFinite(det) || Math.abs(det) < 0.000001) return null;
+  const dx = (-gx * hyy + gy * hxy) / det;
+  const dy = (gx * hxy - gy * hxx) / det;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+  const maxStep = 36;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len > maxStep) {
+    return { dx: (dx / len) * maxStep, dy: (dy / len) * maxStep };
+  }
+  return { dx, dy };
 }
 
 function logicGraphDistances(names, edges) {

@@ -79,7 +79,7 @@ topo_visual_tool.html
 - GIS 稳定性优化：缩放/拖动后防抖重绘，长跨度直连链路按包围盒与视窗相交保留显示，在线瓦片连续失败时自动切换为本地浅色简洁底图。
 - Logic Topo：在白色 SVG 画布上绘制逻辑连接关系，支持拖拽节点、平移和缩放。
 - Logic Topo 采用环链优先的浏览器端布局：上传环链表后优先根据 `Member_path` 呈现环和链结构。
-- 中小规模 Logic Topo 会按规模选择类 Kamada-Kawai 全局距离优化或增强 spring layout，并保留标签预留空间。
+- 中小规模 Logic Topo 会按规模选择前端 JS 版 Kamada-Kawai 全局距离优化或增强 spring layout，并保留标签预留空间。
 - Logic Topo 会将当前范围内没有连接的网元从 spring layout 中拆出，统一平铺到画布最下层，避免散点影响有连接节点的松散布局。
 - 点击任一节点后，会强调该节点的一跳直连链路和邻居节点，便于查看具体连接关系。
 - Logic 节点大小按自由度自适应，连接越多节点越大。

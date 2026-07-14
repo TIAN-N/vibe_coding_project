@@ -166,12 +166,21 @@ The layout pipeline is:
 
 1. Build a visible layout graph from current nodes, links, and valid ring/chain member paths.
 2. Generate ring/chain-first deterministic seed coordinates.
-3. For small graphs, run a browser-side Kamada-Kawai-like optimization based on graph shortest-path distance.
+3. For small and mid-size graphs up to 300 visible nodes, run a browser-side Kamada-Kawai optimization based on graph shortest-path distance.
 4. For medium graphs, run an enhanced spring layout using real links and ring/chain virtual edges.
 5. Resolve node and label overlap with repeated pairwise separation.
 6. Normalize final coordinates into the available SVG viewport.
 
 Large graph protection remains unchanged. Logic Topo still requires users to reduce the visible result when the current view exceeds the configured node/link threshold.
+
+The JavaScript Kamada-Kawai implementation follows the NetworkX layout idea without requiring Python or SciPy:
+
+- Build connected components from the visible graph.
+- Run BFS inside each component to compute all-pairs graph shortest-path distances.
+- Convert graph distance into ideal geometric distance `L_ij`.
+- Use spring strength `K_ij = 1 / d_ij^2`.
+- Iteratively choose the node with the largest gradient and update it with a Newton step derived from the Kamada-Kawai energy function.
+- Keep component-level seed placement from ring/chain paths, then normalize the final coordinates into the SVG viewport.
 
 ### 2.9 批量网元/链路查询过滤
 

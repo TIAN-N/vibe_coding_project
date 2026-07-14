@@ -924,3 +924,14 @@
 - 每条 Ring 的 `Member_path` 按 `ASG-A -> 10 个 CSG -> ASG-B` 顺序构造，用于测试环形/椭圆初始布局。
 - 部分环补充 1-2 条 Link 记录，用于测试环上链式路径对 Logic Topo 布局的约束效果。
 - 校验结果：源宿断链数为 0，`Member_path` 缺失成员数为 0。
+
+## 2026-07-14 前端 Kamada-Kawai 布局实现
+
+本轮将 Logic Topo 中小规模布局从简化 KK-like pairwise force 改为更接近 NetworkX `kamada_kawai_layout` 思路的前端 JS 实现。
+
+- 当前可见节点不超过 300 时，使用 JS 版 Kamada-Kawai 优化器；超过 300 且仍低于大图保护阈值时，继续使用增强 spring layout。
+- KK 优化按连通分量执行，避免断开组件之间的无意义全局拉扯。
+- 每个分量内部先通过 BFS 计算所有节点对的图最短路径距离。
+- 以 `L_ij = L0 * d_ij` 构造理想几何距离，以 `K_ij = 1 / d_ij^2` 构造弹簧强度。
+- 每轮选择梯度最大的节点，并基于 KK 能量函数的一阶梯度和二阶 Hessian 做 Newton step 更新。
+- 保留环链优先 seed、重叠消解和坐标归一化流程，确保 KK 结果仍服务于环/链结构清晰呈现。
