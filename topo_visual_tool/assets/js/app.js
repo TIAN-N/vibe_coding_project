@@ -481,6 +481,8 @@ const state = {
   logic: {
     positions: new Map(),
     layoutKey: "",
+    layoutWidth: 1280,
+    layoutHeight: 820,
     zoom: 1,
     panX: 0,
     panY: 0,
@@ -3296,12 +3298,17 @@ function bindLogicEvents() {
 }
 
 function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLinks = state.links, reservedBottomHeight = 0) {
-  const width = Math.max(1280, el.logicCanvas.clientWidth || 1280);
-  const height = Math.max(820, el.logicCanvas.clientHeight || 820);
-  const layoutHeight = Math.max(320, height - reservedBottomHeight);
+  const viewportWidth = Math.max(320, el.logicCanvas.clientWidth || 900);
+  const viewportHeight = Math.max(240, el.logicCanvas.clientHeight || 600);
+  const paths = logicRingChainPaths(new Set(layoutNodes.map(node => node["NE Name"])));
+  const layoutSize = getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, reservedBottomHeight);
+  const width = layoutSize.width;
+  const layoutHeight = layoutSize.height;
   const positions = new Map();
+  state.logic.layoutWidth = width;
+  state.logic.layoutHeight = layoutHeight;
 
-  computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+  computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks, paths);
   if (layoutNodes.length <= 300) {
     applyKamadaKawaiLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
   } else {
@@ -3312,16 +3319,30 @@ function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLin
 
   state.logic.positions = positions;
   if (resetTransform) {
-    state.logic.zoom = 1;
-    state.logic.panX = 0;
-    state.logic.panY = 0;
+    fitLogicToBounds(layoutNodes);
   }
 }
 
-function computeStructureAwareInitialLayout(positions, width, height, layoutNodes, layoutLinks) {
+function getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, reservedBottomHeight = 0) {
+  const nodeCount = Math.max(1, layoutNodes.length);
+  const ringCount = paths.filter(path => path.category === "ring").length;
+  const componentEstimate = Math.max(1, ringCount || Math.ceil(nodeCount / 18));
+  const columns = Math.max(1, Math.ceil(Math.sqrt(componentEstimate * 1.45)));
+  const rows = Math.max(1, Math.ceil(componentEstimate / columns));
+  const minCellW = 360;
+  const minCellH = 260;
+  const width = Math.max(viewportWidth, columns * minCellW + 180, Math.sqrt(nodeCount) * 230);
+  const height = Math.max(viewportHeight - reservedBottomHeight, rows * minCellH + 160, Math.sqrt(nodeCount) * 170);
+  return {
+    width: Math.ceil(width),
+    height: Math.ceil(height)
+  };
+}
+
+function computeStructureAwareInitialLayout(positions, width, height, layoutNodes, layoutLinks, precomputedPaths = null) {
   const nodeSet = new Set(layoutNodes.map(node => node["NE Name"]));
   const accum = new Map();
-  const paths = logicRingChainPaths(nodeSet);
+  const paths = precomputedPaths || logicRingChainPaths(nodeSet);
 
   if (paths.length) {
     placeRingChainInitialPositions(accum, paths, width, height);
@@ -3359,6 +3380,7 @@ function logicRingChainPaths(nodeSet) {
     paths.push({
       category,
       name: row.Name || row.Label || rowKey,
+      group: row.Belong_agg || row.Uplink_pair || row.Root1 && row.Root2 && `${row.Root1}***${row.Root2}` || rowKey,
       members: uniqueMembers
     });
   });
@@ -3369,26 +3391,35 @@ function logicRingChainPaths(nodeSet) {
 }
 
 function placeRingChainInitialPositions(accum, paths, width, height) {
-  const count = paths.length;
+  const groups = [...groupBy(paths, path => path.group || path.name).values()]
+    .sort((a, b) => String(a[0].group || a[0].name).localeCompare(String(b[0].group || b[0].name)));
+  const count = groups.length;
   const columns = Math.max(1, Math.ceil(Math.sqrt(count * (width / Math.max(1, height)))));
   const rows = Math.max(1, Math.ceil(count / columns));
   const cellW = width / columns;
   const cellH = height / rows;
-  const padX = Math.min(70, cellW * 0.18);
-  const padY = Math.min(54, cellH * 0.18);
+  const padX = Math.min(90, cellW * 0.16);
+  const padY = Math.min(72, cellH * 0.16);
 
-  paths.forEach((path, index) => {
+  groups.forEach((groupPaths, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
     const cx = col * cellW + cellW / 2;
     const cy = row * cellH + cellH / 2;
-    const rx = Math.max(52, cellW / 2 - padX);
-    const ry = Math.max(42, cellH / 2 - padY);
-    if (path.category === "ring") {
-      placePathAsRing(accum, path.members, cx, cy, rx, ry);
-    } else {
-      placePathAsChain(accum, path.members, cx, cy, rx, ry);
-    }
+    const rx = Math.max(160, cellW / 2 - padX);
+    const ry = Math.max(108, cellH / 2 - padY);
+    const rings = groupPaths.filter(path => path.category === "ring");
+    const chains = groupPaths.filter(path => path.category !== "ring");
+    const primaryRing = rings[0] || groupPaths[0];
+    placePathAsRing(accum, primaryRing.members, cx, cy, rx, ry);
+    chains.forEach((path, chainIndex) => {
+      const inset = 0.34 + chainIndex * 0.13;
+      placePathAsChain(accum, path.members, cx, cy + (chainIndex % 2 ? -ry * 0.18 : ry * 0.18), rx * (1 - inset), ry * 0.48);
+    });
+    rings.slice(1).forEach((path, ringIndex) => {
+      const scale = 0.78 - ringIndex * 0.08;
+      placePathAsRing(accum, path.members, cx, cy, rx * Math.max(0.52, scale), ry * Math.max(0.52, scale));
+    });
   });
 }
 
@@ -3985,12 +4016,12 @@ function normalizeLogicPositions(positions, width, height, layoutNodes) {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const pad = 64;
-  const labelPad = 150;
+  const pad = 120;
+  const labelPad = 220;
   const rangeX = Math.max(1, maxX - minX);
   const rangeY = Math.max(1, maxY - minY);
-  const scale = Math.min((width - pad * 2 - labelPad) / rangeX, (height - pad * 2) / rangeY);
-  const safeScale = Number.isFinite(scale) && scale > 0 ? Math.min(scale, 1.8) : 1;
+  const scale = Math.min(1, (width - pad * 2 - labelPad) / rangeX, (height - pad * 2) / rangeY);
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
   const usedW = rangeX * safeScale;
   const usedH = rangeY * safeScale;
   const offsetX = pad + Math.max(0, (width - labelPad - pad * 2 - usedW) / 2);
@@ -4142,6 +4173,29 @@ function centerLogicOn(name) {
   state.logic.panY = rect.height / 2 - position.y * state.logic.zoom;
 }
 
+function fitLogicToBounds(nodes = getVisibleData().nodes, padding = 72, maxZoom = 1.6) {
+  const points = nodes
+    .map(node => state.logic.positions.get(node["NE Name"]))
+    .filter(Boolean);
+  const rect = el.logicCanvas.getBoundingClientRect();
+  if (!points.length || !rect.width || !rect.height) {
+    state.logic.zoom = 1;
+    state.logic.panX = 0;
+    state.logic.panY = 0;
+    return;
+  }
+  const minX = Math.min(...points.map(point => point.x));
+  const maxX = Math.max(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const maxY = Math.max(...points.map(point => point.y));
+  const boxWidth = Math.max(80, maxX - minX);
+  const boxHeight = Math.max(80, maxY - minY);
+  const nextZoom = clamp(Math.min((rect.width - padding * 2) / boxWidth, (rect.height - padding * 2) / boxHeight), 0.12, maxZoom);
+  state.logic.zoom = Number.isFinite(nextZoom) ? nextZoom : 1;
+  state.logic.panX = rect.width / 2 - ((minX + maxX) / 2) * state.logic.zoom;
+  state.logic.panY = rect.height / 2 - ((minY + maxY) / 2) * state.logic.zoom;
+}
+
 function focusLogicOnNodes(nodes) {
   const names = nodes.map(node => node["NE Name"]).filter(Boolean);
   if (!names.length) return;
@@ -4154,28 +4208,14 @@ function focusLogicOnNodes(nodes) {
     return;
   }
 
-  const points = names.map(name => state.logic.positions.get(name)).filter(Boolean);
-  if (!points.length) return;
-  const minX = Math.min(...points.map(point => point.x));
-  const maxX = Math.max(...points.map(point => point.x));
-  const minY = Math.min(...points.map(point => point.y));
-  const maxY = Math.max(...points.map(point => point.y));
-  const rect = el.logicCanvas.getBoundingClientRect();
-  const boxWidth = Math.max(80, maxX - minX);
-  const boxHeight = Math.max(80, maxY - minY);
-  const nextZoom = clamp(Math.min((rect.width - 120) / boxWidth, (rect.height - 120) / boxHeight), 0.35, 2.2);
-  state.logic.zoom = Number.isFinite(nextZoom) ? nextZoom : 1;
-  state.logic.panX = rect.width / 2 - ((minX + maxX) / 2) * state.logic.zoom;
-  state.logic.panY = rect.height / 2 - ((minY + maxY) / 2) * state.logic.zoom;
+  fitLogicToBounds(nodes, 80, 2.2);
 }
 
 
 function fitCurrentView() {
   if (state.view === "gis") fitMap();
   else {
-    state.logic.zoom = 1;
-    state.logic.panX = 0;
-    state.logic.panY = 0;
+    fitLogicToBounds(getVisibleData().nodes);
     renderLogic(getVisibleData());
   }
 }

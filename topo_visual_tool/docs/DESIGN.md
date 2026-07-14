@@ -165,11 +165,13 @@ The role rows `PE / ASG / CSG` are no longer hard layout constraints. Role still
 The layout pipeline is:
 
 1. Build a visible layout graph from current nodes, links, and valid ring/chain member paths.
-2. Generate ring/chain-first deterministic seed coordinates.
-3. For small and mid-size graphs up to 300 visible nodes, run a browser-side Kamada-Kawai optimization based on graph shortest-path distance.
-4. For medium graphs, run an enhanced spring layout using real links and ring/chain virtual edges.
-5. Resolve node and label overlap with repeated pairwise separation.
-6. Normalize final coordinates into the available SVG viewport.
+2. Create a virtual logic canvas larger than the visible viewport when the topology needs more layout space.
+3. Generate ring/chain-first deterministic seed coordinates on the virtual canvas.
+4. For small and mid-size graphs up to 300 visible nodes, run a browser-side Kamada-Kawai optimization based on graph shortest-path distance.
+5. For medium graphs, run an enhanced spring layout using real links and ring/chain virtual edges.
+6. Resolve node and label overlap with repeated pairwise separation.
+7. Normalize final coordinates into the virtual canvas, not the visible viewport.
+8. Use pan/zoom to fit the virtual layout into the current visible SVG viewport.
 
 Large graph protection remains unchanged. Logic Topo still requires users to reduce the visible result when the current view exceeds the configured node/link threshold.
 
@@ -180,7 +182,9 @@ The JavaScript Kamada-Kawai implementation follows the NetworkX layout idea with
 - Convert graph distance into ideal geometric distance `L_ij`.
 - Use spring strength `K_ij = 1 / d_ij^2`.
 - Iteratively choose the node with the largest gradient and update it with a Newton step derived from the Kamada-Kawai energy function.
-- Keep component-level seed placement from ring/chain paths, then normalize the final coordinates into the SVG viewport.
+- Keep component-level seed placement from ring/chain paths, then normalize the final coordinates into the virtual logic canvas. The visible SVG viewport only controls pan/zoom, so ring/chain structures are not compressed into a single screen-sized rectangle.
+
+Ring/chain seed placement is component based. Rows that share `Belong_agg` or `Uplink_pair` are placed in the same layout cell: the primary ring receives a minimum visual radius, extra chain rows are placed inside or near the ring, and secondary rings are nested with smaller radius. This keeps one ASG pair plus its access ring and in-ring chains readable as one business component.
 
 ### 2.9 批量网元/链路查询过滤
 
