@@ -3300,7 +3300,7 @@ function bindLogicEvents() {
 function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLinks = state.links, reservedBottomHeight = 0) {
   const viewportWidth = Math.max(320, el.logicCanvas.clientWidth || 900);
   const viewportHeight = Math.max(240, el.logicCanvas.clientHeight || 600);
-  const paths = logicStructurePaths(new Set(layoutNodes.map(node => node["NE Name"])), layoutNodes, layoutLinks);
+  const paths = logicRingChainPaths(new Set(layoutNodes.map(node => node["NE Name"])));
   const layoutSize = getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, reservedBottomHeight);
   const width = layoutSize.width;
   const layoutHeight = layoutSize.height;
@@ -3342,7 +3342,7 @@ function getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, r
 function computeStructureAwareInitialLayout(positions, width, height, layoutNodes, layoutLinks, precomputedPaths = null) {
   const nodeSet = new Set(layoutNodes.map(node => node["NE Name"]));
   const accum = new Map();
-  const paths = precomputedPaths || logicStructurePaths(nodeSet, layoutNodes, layoutLinks);
+  const paths = precomputedPaths || logicRingChainPaths(nodeSet);
 
   if (paths.length) {
     placeRingChainInitialPositions(accum, paths, width, height);
@@ -3367,11 +3367,6 @@ function computeStructureAwareInitialLayout(positions, width, height, layoutNode
   });
 }
 
-function logicStructurePaths(nodeSet, layoutNodes = [], layoutLinks = []) {
-  const ringChainPaths = logicRingChainPaths(nodeSet);
-  return ringChainPaths.length ? ringChainPaths : inferLogicPathsFromLinks(nodeSet, layoutNodes, layoutLinks);
-}
-
 function logicRingChainPaths(nodeSet) {
   if (!state.ringChains.length) return [];
   const paths = [];
@@ -3393,119 +3388,6 @@ function logicRingChainPaths(nodeSet) {
     if (a.category !== b.category) return a.category === "ring" ? -1 : 1;
     return b.members.length - a.members.length || String(a.name).localeCompare(String(b.name));
   });
-}
-
-function inferLogicPathsFromLinks(nodeSet, layoutNodes, layoutLinks) {
-  const nodeByName = new Map(layoutNodes.map(node => [node["NE Name"], node]));
-  const csgNames = new Set(layoutNodes
-    .filter(node => roleKey(node) === "CSG" && nodeSet.has(node["NE Name"]))
-    .map(node => node["NE Name"]));
-  if (!csgNames.size) return [];
-
-  const csgAdjacency = new Map([...csgNames].map(name => [name, new Set()]));
-  const asgByCsg = new Map([...csgNames].map(name => [name, new Set()]));
-  layoutLinks.forEach(link => {
-    const src = link["Src NE Name"];
-    const sink = link["Sink NE Name"];
-    const srcNode = nodeByName.get(src);
-    const sinkNode = nodeByName.get(sink);
-    if (!srcNode || !sinkNode) return;
-    const srcRole = roleKey(srcNode);
-    const sinkRole = roleKey(sinkNode);
-    if (srcRole === "CSG" && sinkRole === "CSG" && csgAdjacency.has(src) && csgAdjacency.has(sink)) {
-      csgAdjacency.get(src).add(sink);
-      csgAdjacency.get(sink).add(src);
-      return;
-    }
-    if (srcRole === "ASG" && sinkRole === "CSG" && asgByCsg.has(sink)) asgByCsg.get(sink).add(src);
-    if (srcRole === "CSG" && sinkRole === "ASG" && asgByCsg.has(src)) asgByCsg.get(src).add(sink);
-  });
-
-  const components = csgComponents(csgAdjacency);
-  const paths = [];
-  components.forEach((component, index) => {
-    if (!component.length) return;
-    const orderedCsg = orderCsgComponent(component, csgAdjacency);
-    const asgRoots = [...new Set(component.flatMap(name => [...(asgByCsg.get(name) || [])]))]
-      .sort((a, b) => String(a).localeCompare(String(b)));
-    const roots = chooseAsgRootsForComponent(asgRoots, orderedCsg, asgByCsg);
-    const members = [
-      ...(roots.left ? [roots.left] : []),
-      ...orderedCsg,
-      ...(roots.right && roots.right !== roots.left ? [roots.right] : [])
-    ];
-    if (members.length < 2) return;
-    const group = roots.left && roots.right
-      ? `${roots.left}***${roots.right}`
-      : roots.left || roots.right || `CSG-COMP-${index + 1}`;
-    const isRing = Boolean(roots.left && roots.right && roots.left !== roots.right && component.length >= 3);
-    paths.push({
-      category: isRing ? "ring" : "link",
-      source: "inferred",
-      name: `INFER-${index + 1}`,
-      group,
-      members
-    });
-  });
-  return paths.sort((a, b) => b.members.length - a.members.length || String(a.group).localeCompare(String(b.group)));
-}
-
-function csgComponents(adjacency) {
-  const seen = new Set();
-  const components = [];
-  [...adjacency.keys()].sort().forEach(start => {
-    if (seen.has(start)) return;
-    const queue = [start];
-    const component = [];
-    seen.add(start);
-    while (queue.length) {
-      const name = queue.shift();
-      component.push(name);
-      [...(adjacency.get(name) || [])].sort().forEach(next => {
-        if (seen.has(next)) return;
-        seen.add(next);
-        queue.push(next);
-      });
-    }
-    components.push(component);
-  });
-  return components;
-}
-
-function orderCsgComponent(component, adjacency) {
-  const componentSet = new Set(component);
-  const degree = name => [...(adjacency.get(name) || [])].filter(next => componentSet.has(next)).length;
-  const endpoints = component.filter(name => degree(name) <= 1).sort();
-  const start = endpoints[0] || component.slice().sort()[0];
-  const ordered = [];
-  const seen = new Set();
-  let current = start;
-  let previous = "";
-  while (current && !seen.has(current)) {
-    ordered.push(current);
-    seen.add(current);
-    const next = [...(adjacency.get(current) || [])]
-      .filter(name => componentSet.has(name) && name !== previous && !seen.has(name))
-      .sort()[0];
-    previous = current;
-    current = next;
-  }
-  component.slice().sort().forEach(name => {
-    if (!seen.has(name)) ordered.push(name);
-  });
-  return ordered;
-}
-
-function chooseAsgRootsForComponent(asgRoots, orderedCsg, asgByCsg) {
-  if (!asgRoots.length) return { left: "", right: "" };
-  if (asgRoots.length === 1) return { left: asgRoots[0], right: "" };
-  const first = orderedCsg[0];
-  const last = orderedCsg[orderedCsg.length - 1];
-  const firstAsgs = asgByCsg.get(first) || new Set();
-  const lastAsgs = asgByCsg.get(last) || new Set();
-  const left = asgRoots.find(name => firstAsgs.has(name)) || asgRoots[0];
-  const right = asgRoots.find(name => name !== left && lastAsgs.has(name)) || asgRoots.find(name => name !== left) || asgRoots[1];
-  return { left, right };
 }
 
 function placeRingChainInitialPositions(accum, paths, width, height) {
@@ -3739,12 +3621,12 @@ function hasPositionsFor(nodes) {
 }
 
 function logicLayoutKey(nodes, links, isolatedCount) {
-  const layoutVersion = "logic-v3-inferred-structure";
+  const layoutVersion = "logic-v2-ring-chain-first";
   const names = nodes.map(node => node["NE Name"]).sort().join("|");
   const edgeKeys = links.map(link => linkKey(link)).sort().join("|");
   const nodeSet = new Set(nodes.map(node => node["NE Name"]));
-  const pathKeys = logicStructurePaths(nodeSet, nodes, links)
-    .map(path => `${path.source || "ringChain"}:${path.category}:${path.group || ""}:${path.name}:${path.members.join(">")}`)
+  const pathKeys = logicRingChainPaths(nodeSet)
+    .map(path => `${path.category}:${path.name}:${path.members.join(">")}`)
     .sort()
     .join("|");
   return `${layoutVersion}:${nodes.length}:${links.length}:${isolatedCount}:${names}:${edgeKeys}:${pathKeys}`;
@@ -3823,7 +3705,7 @@ function buildLogicLayoutEdges(layoutNodes, layoutLinks) {
   layoutLinks.forEach(link => {
     addEdge(link["Src NE Name"], link["Sink NE Name"], link["Link Type"] || "Link", false);
   });
-  logicStructurePaths(nodeSet, layoutNodes, layoutLinks).forEach(path => {
+  logicRingChainPaths(nodeSet).forEach(path => {
     for (let i = 1; i < path.members.length; i++) {
       addEdge(path.members[i - 1], path.members[i], path.category === "ring" ? "RingChain-Ring" : "RingChain-Link", true);
     }

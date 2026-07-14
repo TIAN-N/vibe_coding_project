@@ -160,8 +160,6 @@ Logic Topo layout now prioritizes ring/chain business structure over role hierar
 - Adjacent `Member_path` pairs are added as virtual layout edges even when they are not styled, so the force model preserves ring/chain continuity.
 - Devices not covered by ring/chain paths are placed by connected components, then refined together with the rest of the graph.
 
-When no ring/chain table is uploaded, Logic Topo derives a layout-only structure from the current device and link tables. The fallback scans CSG-CSG connected components, finds adjacent ASG uplinks for each component, and builds inferred ASG-CSG-ASG or ASG-CSG paths. These inferred paths are only used as layout seeds and virtual layout edges; they do not mutate uploaded data, do not create ring/chain records, and do not affect ring/chain filtering statistics.
-
 The role rows `PE / ASG / CSG` are no longer hard layout constraints. Role still affects visual style and node size, but layout clarity is driven by ring/chain paths and link relationships.
 
 The layout pipeline is:
