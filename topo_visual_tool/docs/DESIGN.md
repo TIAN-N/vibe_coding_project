@@ -584,6 +584,9 @@ Product contract:
 - The version selector is the active data switch. The project name input edits the active version name.
 - New versions start empty and receive a timestamp name by default.
 - Parsing uploaded device/link/ring-chain files writes data only into the active version.
+- The upload panel records per-version source file metadata for device, link, and optional ring/chain inputs. Source labels are restored when switching versions.
+- Native file inputs are not programmatically repopulated on version switch because browsers do not allow web pages to set local file paths or retain file handles without user selection.
+- When the browser only exposes `C:\fakepath\...` or a file name, the source label stores the file name and the tooltip explains that the full local path is unavailable.
 - Switching versions swaps the active device rows, link rows, ring/chain rows, indexes, quality stats, and per-version interaction state.
 - Per-version interaction state includes highlight rule, filter rule, locate rule, located result, and bulk query.
 - Global preferences remain shared across versions: language, role styles, node/link/ring-chain style rules, route path style, highlight contrast, and condition/search history.
@@ -593,6 +596,7 @@ Implementation contract:
 
 - The existing render pipeline continues to read `state.nodes`, `state.links`, and `state.ringChains`.
 - `state.versions` stores version snapshots; switching first persists the current snapshot, then loads the target snapshot into the existing render state.
+- Each version snapshot includes `sourceFiles`, a lightweight metadata object containing file name/path display text, size, last modified time, and whether the full path was available.
 - Indexes are rebuilt after each switch or upload.
 - Version data is session-only. It is intentionally not stored in `localStorage` because large topology tables can exceed browser storage limits.
 

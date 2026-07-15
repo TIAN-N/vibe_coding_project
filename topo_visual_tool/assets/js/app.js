@@ -65,6 +65,10 @@ const I18N = {
     projectVersionLabel: "数据版本",
     newVersion: "新建版本",
     deleteVersion: "删除版本",
+    chooseFile: "选择文件",
+    noFileSelected: "未选择文件",
+    mockDataSource: "内置 Mock 数据",
+    filePathUnavailable: "浏览器未提供完整本地路径，仅记录文件名",
     untitledVersion: "未命名版本",
     versionCreated: "已新建数据版本：{name}",
     versionDeleted: "已删除数据版本：{name}",
@@ -253,6 +257,10 @@ const I18N = {
     projectVersionLabel: "Data Version",
     newVersion: "New Version",
     deleteVersion: "Delete Version",
+    chooseFile: "Choose File",
+    noFileSelected: "No file selected",
+    mockDataSource: "Built-in Mock data",
+    filePathUnavailable: "The browser did not expose the full local path; only the file name is recorded.",
     untitledVersion: "Untitled Version",
     versionCreated: "Data version created: {name}",
     versionDeleted: "Data version deleted: {name}",
@@ -646,6 +654,9 @@ function bindEvents() {
   el.fitBtn.addEventListener("click", fitCurrentView);
   el.mockBtn.addEventListener("click", loadMockData);
   el.loadFilesBtn.addEventListener("click", loadUploadedFiles);
+  el.neFile.addEventListener("change", () => updateSourceFileFromInput("device", el.neFile));
+  el.linkFile.addEventListener("change", () => updateSourceFileFromInput("link", el.linkFile));
+  if (el.ringChainFile) el.ringChainFile.addEventListener("change", () => updateSourceFileFromInput("ringChain", el.ringChainFile));
   el.locateBtn.addEventListener("click", locateNode);
   el.advancedLocateBtn.addEventListener("click", () => openConditionModal("locate"));
   el.clearLocateBtn.addEventListener("click", clearLocateRule);
@@ -746,6 +757,7 @@ function applyLanguage() {
   renderLinkStyleRules();
   renderRingChainStyleRules();
   renderVersionControls();
+  renderFileSources();
   updateRuleSummaries();
   if (!el.conditionModal.classList.contains("hidden")) renderConditionModal();
 }
@@ -819,8 +831,13 @@ function createEmptyDataVersion(name = formatProjectTimestamp()) {
     nodes: [],
     links: [],
     ringChains: [],
+    sourceFiles: emptySourceFiles(),
     viewState: emptyVersionViewState()
   };
+}
+
+function emptySourceFiles() {
+  return { device: null, link: null, ringChain: null };
 }
 
 function emptyVersionViewState() {
@@ -896,6 +913,7 @@ function persistActiveVersionState() {
   version.nodes = cloneRows(state.nodes);
   version.links = cloneRows(state.links);
   version.ringChains = cloneRows(state.ringChains);
+  version.sourceFiles = cloneSourceFiles(version.sourceFiles || emptySourceFiles());
   version.viewState = {
     highlightRule: cloneRuleGroup(state.highlightRule),
     filterRule: cloneRuleGroup(state.filterRule),
@@ -913,6 +931,7 @@ function loadVersionIntoState(version) {
   state.nodes = cloneRows(version.nodes);
   state.links = cloneRows(version.links);
   state.ringChains = cloneRows(version.ringChains);
+  version.sourceFiles = cloneSourceFiles(version.sourceFiles || emptySourceFiles());
   state.nodeFields = collectFields(state.nodes, REQUIRED_NE);
   state.linkFields = collectFields(state.links, REQUIRED_LINK);
   state.ringChainFields = collectFields(state.ringChains, REQUIRED_RING_CHAIN);
@@ -923,6 +942,7 @@ function loadVersionIntoState(version) {
   state.logic.positions = new Map();
   state.logic.layoutKey = "";
   clearRingChainStyleCache();
+  renderFileSources();
 }
 
 function restoreVersionViewState(viewState) {
@@ -947,6 +967,14 @@ function cloneRows(rows) {
   return (rows || []).map(row => ({ ...row }));
 }
 
+function cloneSourceFiles(sourceFiles) {
+  return {
+    device: sourceFiles && sourceFiles.device ? { ...sourceFiles.device } : null,
+    link: sourceFiles && sourceFiles.link ? { ...sourceFiles.link } : null,
+    ringChain: sourceFiles && sourceFiles.ringChain ? { ...sourceFiles.ringChain } : null
+  };
+}
+
 function cloneBulkQuery(query) {
   if (!query) return null;
   return {
@@ -965,6 +993,81 @@ function renderVersionControls() {
   }).join("");
   el.projectVersionSelect.value = state.activeVersionId;
   if (el.deleteVersionBtn) el.deleteVersionBtn.disabled = !state.versions.length;
+}
+
+function updateSourceFileFromInput(type, input) {
+  const version = activeDataVersion();
+  if (!version || !input) return;
+  version.sourceFiles = cloneSourceFiles(version.sourceFiles || emptySourceFiles());
+  version.sourceFiles[type] = sourceFileFromInput(input);
+  version.updatedAt = new Date().toISOString();
+  renderFileSources();
+  renderVersionControls();
+}
+
+function syncSourceFilesFromInputs() {
+  const version = activeDataVersion();
+  if (!version) return;
+  version.sourceFiles = cloneSourceFiles(version.sourceFiles || emptySourceFiles());
+  const device = sourceFileFromInput(el.neFile);
+  const link = sourceFileFromInput(el.linkFile);
+  const ringChain = sourceFileFromInput(el.ringChainFile);
+  if (device) version.sourceFiles.device = device;
+  if (link) version.sourceFiles.link = link;
+  version.sourceFiles.ringChain = ringChain || null;
+  renderFileSources();
+}
+
+function sourceFileFromInput(input) {
+  const file = input.files && input.files[0];
+  if (!file) return null;
+  const rawPath = input.value || file.webkitRelativePath || file.name;
+  const fakePath = /^C:\\fakepath\\/i.test(rawPath);
+  const pathValue = fakePath ? file.name : rawPath;
+  return {
+    name: file.name,
+    path: pathValue,
+    fullPathAvailable: !fakePath && pathValue !== file.name,
+    size: file.size || 0,
+    lastModified: file.lastModified || 0,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function mockSourceFile(label) {
+  return {
+    name: label,
+    path: t("mockDataSource"),
+    fullPathAvailable: true,
+    size: 0,
+    lastModified: 0,
+    updatedAt: new Date().toISOString(),
+    mock: true
+  };
+}
+
+function renderFileSources() {
+  const version = activeDataVersion();
+  const sourceFiles = version && version.sourceFiles || emptySourceFiles();
+  renderFileSource(el.neFileSource, sourceFiles.device);
+  renderFileSource(el.linkFileSource, sourceFiles.link);
+  renderFileSource(el.ringChainFileSource, sourceFiles.ringChain);
+}
+
+function renderFileSource(node, source) {
+  if (!node) return;
+  if (!source) {
+    node.textContent = t("noFileSelected");
+    node.title = t("noFileSelected");
+    node.classList.remove("has-file");
+    return;
+  }
+  const text = source.path || source.name || t("noFileSelected");
+  node.textContent = text;
+  node.title = source.fullPathAvailable || source.mock
+    ? text
+    : `${source.name || text}\n${t("filePathUnavailable")}`;
+  node.classList.add("has-file");
 }
 
 function clearFileInputs() {
@@ -1912,6 +2015,7 @@ async function loadUploadedFiles() {
     const reads = [readDataFile(neFile), readDataFile(linkFile)];
     if (ringChainFile) reads.push(readDataFile(ringChainFile));
     const [nodes, links, ringChains = []] = await Promise.all(reads);
+    syncSourceFilesFromInputs();
     setData(nodes, links, ringChainFile ? ringChains : []);
     const stats = ringChainStats();
     const message = ringChainFile
@@ -2004,6 +2108,14 @@ function parseCsv(text) {
 
 function loadMockData() {
   const { nodes, links } = createMockTopology();
+  const version = activeDataVersion();
+  if (version) {
+    version.sourceFiles = {
+      device: mockSourceFile("Mock Device"),
+      link: mockSourceFile("Mock Link"),
+      ringChain: null
+    };
+  }
   setData(nodes, links);
   setMessage(el.uploadMessage, t("mockLoaded", { devices: nodes.length, links: links.length }), "ok");
 }
