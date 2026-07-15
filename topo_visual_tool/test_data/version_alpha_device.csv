@@ -1,0 +1,7 @@
+NE Name,Role,Longitude,Latitude,Region,Vendor,Status,Scenario
+ALPHA-PE-01,PE,100.501800,13.756300,Bangkok,Huawei,Up,Version Alpha
+ALPHA-ASG-01,ASG,100.565000,13.812000,Bangkok-North,Nokia,Up,Version Alpha
+ALPHA-ASG-02,ASG,100.620000,13.742000,Bangkok-East,ZTE,Maintenance,Version Alpha
+ALPHA-CSG-01,CSG,100.540000,13.790000,Bangkok-North,Huawei,Up,Version Alpha
+ALPHA-CSG-02,CSG,100.575000,13.770000,Bangkok-North,Cisco,Up,Version Alpha
+ALPHA-CSG-03,CSG,100.605000,13.715000,Bangkok-East,ZTE,Down,Version Alpha

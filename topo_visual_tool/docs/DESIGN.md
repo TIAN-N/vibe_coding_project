@@ -575,6 +575,27 @@ The top-right toolbar includes a project name field before the language switch. 
 - Users can edit the field directly to name the current data version.
 - Language switching updates only labels and placeholders; the user-entered project name is preserved.
 
+## 13.1 Multi-Version Data Workspace
+
+The project name field is now paired with a data version selector. A single opened HTML page can hold multiple topology data versions during the current browser session.
+
+Product contract:
+
+- The version selector is the active data switch. The project name input edits the active version name.
+- New versions start empty and receive a timestamp name by default.
+- Parsing uploaded device/link/ring-chain files writes data only into the active version.
+- Switching versions swaps the active device rows, link rows, ring/chain rows, indexes, quality stats, and per-version interaction state.
+- Per-version interaction state includes highlight rule, filter rule, locate rule, located result, and bulk query.
+- Global preferences remain shared across versions: language, role styles, node/link/ring-chain style rules, route path style, highlight contrast, and condition/search history.
+- Deleting the last remaining version clears it instead of leaving the page without an active version.
+
+Implementation contract:
+
+- The existing render pipeline continues to read `state.nodes`, `state.links`, and `state.ringChains`.
+- `state.versions` stores version snapshots; switching first persists the current snapshot, then loads the target snapshot into the existing render state.
+- Indexes are rebuilt after each switch or upload.
+- Version data is session-only. It is intentionally not stored in `localStorage` because large topology tables can exceed browser storage limits.
+
 ## 14. Current Interaction Contract
 
 This section consolidates the current behavior after recent feature extensions.
@@ -589,7 +610,7 @@ The tool has three upload inputs:
 
 Parsing is triggered by the single Parse Upload action. Device and link tables are validated first. If a ring/chain table is provided, it is validated and cached after the core topology data is loaded. A missing ring/chain table is treated as a normal state and does not expose ring/chain style controls.
 
-Successful parsing also refreshes the project name field with a timestamp. The project name is metadata for the current page state only; it does not alter device, link, ring/chain, or style records.
+Successful parsing writes the parsed rows into the active data version. If the active version name has not been manually edited, the project name field refreshes to the parse timestamp. If the user already renamed the version, parsing preserves that name. The project name remains metadata; it does not alter device, link, ring/chain, or style records.
 
 ### 14.2 Condition Source Contract
 

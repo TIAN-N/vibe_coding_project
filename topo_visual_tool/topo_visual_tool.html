@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>拓扑可视工具</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
@@ -15,10 +16,18 @@
         <span data-i18n="appSubtitle">CSV / XLSX 上传，GIS 与逻辑拓扑联动</span>
       </div>
       <div class="top-actions">
+        <label class="project-version-field">
+          <span data-i18n="projectVersionLabel">数据版本</span>
+          <select id="projectVersionSelect" aria-label="Data version"></select>
+        </label>
         <label class="project-name-field">
           <span data-i18n="projectNameLabel">项目名称</span>
           <input id="projectNameInput" type="text" placeholder="2026-07-01-23-59-59" data-i18n-placeholder="projectNamePlaceholder">
         </label>
+        <div class="version-actions">
+          <button id="newVersionBtn" type="button" data-i18n="newVersion">新建版本</button>
+          <button id="deleteVersionBtn" class="danger" type="button" data-i18n="deleteVersion">删除版本</button>
+        </div>
         <div class="segmented compact" aria-label="Language">
           <button id="langZhBtn" class="active" type="button">中文</button>
           <button id="langEnBtn" type="button">English</button>
@@ -58,6 +67,7 @@
         <section class="section">
           <h2 data-i18n="sectionStats">统计</h2>
           <div class="stats">
+            <div class="stat stat-wide"><b id="statVersion">-</b><span data-i18n="currentVersion">当前版本</span></div>
             <div class="stat"><b id="statNodes">0</b><span data-i18n="devices">网元</span></div>
             <div class="stat"><b id="statLinks">0</b><span data-i18n="links">链路</span></div>
             <div class="stat"><b id="statVisibleNodes">0</b><span data-i18n="visibleDevices">当前显示网元</span></div>
@@ -268,8 +278,8 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.topoLeafletLoaded && window.topoLeafletLoaded()"></script>
   <script src="assets/js/app.js"></script>
+  <script async src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </body>
 </html>

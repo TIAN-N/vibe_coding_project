@@ -62,10 +62,18 @@ const I18N = {
     ringChainTable: "环链表",
     projectNameLabel: "项目名称",
     projectNamePlaceholder: "输入项目名称",
+    projectVersionLabel: "数据版本",
+    newVersion: "新建版本",
+    deleteVersion: "删除版本",
+    untitledVersion: "未命名版本",
+    versionCreated: "已新建数据版本：{name}",
+    versionDeleted: "已删除数据版本：{name}",
+    versionSwitched: "已切换到数据版本：{name}",
     parseUpload: "解析上传数据",
     loadMock: "加载 Mock",
     requiredFields: "必选字段：NE Name、Role、Longitude、Latitude、Src NE Name、Sink NE Name。",
     sectionStats: "统计",
+    currentVersion: "当前版本",
     devices: "网元",
     links: "链路",
     rings: "环",
@@ -242,10 +250,18 @@ const I18N = {
     ringChainTable: "Ring/Chain Table",
     projectNameLabel: "Project",
     projectNamePlaceholder: "Enter project name",
+    projectVersionLabel: "Data Version",
+    newVersion: "New Version",
+    deleteVersion: "Delete Version",
+    untitledVersion: "Untitled Version",
+    versionCreated: "Data version created: {name}",
+    versionDeleted: "Data version deleted: {name}",
+    versionSwitched: "Switched to data version: {name}",
     parseUpload: "Parse Upload",
     loadMock: "Load Mock",
     requiredFields: "Required fields: NE Name, Role, Longitude, Latitude, Src NE Name, Sink NE Name.",
     sectionStats: "Statistics",
+    currentVersion: "Current Version",
     devices: "Devices",
     links: "Links",
     rings: "Rings",
@@ -416,6 +432,8 @@ const I18N = {
 const state = {
   lang: "zh",
   projectName: "",
+  versions: [],
+  activeVersionId: "",
   nodes: [],
   links: [],
   ringChains: [],
@@ -499,10 +517,18 @@ document.querySelectorAll("[id]").forEach(item => {
   el[item.id] = item;
 });
 
+window.topoLeafletLoaded = () => {
+  if (state.map || !window.L) return;
+  initMap();
+  renderTopologies();
+  if (state.nodes.length) fitCurrentView();
+};
+
 init();
 
 function init() {
   loadSearchHistory();
+  initDataVersions();
   initMap();
   fillOperatorOptions();
   initStyleControls();
@@ -607,6 +633,9 @@ function onMapClick(event) {
 }
 
 function bindEvents() {
+  el.projectVersionSelect.addEventListener("change", () => switchDataVersion(el.projectVersionSelect.value));
+  el.newVersionBtn.addEventListener("click", createAndSwitchDataVersion);
+  el.deleteVersionBtn.addEventListener("click", deleteActiveDataVersion);
   el.projectNameInput.addEventListener("input", updateProjectNameFromControl);
   el.langZhBtn.addEventListener("click", () => switchLanguage("zh"));
   el.langEnBtn.addEventListener("click", () => switchLanguage("en"));
@@ -716,6 +745,7 @@ function applyLanguage() {
   renderNodeStyleRules();
   renderLinkStyleRules();
   renderRingChainStyleRules();
+  renderVersionControls();
   updateRuleSummaries();
   if (!el.conditionModal.classList.contains("hidden")) renderConditionModal();
 }
@@ -730,14 +760,35 @@ function t(key, params = {}) {
 
 function updateProjectNameFromControl() {
   state.projectName = el.projectNameInput.value.trim();
+  const version = activeDataVersion();
+  if (version) {
+    version.name = state.projectName || t("untitledVersion");
+    version.nameTouched = true;
+    version.updatedAt = new Date().toISOString();
+    persistActiveVersionState();
+    renderVersionControls();
+  }
 }
 
-function setDefaultProjectName(date = new Date()) {
+function setDefaultProjectName(date = new Date(), options = {}) {
+  const { force = true } = options;
+  const version = activeDataVersion();
+  if (version && version.nameTouched && !force) {
+    state.projectName = version.name;
+    if (el.projectNameInput) el.projectNameInput.value = state.projectName;
+    return;
+  }
   state.projectName = formatProjectTimestamp(date);
   if (el.projectNameInput) el.projectNameInput.value = state.projectName;
+  if (version) {
+    version.name = state.projectName;
+    version.nameTouched = false;
+    version.updatedAt = date.toISOString();
+    renderVersionControls();
+  }
 }
 
-function formatProjectTimestamp(date) {
+function formatProjectTimestamp(date = new Date()) {
   const pad = value => String(value).padStart(2, "0");
   return [
     date.getFullYear(),
@@ -747,6 +798,179 @@ function formatProjectTimestamp(date) {
     pad(date.getMinutes()),
     pad(date.getSeconds())
   ].join("-");
+}
+
+function initDataVersions() {
+  if (state.versions.length) return;
+  const version = createEmptyDataVersion(formatProjectTimestamp());
+  state.versions.push(version);
+  state.activeVersionId = version.id;
+  loadVersionIntoState(version);
+  renderVersionControls();
+}
+
+function createEmptyDataVersion(name = formatProjectTimestamp()) {
+  return {
+    id: `version-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    nameTouched: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    nodes: [],
+    links: [],
+    ringChains: [],
+    viewState: emptyVersionViewState()
+  };
+}
+
+function emptyVersionViewState() {
+  return {
+    highlightRule: null,
+    filterRule: null,
+    locateRule: null,
+    locatedNames: [],
+    locatedLinkKeys: [],
+    bulkQuery: null
+  };
+}
+
+function activeDataVersion() {
+  return state.versions.find(version => version.id === state.activeVersionId) || null;
+}
+
+function createAndSwitchDataVersion() {
+  persistActiveVersionState();
+  const version = createEmptyDataVersion(formatProjectTimestamp());
+  state.versions.push(version);
+  state.activeVersionId = version.id;
+  loadVersionIntoState(version);
+  clearFileInputs();
+  renderVersionControls();
+  refreshAll();
+  setMessage(el.uploadMessage, t("versionCreated", { name: version.name }), "ok");
+}
+
+function switchDataVersion(id) {
+  if (!id || id === state.activeVersionId) return;
+  const target = state.versions.find(version => version.id === id);
+  if (!target) return;
+  persistActiveVersionState();
+  state.activeVersionId = id;
+  loadVersionIntoState(target);
+  clearFileInputs();
+  renderVersionControls();
+  refreshAll();
+  fitCurrentView();
+  setMessage(el.uploadMessage, t("versionSwitched", { name: target.name || t("untitledVersion") }), "ok");
+}
+
+function deleteActiveDataVersion() {
+  const current = activeDataVersion();
+  if (!current) return;
+  const deletedName = current.name || t("untitledVersion");
+  if (state.versions.length <= 1) {
+    const replacement = createEmptyDataVersion(formatProjectTimestamp());
+    replacement.id = current.id;
+    replacement.createdAt = current.createdAt;
+    state.versions = [replacement];
+    state.activeVersionId = replacement.id;
+    loadVersionIntoState(replacement);
+  } else {
+    const index = state.versions.findIndex(version => version.id === current.id);
+    state.versions.splice(index, 1);
+    const next = state.versions[Math.max(0, index - 1)] || state.versions[0];
+    state.activeVersionId = next.id;
+    loadVersionIntoState(next);
+  }
+  clearFileInputs();
+  renderVersionControls();
+  refreshAll();
+  fitCurrentView();
+  setMessage(el.uploadMessage, t("versionDeleted", { name: deletedName }), "ok");
+}
+
+function persistActiveVersionState() {
+  const version = activeDataVersion();
+  if (!version) return;
+  version.name = state.projectName || version.name || t("untitledVersion");
+  version.nodes = cloneRows(state.nodes);
+  version.links = cloneRows(state.links);
+  version.ringChains = cloneRows(state.ringChains);
+  version.viewState = {
+    highlightRule: cloneRuleGroup(state.highlightRule),
+    filterRule: cloneRuleGroup(state.filterRule),
+    locateRule: cloneRuleGroup(state.locateRule),
+    locatedNames: [...state.locatedNames],
+    locatedLinkKeys: [...state.locatedLinkKeys],
+    bulkQuery: cloneBulkQuery(state.bulkQuery)
+  };
+  version.updatedAt = new Date().toISOString();
+}
+
+function loadVersionIntoState(version) {
+  state.projectName = version.name || t("untitledVersion");
+  if (el.projectNameInput) el.projectNameInput.value = state.projectName;
+  state.nodes = cloneRows(version.nodes);
+  state.links = cloneRows(version.links);
+  state.ringChains = cloneRows(version.ringChains);
+  state.nodeFields = collectFields(state.nodes, REQUIRED_NE);
+  state.linkFields = collectFields(state.links, REQUIRED_LINK);
+  state.ringChainFields = collectFields(state.ringChains, REQUIRED_RING_CHAIN);
+  rebuildIndexes();
+  restoreVersionViewState(version.viewState || emptyVersionViewState());
+  if (el.bulkQueryInput) el.bulkQueryInput.value = state.bulkQuery ? state.bulkQuery.raw || "" : "";
+  resetTransientSelection();
+  state.logic.positions = new Map();
+  state.logic.layoutKey = "";
+  clearRingChainStyleCache();
+}
+
+function restoreVersionViewState(viewState) {
+  state.highlightRule = cloneRuleGroup(viewState.highlightRule);
+  state.filterRule = cloneRuleGroup(viewState.filterRule);
+  state.locateRule = cloneRuleGroup(viewState.locateRule);
+  state.locatedNames = new Set(viewState.locatedNames || []);
+  state.locatedLinkKeys = new Set(viewState.locatedLinkKeys || []);
+  state.bulkQuery = cloneBulkQuery(viewState.bulkQuery);
+}
+
+function resetTransientSelection() {
+  state.selectedName = "";
+  state.selectedLinkKey = "";
+  state.selectedRouteKey = "";
+  state.selectedCoordinateKey = "";
+  state.routeHitEntries = [];
+  if (el.details) el.details.classList.remove("show");
+}
+
+function cloneRows(rows) {
+  return (rows || []).map(row => ({ ...row }));
+}
+
+function cloneBulkQuery(query) {
+  if (!query) return null;
+  return {
+    raw: query.raw || "",
+    tokens: [...(query.tokens || [])],
+    matchNames: new Set([...(query.matchNames || [])]),
+    matchLinks: new Set([...(query.matchLinks || [])])
+  };
+}
+
+function renderVersionControls() {
+  if (!el.projectVersionSelect) return;
+  el.projectVersionSelect.innerHTML = state.versions.map(version => {
+    const label = `${version.name || t("untitledVersion")} · ${version.nodes.length}/${version.links.length}`;
+    return `<option value="${escapeAttr(version.id)}">${escapeHtml(label)}</option>`;
+  }).join("");
+  el.projectVersionSelect.value = state.activeVersionId;
+  if (el.deleteVersionBtn) el.deleteVersionBtn.disabled = !state.versions.length;
+}
+
+function clearFileInputs() {
+  ["neFile", "linkFile", "ringChainFile"].forEach(id => {
+    if (el[id]) el[id].value = "";
+  });
 }
 
 function loadSearchHistory() {
@@ -1919,7 +2143,8 @@ function formatCoord(value) {
   return Number(value).toFixed(7).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function setData(nodes, links, ringChains = []) {
+function setData(nodes, links, ringChains = [], options = {}) {
+  const { refreshProjectName = true } = options;
   const normalizedNodes = nodes.map(normalizeRow);
   const normalizedLinks = links.map(normalizeRow);
   const normalizedRingChains = ringChains.map(normalizeRow);
@@ -1948,13 +2173,16 @@ function setData(nodes, links, ringChains = []) {
   state.locatedNames = new Set();
   state.locatedLinkKeys = new Set();
   state.bulkQuery = null;
-  setDefaultProjectName();
+  if (el.bulkQueryInput) el.bulkQueryInput.value = "";
+  if (refreshProjectName) setDefaultProjectName(new Date(), { force: false });
   state.ringChainStyleRules = state.ringChains.length ? state.ringChainStyleRules : [];
   state.appliedRingChainStyleRules = state.ringChains.length ? state.appliedRingChainStyleRules : [];
   clearRingChainStyleCache();
 
   state.logic.positions = new Map();
   state.logic.layoutKey = "";
+  persistActiveVersionState();
+  renderVersionControls();
   refreshAll();
   fitCurrentView();
   if (isLargeDataset()) setMessage(el.uploadMessage, t("largeDataLoaded"), "ok");
@@ -2058,6 +2286,7 @@ function ringChainRowKey(row, index) {
 }
 
 function refreshAll() {
+  renderVersionControls();
   updateFieldSelectors();
   updateSuggestions();
   updateRuleSummaries();
@@ -4306,6 +4535,7 @@ function clearSelection() {
 }
 
 function updateStats(data) {
+  if (el.statVersion) el.statVersion.textContent = state.projectName || "-";
   el.statNodes.textContent = state.nodes.length;
   el.statLinks.textContent = state.links.length;
   el.statVisibleNodes.textContent = data.nodes.length;
@@ -4480,6 +4710,8 @@ function applyTableEdits() {
   clearRingChainStyleCache();
   state.logic.positions = new Map();
   state.logic.layoutKey = "";
+  persistActiveVersionState();
+  renderVersionControls();
   refreshAll();
   setMessage(el.uploadMessage, t("editApplied"), "ok");
 }

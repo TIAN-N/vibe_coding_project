@@ -1,0 +1,9 @@
+NE Name,Role,Longitude,Latitude,Region,Vendor,Status,Scenario
+BETA-PE-01,PE,98.993100,18.788300,Chiang Mai,Juniper,Up,Version Beta
+BETA-PE-02,PE,99.012000,18.806000,Chiang Mai,Cisco,Up,Version Beta
+BETA-ASG-01,ASG,99.045000,18.820000,Chiang Mai-North,Huawei,Up,Version Beta
+BETA-ASG-02,ASG,98.955000,18.760000,Chiang Mai-West,Nokia,Up,Version Beta
+BETA-CSG-01,CSG,99.030000,18.795000,Chiang Mai-North,ZTE,Up,Version Beta
+BETA-CSG-02,CSG,99.060000,18.775000,Chiang Mai-East,Huawei,Maintenance,Version Beta
+BETA-CSG-03,CSG,98.970000,18.735000,Chiang Mai-West,Cisco,Up,Version Beta
+BETA-CSG-04,CSG,98.930000,18.780000,Chiang Mai-West,Nokia,Down,Version Beta

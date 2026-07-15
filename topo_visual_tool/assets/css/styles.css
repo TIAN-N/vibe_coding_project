@@ -156,21 +156,40 @@ input:focus, select:focus {
   align-items: center;
   gap: 10px;
 }
-.project-name-field {
+.project-name-field,
+.project-version-field {
   display: grid;
-  grid-template-columns: auto 180px;
+  grid-template-columns: auto 150px;
   align-items: center;
   gap: 7px;
   min-width: 0;
   color: var(--muted);
   font-size: 12px;
 }
-.project-name-field span {
+.project-version-field {
+  grid-template-columns: auto 160px;
+}
+.project-name-field span,
+.project-version-field span {
   white-space: nowrap;
 }
-.project-name-field input {
-  width: 180px;
+.project-name-field input,
+.project-version-field select {
+  width: 150px;
   height: 30px;
+  font-size: 12px;
+}
+.project-version-field select {
+  width: 160px;
+}
+.version-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.version-actions button {
+  height: 30px;
+  padding: 0 9px;
   font-size: 12px;
 }
 
@@ -276,11 +295,20 @@ input[type="file"] {
   background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
   min-height: 60px;
 }
+.stat.stat-wide {
+  grid-column: 1 / -1;
+}
 .stat b {
   display: block;
   font-size: 20px;
   line-height: 1.1;
   color: var(--primary-dark);
+}
+.stat.stat-wide b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
 }
 .stat span {
   color: var(--muted);

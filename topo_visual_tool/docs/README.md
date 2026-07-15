@@ -216,6 +216,15 @@ topo_visual_tool.html
 - 默认格式为 `YYYY-MM-DD-HH-mm-ss`，例如 `2026-07-01-23-05-09`。
 - 用户可以手动修改项目名称，用于标记当前数据版本；语言切换不会覆盖已输入名称。
 
+### 多版本数据切换
+
+- 顶部右上角新增“数据版本”下拉框，可在同一个 HTML 页面会话内管理多份拓扑数据。
+- 点击“新建版本”会创建一个空数据版本并自动切换过去；后续上传网元表、链路表和可选环链表时，解析结果只写入当前版本。
+- 修改“项目名称”会同步重命名当前数据版本；下拉框显示版本名称和该版本的网元/链路数量。
+- 切换版本时，GIS Topo、Logic Topo、统计卡片、数据表、过滤/高亮/定位/批量查询上下文都会切换到对应版本。
+- 删除当前版本后，页面会自动切换到相邻版本；如果只剩一个版本，则清空该版本并保留一个默认空版本。
+- 当前版本数据只保存在本次页面会话内；刷新 HTML 后不会自动恢复历史版本。
+
 ### 上传数据
 
 必传：
@@ -308,6 +317,7 @@ topo_visual_tool.html
 - `link.csv`：当前链路测试表，包含扩展链路属性和 `Route WKT`。
 - `ring_chain_sample.csv`：环链识别测试表，覆盖 `Ring`、`Link` 和缺失成员 warning 场景。
 - `logic_layout_mid_device.csv` / `logic_layout_mid_link.csv` / `logic_layout_mid_ring_chain.csv`：Logic Topo 中小规模布局测试数据，包含 50 个 ASG、250 个 CSG、25 个接入环和 17 条环上链。
+- `version_alpha_device.csv` / `version_alpha_link.csv` 和 `version_beta_device.csv` / `version_beta_link.csv`：多版本数据切换测试数据，用于验证同一个 HTML 页面内创建版本、分别上传解析、切换恢复统计和拓扑视图。
 - `colocated_device_sample.csv` / `colocated_link_sample.csv`：同经纬度共址网元测试表，覆盖同角色共址、混合角色共址和 PE/ASG/CSG 混合共址。
 - `thailand_colocated_large_device.csv` / `thailand_colocated_large_link.csv`：泰国境内大规模共站点压测数据，包含 60 个 ASG、1100 个 CSG、500 个经纬度站点和 1160 条链路。
 
