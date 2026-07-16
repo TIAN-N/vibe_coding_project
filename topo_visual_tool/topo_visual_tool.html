@@ -4,11 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>拓扑可视工具</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2m-8 3 .8 9h8.4l.8-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-map" viewBox="0 0 24 24"><path d="m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2V6Zm5-2v14m6-12v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-table" viewBox="0 0 24 24"><path d="M4 5h16v14H4V5Zm0 5h16M9 5v14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V5m0 0 4 4m-4-4-4 4M5 17v2h14v-2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-database" viewBox="0 0 24 24"><path d="M5 7c0-2 14-2 14 0v10c0 2-14 2-14 0V7Zm0 0c0 2 14 2 14 0M5 12c0 2 14 2 14 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 4 9 5-9 5-9-5 9-5Zm-7 9 7 4 7-4M5 17l7 4 7-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-fit" viewBox="0 0 24 24"><path d="M8 4H4v4m12-4h4v4M8 20H4v-4m12 4h4v-4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><path d="M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Zm5.3-2.2L21 21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+    <symbol id="icon-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7v5l-4 2v-7L4 5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+    <symbol id="icon-clear" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M5 19h4L19 9l-4-4L5 15v4Zm9-13 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -25,22 +40,30 @@
           <input id="projectNameInput" type="text" placeholder="2026-07-01-23-59-59" data-i18n-placeholder="projectNamePlaceholder">
         </label>
         <div class="version-actions">
-          <button id="newVersionBtn" type="button" data-i18n="newVersion">新建版本</button>
-          <button id="deleteVersionBtn" class="danger" type="button" data-i18n="deleteVersion">删除版本</button>
+          <button id="newVersionBtn" class="icon-button" type="button"><svg><use href="#icon-plus"></use></svg><span data-i18n="newVersion">新建版本</span></button>
+          <button id="deleteVersionBtn" class="danger icon-button" type="button"><svg><use href="#icon-trash"></use></svg><span data-i18n="deleteVersion">删除版本</span></button>
         </div>
         <div class="segmented compact" aria-label="Language">
           <button id="langZhBtn" class="active" type="button">中文</button>
           <button id="langEnBtn" type="button">English</button>
         </div>
         <nav class="tabs" aria-label="主页面切换">
-          <button id="tabTopo" class="active" type="button" data-i18n="tabTopo">拓扑视图</button>
-          <button id="tabData" type="button" data-i18n="tabData">数据管理</button>
+          <button id="tabTopo" class="active icon-button" type="button"><svg><use href="#icon-map"></use></svg><span data-i18n="tabTopo">拓扑视图</span></button>
+          <button id="tabData" class="icon-button" type="button"><svg><use href="#icon-table"></use></svg><span data-i18n="tabData">数据管理</span></button>
         </nav>
       </div>
     </header>
 
     <div id="topoPage" class="main topo-page">
       <aside class="sidebar">
+        <div class="sidebar-brand brand-row" aria-label="CoNET brand">
+          <div class="brand-icon" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="brand-text">
+            <strong>CoNET</strong>
+          </div>
+        </div>
         <section class="section">
           <h2 data-i18n="sectionUpload">数据上传</h2>
           <div class="form-grid">
@@ -60,8 +83,8 @@
               <div id="ringChainFileSource" class="file-source" title="" data-i18n="noFileSelected">未选择文件</div>
             </div>
             <div class="row">
-              <button id="loadFilesBtn" class="primary grow" type="button" data-i18n="parseUpload">解析上传数据</button>
-              <button id="mockBtn" type="button" data-i18n="loadMock">加载 Mock</button>
+              <button id="loadFilesBtn" class="primary grow icon-button" type="button"><svg><use href="#icon-upload"></use></svg><span data-i18n="parseUpload">解析上传数据</span></button>
+              <button id="mockBtn" class="icon-button" type="button"><svg><use href="#icon-database"></use></svg><span data-i18n="loadMock">加载 Mock</span></button>
             </div>
             <div id="uploadMessage" class="message" data-i18n="requiredFields">必选字段：NE Name、Role、Longitude、Latitude、Src NE Name、Sink NE Name。</div>
           </div>
@@ -151,9 +174,9 @@
             <input id="searchInput" list="neSuggestions" placeholder="输入网元名称" data-i18n-placeholder="searchPlaceholder">
             <datalist id="neSuggestions"></datalist>
             <div class="row">
-              <button id="locateBtn" class="primary grow" type="button" data-i18n="locateDevice">定位网元</button>
+              <button id="locateBtn" class="primary grow icon-button" type="button"><svg><use href="#icon-search"></use></svg><span data-i18n="locateDevice">定位网元</span></button>
               <button id="advancedLocateBtn" type="button" data-i18n="advancedCondition">复合条件</button>
-              <button id="clearLocateBtn" type="button" data-i18n="clear">清除</button>
+              <button id="clearLocateBtn" class="icon-button" type="button"><svg><use href="#icon-clear"></use></svg><span data-i18n="clear">清除</span></button>
             </div>
             <div id="locateMessage" class="message"></div>
           </div>
@@ -169,9 +192,9 @@
             <input id="highlightValue" list="highlightHistory" placeholder="条件值" data-i18n-placeholder="conditionValue">
             <datalist id="highlightHistory"></datalist>
             <div class="row">
-              <button id="applyHighlightBtn" class="primary grow" type="button" data-i18n="applyHighlight">应用高亮</button>
+              <button id="applyHighlightBtn" class="primary grow icon-button" type="button"><svg><use href="#icon-search"></use></svg><span data-i18n="applyHighlight">应用高亮</span></button>
               <button id="advancedHighlightBtn" type="button" data-i18n="advancedCondition">复合条件</button>
-              <button id="clearHighlightBtn" type="button" data-i18n="clear">清除</button>
+              <button id="clearHighlightBtn" class="icon-button" type="button"><svg><use href="#icon-clear"></use></svg><span data-i18n="clear">清除</span></button>
             </div>
             <label class="range-line"><span data-i18n="highlightContrast">对比度</span><input id="highlightContrastInput" type="range" min="0" max="1" step="0.05"></label>
             <div id="highlightRuleSummary" class="condition-summary"></div>
@@ -188,9 +211,9 @@
             <input id="filterValue" list="filterHistory" placeholder="条件值" data-i18n-placeholder="conditionValue">
             <datalist id="filterHistory"></datalist>
             <div class="row">
-              <button id="applyFilterBtn" class="primary grow" type="button" data-i18n="applyFilter">应用过滤</button>
+              <button id="applyFilterBtn" class="primary grow icon-button" type="button"><svg><use href="#icon-filter"></use></svg><span data-i18n="applyFilter">应用过滤</span></button>
               <button id="advancedFilterBtn" type="button" data-i18n="advancedCondition">复合条件</button>
-              <button id="clearFilterBtn" type="button" data-i18n="clear">清除</button>
+              <button id="clearFilterBtn" class="icon-button" type="button"><svg><use href="#icon-clear"></use></svg><span data-i18n="clear">清除</span></button>
             </div>
             <div id="filterRuleSummary" class="condition-summary"></div>
           </div>
@@ -201,8 +224,8 @@
           <div class="form-grid">
             <textarea id="bulkQueryInput" class="bulk-query" data-i18n-placeholder="bulkQueryPlaceholder" placeholder="从 Word / Excel / CSV 粘贴网元或链路清单"></textarea>
             <div class="row">
-              <button id="applyBulkQueryBtn" class="primary grow" type="button" data-i18n="query">查询</button>
-              <button id="clearBulkQueryBtn" type="button" data-i18n="clearQuery">清除查询</button>
+              <button id="applyBulkQueryBtn" class="primary grow icon-button" type="button"><svg><use href="#icon-search"></use></svg><span data-i18n="query">查询</span></button>
+              <button id="clearBulkQueryBtn" class="icon-button" type="button"><svg><use href="#icon-clear"></use></svg><span data-i18n="clearQuery">清除查询</span></button>
             </div>
             <div id="bulkQueryMessage" class="message"></div>
           </div>
@@ -213,10 +236,10 @@
         <div class="toolbar">
           <div class="left">
             <div class="segmented" aria-label="拓扑视图切换">
-              <button id="gisBtn" class="active" type="button">GIS Topo</button>
-              <button id="logicBtn" type="button">Logic Topo</button>
+              <button id="gisBtn" class="active icon-button" type="button"><svg><use href="#icon-map"></use></svg><span>GIS Topo</span></button>
+              <button id="logicBtn" class="icon-button" type="button"><svg><use href="#icon-layers"></use></svg><span>Logic Topo</span></button>
             </div>
-            <button id="fitBtn" type="button" data-i18n="fitView">适配视图</button>
+            <button id="fitBtn" class="icon-button" type="button"><svg><use href="#icon-fit"></use></svg><span data-i18n="fitView">适配视图</span></button>
           </div>
           <div class="right">
             <span id="viewMessage" class="notice" data-i18n="waitUpload">等待上传数据。</span>
@@ -235,17 +258,17 @@
       <div class="data-toolbar">
         <div class="left">
           <div class="segmented">
-            <button id="neTableBtn" class="active" type="button" data-i18n="deviceTable">网元表</button>
-            <button id="linkTableBtn" type="button" data-i18n="linkTable">链路表</button>
+            <button id="neTableBtn" class="active icon-button" type="button"><svg><use href="#icon-database"></use></svg><span data-i18n="deviceTable">网元表</span></button>
+            <button id="linkTableBtn" class="icon-button" type="button"><svg><use href="#icon-layers"></use></svg><span data-i18n="linkTable">链路表</span></button>
           </div>
           <select id="tableField"></select>
           <select id="tableOp"></select>
           <input id="tableValue" placeholder="表格过滤值" data-i18n-placeholder="tableFilterValue">
-          <button id="clearTableFilterBtn" type="button" data-i18n="clearFilter">清除过滤</button>
+          <button id="clearTableFilterBtn" class="icon-button" type="button"><svg><use href="#icon-clear"></use></svg><span data-i18n="clearFilter">清除过滤</span></button>
         </div>
         <div class="right">
-          <button id="addRowBtn" type="button" data-i18n="addRow">新增行</button>
-          <button id="applyEditBtn" class="primary" type="button" data-i18n="applyEdit">应用编辑</button>
+          <button id="addRowBtn" class="icon-button" type="button"><svg><use href="#icon-plus"></use></svg><span data-i18n="addRow">新增行</span></button>
+          <button id="applyEditBtn" class="primary icon-button" type="button"><svg><use href="#icon-edit"></use></svg><span data-i18n="applyEdit">应用编辑</span></button>
         </div>
       </div>
       <div id="dataSummary" class="data-summary"></div>

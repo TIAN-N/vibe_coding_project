@@ -34,6 +34,13 @@ body {
 
 button, input, select { font: inherit; }
 
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 button {
   border: 1px solid var(--line);
   background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
@@ -59,6 +66,24 @@ button.danger {
   color: var(--danger);
   border-color: #efc6c6;
   background: #fff;
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.icon-button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: currentColor;
+}
+.icon-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .button-like {
   display: inline-flex;
@@ -231,6 +256,78 @@ input:focus, select:focus {
   padding: 14px;
   border-right: 1px solid var(--line);
   background: linear-gradient(180deg, #edf4f7 0%, #e8eff4 100%);
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sidebar-brand {
+  min-height: 64px;
+  padding: 10px 2px 14px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(216, 226, 234, .9);
+}
+.brand-icon {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #102033, #1b3654);
+  box-shadow: inset 0 0 0 1px rgba(124, 247, 255, .25), 0 8px 20px rgba(25, 103, 210, .18);
+}
+.brand-icon::before,
+.brand-icon::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  background: #00d7e7;
+  transform-origin: left center;
+}
+.brand-icon::before {
+  width: 20px;
+  left: 12px;
+  top: 27px;
+  transform: rotate(-52deg);
+}
+.brand-icon::after {
+  width: 17px;
+  left: 22px;
+  top: 16px;
+  transform: rotate(34deg);
+}
+.brand-icon span {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7cf7ff;
+  box-shadow: 0 0 12px rgba(124, 247, 255, .8);
+}
+.brand-icon span:nth-child(1) {
+  left: 8px;
+  top: 27px;
+}
+.brand-icon span:nth-child(2) {
+  left: 20px;
+  top: 10px;
+}
+.brand-icon span:nth-child(3) {
+  right: 8px;
+  top: 20px;
+}
+.brand-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.brand-text strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .workspace {
