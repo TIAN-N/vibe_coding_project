@@ -56,6 +56,7 @@ const I18N = {
     appSubtitle: "CSV / XLSX 上传，GIS 与逻辑拓扑联动",
     tabTopo: "拓扑视图",
     tabData: "数据管理",
+    tabCompare: "版本拓扑对比",
     sectionUpload: "数据上传",
     deviceTable: "网元表",
     linkTable: "链路表",
@@ -73,6 +74,18 @@ const I18N = {
     versionCreated: "已新建数据版本：{name}",
     versionDeleted: "已删除数据版本：{name}",
     versionSwitched: "已切换到数据版本：{name}",
+    compareLeftVersion: "左侧版本",
+    compareRightVersion: "右侧版本",
+    compareCenterPlaceholder: "中心网元",
+    compareListPlaceholder: "粘贴网元清单或链路清单",
+    compareSyncView: "同步视野",
+    compareApply: "应用对比",
+    compareShowDiff: "显示差异高亮",
+    compareNeedVersions: "请先创建并加载至少两个数据版本。",
+    compareNoData: "所选版本暂无可对比数据。",
+    compareApplied: "对比已应用：左侧 {leftNodes} 个网元 / {leftLinks} 条链路，右侧 {rightNodes} 个网元 / {rightLinks} 条链路。",
+    compareCleared: "对比范围已清除，显示所选版本全部拓扑。",
+    compareDiffLegend: "差异：红色=仅左侧存在，绿色=仅右侧存在，黄色=属性可能变化。",
     parseUpload: "解析上传数据",
     loadMock: "加载 Mock",
     requiredFields: "必选字段：NE Name、Role、Longitude、Latitude、Src NE Name、Sink NE Name。",
@@ -248,6 +261,7 @@ const I18N = {
     appSubtitle: "CSV / XLSX upload with GIS and logical topology",
     tabTopo: "Topology",
     tabData: "Data Management",
+    tabCompare: "Version Compare",
     sectionUpload: "Data Upload",
     deviceTable: "Device Table",
     linkTable: "Link Table",
@@ -265,6 +279,18 @@ const I18N = {
     versionCreated: "Data version created: {name}",
     versionDeleted: "Data version deleted: {name}",
     versionSwitched: "Switched to data version: {name}",
+    compareLeftVersion: "Left Version",
+    compareRightVersion: "Right Version",
+    compareCenterPlaceholder: "Center device",
+    compareListPlaceholder: "Paste device or link list",
+    compareSyncView: "Sync View",
+    compareApply: "Apply Compare",
+    compareShowDiff: "Show diff highlight",
+    compareNeedVersions: "Create and load at least two data versions first.",
+    compareNoData: "Selected versions have no topology data to compare.",
+    compareApplied: "Compare applied: left {leftNodes} devices / {leftLinks} links, right {rightNodes} devices / {rightLinks} links.",
+    compareCleared: "Compare scope cleared; showing all topology in selected versions.",
+    compareDiffLegend: "Diff: red=left only, green=right only, yellow=possible attribute change.",
     parseUpload: "Parse Upload",
     loadMock: "Load Mock",
     requiredFields: "Required fields: NE Name, Role, Longitude, Latitude, Src NE Name, Sink NE Name.",
@@ -500,6 +526,47 @@ const state = {
   lightBasemap: false,
   mapLayers: { nodes: [], links: [], routes: [] },
   routeHitEntries: [],
+  compare: {
+    active: false,
+    syncingView: false,
+    criteria: { mode: "all", center: "", hops: 1, tokens: [] },
+    left: {
+      side: "left",
+      versionId: "",
+      map: null,
+      tileLayer: null,
+      layers: [],
+      selectedName: "",
+      selectedLinkKey: "",
+      showRoutes: true,
+      showDiff: true,
+      width: "medium",
+      styleReady: false,
+      roleStyles: null,
+      nodeStyleRules: [],
+      appliedNodeStyleRules: [],
+      linkStyleRules: [],
+      appliedLinkStyleRules: []
+    },
+    right: {
+      side: "right",
+      versionId: "",
+      map: null,
+      tileLayer: null,
+      layers: [],
+      selectedName: "",
+      selectedLinkKey: "",
+      showRoutes: true,
+      showDiff: true,
+      width: "medium",
+      styleReady: false,
+      roleStyles: null,
+      nodeStyleRules: [],
+      appliedNodeStyleRules: [],
+      linkStyleRules: [],
+      appliedLinkStyleRules: []
+    }
+  },
   ringChainStyleCache: {
     key: "",
     styles: new Map()
@@ -528,6 +595,7 @@ document.querySelectorAll("[id]").forEach(item => {
 window.topoLeafletLoaded = () => {
   if (state.map || !window.L) return;
   initMap();
+  if (state.compare.active) initCompareMaps();
   renderTopologies();
   if (state.nodes.length) fitCurrentView();
 };
@@ -649,6 +717,7 @@ function bindEvents() {
   el.langEnBtn.addEventListener("click", () => switchLanguage("en"));
   el.tabTopo.addEventListener("click", () => switchPage("topo"));
   el.tabData.addEventListener("click", () => switchPage("data"));
+  el.tabCompare.addEventListener("click", () => switchPage("compare"));
   el.gisBtn.addEventListener("click", () => switchTopoView("gis"));
   el.logicBtn.addEventListener("click", () => switchTopoView("logic"));
   el.fitBtn.addEventListener("click", fitCurrentView);
@@ -718,6 +787,7 @@ function bindEvents() {
   el.addRowBtn.addEventListener("click", addTableRow);
   el.applyEditBtn.addEventListener("click", applyTableEdits);
 
+  bindCompareEvents();
   bindLogicEvents();
   document.addEventListener("mousedown", event => {
     if (state.searchHistoryMenu && !state.searchHistoryMenu.contains(event.target)) {
@@ -727,8 +797,879 @@ function bindEvents() {
   window.addEventListener("resize", () => {
     hideSearchHistoryMenu();
     if (state.map) state.map.invalidateSize();
+    invalidateCompareMaps();
     if (state.view === "logic") renderLogic(getVisibleData());
   });
+}
+
+function bindCompareEvents() {
+  if (!el.compareApplyBtn) return;
+
+  el.compareLeftVersion.addEventListener("change", () => {
+    state.compare.left.versionId = el.compareLeftVersion.value;
+    renderCompare();
+  });
+  el.compareRightVersion.addEventListener("change", () => {
+    state.compare.right.versionId = el.compareRightVersion.value;
+    renderCompare();
+  });
+  el.compareApplyBtn.addEventListener("click", applyCompareCriteria);
+  el.compareClearBtn.addEventListener("click", clearCompareCriteria);
+  el.compareFitBtn.addEventListener("click", fitCompareMaps);
+  el.compareSyncView.addEventListener("change", () => renderCompare());
+
+  bindCompareSideControls("left");
+  bindCompareSideControls("right");
+}
+
+function bindCompareSideControls(side) {
+  const prefix = side === "left" ? "compareLeft" : "compareRight";
+  const ctx = state.compare[side];
+  el[`${prefix}StyleToggle`].addEventListener("click", () => {
+    el[`${prefix}Drawer`].classList.toggle("open");
+  });
+  el[`${prefix}Routes`].addEventListener("change", event => {
+    ctx.showRoutes = event.target.checked;
+    renderCompare();
+  });
+  el[`${prefix}Diff`].addEventListener("change", event => {
+    ctx.showDiff = event.target.checked;
+    renderCompare();
+  });
+  el[`${prefix}Width`].addEventListener("change", event => {
+    ctx.width = event.target.value;
+    renderCompare();
+  });
+  el[`${prefix}StyleControls`].addEventListener("input", event => updateCompareStyleFromControl(side, event));
+  el[`${prefix}StyleControls`].addEventListener("change", event => updateCompareStyleFromControl(side, event));
+  el[`${prefix}StyleControls`].addEventListener("click", event => handleCompareStyleClick(side, event));
+}
+
+function setupComparePage() {
+  persistActiveVersionState();
+  renderCompareVersionControls();
+  initCompareMaps();
+  updateCompareSuggestions();
+  renderCompare();
+}
+
+function renderCompareVersionControls() {
+  if (!el.compareLeftVersion || !el.compareRightVersion) return;
+
+  const options = state.versions.map(version => {
+    const label = `${version.name || t("untitledVersion")} · ${version.nodes.length}/${version.links.length}`;
+    return `<option value="${escapeAttr(version.id)}">${escapeHtml(label)}</option>`;
+  }).join("");
+  el.compareLeftVersion.innerHTML = options;
+  el.compareRightVersion.innerHTML = options;
+
+  const loaded = state.versions.filter(version => version.nodes.length || version.links.length);
+  const fallbackLeft = state.activeVersionId || (state.versions[0] && state.versions[0].id) || "";
+  if (!state.compare.left.versionId || !state.versions.some(version => version.id === state.compare.left.versionId)) {
+    state.compare.left.versionId = fallbackLeft;
+  }
+  if (!state.compare.right.versionId || !state.versions.some(version => version.id === state.compare.right.versionId)) {
+    const candidate = loaded.find(version => version.id !== state.compare.left.versionId)
+      || state.versions.find(version => version.id !== state.compare.left.versionId)
+      || state.versions[1]
+      || state.versions[0];
+    state.compare.right.versionId = candidate ? candidate.id : "";
+  }
+
+  el.compareLeftVersion.value = state.compare.left.versionId;
+  el.compareRightVersion.value = state.compare.right.versionId;
+}
+
+function initCompareMaps() {
+  if (!window.L) {
+    setCompareMessage(t("leafletMissing"), "error");
+    return;
+  }
+  initCompareMap("left", "compareMapLeft");
+  initCompareMap("right", "compareMapRight");
+}
+
+function initCompareMap(side, containerId) {
+  const ctx = state.compare[side];
+  if (ctx.map) return;
+
+  ctx.map = L.map(containerId, {
+    zoomControl: false,
+    preferCanvas: true,
+    renderer: L.canvas({ padding: 0.75 })
+  }).setView([13.7563, 100.5018], 10);
+  L.control.zoom({ position: "bottomright" }).addTo(ctx.map);
+  ctx.tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 20,
+    maxNativeZoom: 19,
+    attribution: "&copy; OpenStreetMap",
+    keepBuffer: 4,
+    detectRetina: true,
+    crossOrigin: true
+  }).addTo(ctx.map);
+  ctx.map.on("moveend zoomend", () => syncCompareView(side));
+  ctx.map.on("click", () => {
+    ctx.selectedName = "";
+    ctx.selectedLinkKey = "";
+    const details = side === "left" ? el.compareLeftDetails : el.compareRightDetails;
+    details.classList.remove("show");
+    renderCompare();
+  });
+}
+
+function syncCompareView(sourceSide) {
+  if (!el.compareSyncView || !el.compareSyncView.checked || state.compare.syncingView) return;
+  const source = state.compare[sourceSide];
+  const target = state.compare[sourceSide === "left" ? "right" : "left"];
+  if (!source.map || !target.map) return;
+
+  state.compare.syncingView = true;
+  target.map.setView(source.map.getCenter(), source.map.getZoom(), { animate: false });
+  state.compare.syncingView = false;
+}
+
+function invalidateCompareMaps() {
+  ["left", "right"].forEach(side => {
+    const map = state.compare[side].map;
+    if (map) map.invalidateSize();
+  });
+}
+
+function applyCompareCriteria() {
+  const center = String(el.compareCenterInput.value || "").trim();
+  const tokens = parseCompareTokens(el.compareListInput.value);
+  state.compare.criteria = {
+    mode: center ? "hop" : tokens.length ? "list" : "all",
+    center,
+    hops: clamp(Number(el.compareHopSelect.value) || 1, 1, 3),
+    tokens
+  };
+  renderCompare();
+}
+
+function clearCompareCriteria() {
+  el.compareCenterInput.value = "";
+  el.compareListInput.value = "";
+  state.compare.criteria = { mode: "all", center: "", hops: 1, tokens: [] };
+  renderCompare(t("compareCleared"), "ok");
+}
+
+function parseCompareTokens(text) {
+  return String(text || "")
+    .split(/[\n,;，；\t]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function versionById(id) {
+  return state.versions.find(version => version.id === id) || null;
+}
+
+function buildVersionIndexes(version) {
+  const nodeByName = new Map();
+  const linksByNode = new Map();
+  (version.nodes || []).forEach(node => {
+    const name = node["NE Name"];
+    if (name) nodeByName.set(name, node);
+  });
+  (version.links || []).forEach(link => {
+    [link["Src NE Name"], link["Sink NE Name"]].forEach(name => {
+      if (!name) return;
+      if (!linksByNode.has(name)) linksByNode.set(name, []);
+      linksByNode.get(name).push(link);
+    });
+  });
+  return { nodeByName, linksByNode };
+}
+
+function getCompareVisibleData(version, criteria) {
+  const indexes = buildVersionIndexes(version);
+  const allNodes = version.nodes || [];
+  const allLinks = version.links || [];
+  if (!criteria || criteria.mode === "all") {
+    return { nodes: allNodes, links: allLinks, nodeByName: indexes.nodeByName };
+  }
+
+  const names = criteria.mode === "hop"
+    ? compareHopNames(criteria.center, criteria.hops, indexes)
+    : compareTokenNames(criteria.tokens, indexes);
+  const visibleNames = new Set(names);
+  const links = [];
+  const seenLinks = new Set();
+  allLinks.forEach(link => {
+    const key = linkKey(link);
+    const src = link["Src NE Name"];
+    const sink = link["Sink NE Name"];
+    const bothVisible = visibleNames.has(src) && visibleNames.has(sink);
+    const directlyRequested = criteria.mode === "list" && names.has(key);
+    if ((bothVisible || directlyRequested) && !seenLinks.has(key)) {
+      seenLinks.add(key);
+      links.push(link);
+      visibleNames.add(src);
+      visibleNames.add(sink);
+    }
+  });
+  return {
+    nodes: [...visibleNames].map(name => indexes.nodeByName.get(name)).filter(Boolean),
+    links,
+    nodeByName: indexes.nodeByName
+  };
+}
+
+function compareHopNames(center, hops, indexes) {
+  const start = findVersionNodeName(center, indexes.nodeByName);
+  const names = new Set();
+  if (!start) return names;
+
+  const queue = [{ name: start, depth: 0 }];
+  names.add(start);
+  while (queue.length) {
+    const current = queue.shift();
+    if (current.depth >= hops) continue;
+    (indexes.linksByNode.get(current.name) || []).forEach(link => {
+      const next = link["Src NE Name"] === current.name ? link["Sink NE Name"] : link["Src NE Name"];
+      if (!next || names.has(next)) return;
+      names.add(next);
+      queue.push({ name: next, depth: current.depth + 1 });
+    });
+  }
+  return names;
+}
+
+function findVersionNodeName(input, nodeByName) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  if (nodeByName.has(value)) return value;
+  const upper = value.toUpperCase();
+  for (const name of nodeByName.keys()) {
+    if (String(name).toUpperCase() === upper) return name;
+  }
+  return "";
+}
+
+function compareTokenNames(tokens, indexes) {
+  const names = new Set();
+  tokens.forEach(token => {
+    const direct = findVersionNodeName(token, indexes.nodeByName);
+    if (direct) {
+      names.add(direct);
+      return;
+    }
+    const [a, b] = String(token).split(/\s*(?:->|=>|--|⇄|<->)\s*/).map(part => part && part.trim());
+    const src = findVersionNodeName(a, indexes.nodeByName);
+    const sink = findVersionNodeName(b, indexes.nodeByName);
+    if (src) names.add(src);
+    if (sink) names.add(sink);
+  });
+  return names;
+}
+
+function renderCompare(message = "", type = "") {
+  if (!el.comparePage || !state.compare.active) return;
+  if (!window.L) {
+    setCompareMessage(t("leafletMissing"), "error");
+    return;
+  }
+
+  renderCompareVersionControls();
+  const leftVersion = versionById(state.compare.left.versionId);
+  const rightVersion = versionById(state.compare.right.versionId);
+  if (state.versions.filter(version => version.nodes.length || version.links.length).length < 2) {
+    setCompareMessage(t("compareNeedVersions"), "error");
+    return;
+  }
+  if (!leftVersion || !rightVersion) return;
+
+  const leftData = getCompareVisibleData(leftVersion, state.compare.criteria);
+  const rightData = getCompareVisibleData(rightVersion, state.compare.criteria);
+  const diff = buildCompareDiff(leftData, rightData);
+
+  renderCompareSide("left", leftVersion, leftData, diff);
+  renderCompareSide("right", rightVersion, rightData, diff);
+  updateCompareSuggestions();
+  setCompareMessage(message || t("compareApplied", {
+    leftNodes: leftData.nodes.length,
+    leftLinks: leftData.links.length,
+    rightNodes: rightData.nodes.length,
+    rightLinks: rightData.links.length
+  }), type || "ok");
+}
+
+function buildCompareDiff(leftData, rightData) {
+  const leftNodes = new Set(leftData.nodes.map(node => node["NE Name"]).filter(Boolean));
+  const rightNodes = new Set(rightData.nodes.map(node => node["NE Name"]).filter(Boolean));
+  const leftLinks = new Set(leftData.links.map(linkKey));
+  const rightLinks = new Set(rightData.links.map(linkKey));
+  const changedNodes = new Set();
+  leftNodes.forEach(name => {
+    if (!rightNodes.has(name)) return;
+    const left = leftData.nodeByName.get(name);
+    const right = rightData.nodeByName.get(name);
+    if (JSON.stringify(left || {}) !== JSON.stringify(right || {})) changedNodes.add(name);
+  });
+  return { leftNodes, rightNodes, leftLinks, rightLinks, changedNodes };
+}
+
+function renderCompareSide(side, version, data, diff) {
+  const ctx = state.compare[side];
+  const prefix = side === "left" ? "compareLeft" : "compareRight";
+  const map = ctx.map;
+  if (!map) return;
+  ensureCompareStyleState(ctx);
+
+  ctx.layers.forEach(layer => layer.remove());
+  ctx.layers = [];
+  el[`${prefix}Title`].textContent = version.name || t("untitledVersion");
+  el[`${prefix}Stats`].textContent = `${data.nodes.length}/${version.nodes.length} ${t("devices")} · ${data.links.length}/${version.links.length} ${t("links")}`;
+  renderCompareLegend(prefix);
+  renderCompareStyleControls(side, version);
+
+  const degreeMap = getNodeDegreeMap(data.links);
+  data.links.forEach(link => {
+    const src = data.nodeByName.get(link["Src NE Name"]);
+    const sink = data.nodeByName.get(link["Sink NE Name"]);
+    if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return;
+    const status = compareLinkStatus(side, link, diff, ctx.showDiff);
+    const sideStyle = compareResolveLinkStyle(ctx, link);
+    if (ctx.showRoutes) {
+      const points = routePointsForLink(link);
+      if (points.length > 1) {
+        ctx.layers.push(L.polyline(points, {
+          color: status.override ? status.color : sideStyle.color,
+          weight: Math.max(sideStyle.weight, compareLinkWeight(ctx.width), 3.2),
+          dashArray: "6 6",
+          opacity: 0.42
+        }).addTo(map));
+      }
+    }
+    const selected = ctx.selectedLinkKey === linkKey(link);
+    const line = L.polyline([[Number(src.Latitude), Number(src.Longitude)], [Number(sink.Latitude), Number(sink.Longitude)]], {
+      color: selected ? "#245a6e" : status.override ? status.color : sideStyle.color,
+      weight: selected ? Math.max(sideStyle.weight, compareLinkWeight(ctx.width)) + 1.4 : Math.max(sideStyle.weight, compareLinkWeight(ctx.width)),
+      dashArray: status.dashArray || sideStyle.dashArray,
+      opacity: status.opacity
+    }).addTo(map);
+    line.bindTooltip(`${link["Src NE Name"]} ⇄ ${link["Sink NE Name"]}`);
+    line.on("click", event => {
+      if (window.L && event) L.DomEvent.stop(event);
+      ctx.selectedLinkKey = linkKey(link);
+      ctx.selectedName = "";
+      showCompareLinkDetails(side, link);
+      renderCompare();
+    });
+    ctx.layers.push(line);
+  });
+
+  data.nodes.forEach(node => {
+    if (!hasCoord(node)) return;
+    const name = node["NE Name"];
+    const selected = ctx.selectedName === name;
+    const status = compareNodeStatus(side, node, diff, ctx.showDiff);
+    const radius = compareMapNodeRadius(ctx, degreeMap.get(name) || 0, node, selected);
+    const marker = L.circleMarker([Number(node.Latitude), Number(node.Longitude)], {
+      radius,
+      fillColor: compareNodeFill(ctx, node),
+      color: selected ? "#245a6e" : status.color,
+      weight: selected ? 3.4 : status.weight,
+      fillOpacity: 0.94,
+      opacity: 1
+    }).addTo(map);
+    marker.bindTooltip(name, { permanent: false, direction: "top", className: "node-tip" });
+    marker.on("click", event => {
+      if (window.L && event) L.DomEvent.stop(event);
+      ctx.selectedName = name;
+      ctx.selectedLinkKey = "";
+      showCompareNodeDetails(side, node);
+      renderCompare();
+    });
+    ctx.layers.push(marker);
+  });
+}
+
+function compareNodeStatus(side, node, diff, showDiff) {
+  if (!showDiff) return { color: "#ffffff", weight: 2.4 };
+  const name = node["NE Name"];
+  const onlyLeft = side === "left" && !diff.rightNodes.has(name);
+  const onlyRight = side === "right" && !diff.leftNodes.has(name);
+  if (onlyLeft) return { color: "#bd3b3b", weight: 4 };
+  if (onlyRight) return { color: "#138a65", weight: 4 };
+  if (diff.changedNodes.has(name)) return { color: "#c99a3d", weight: 3.6 };
+  return { color: "#ffffff", weight: 2.4 };
+}
+
+function compareLinkStatus(side, link, diff, showDiff) {
+  const base = { color: "", dashArray: "", opacity: 0.86, override: false };
+  if (!showDiff) return base;
+  const key = linkKey(link);
+  if (side === "left" && !diff.rightLinks.has(key)) return { color: "#bd3b3b", dashArray: "8 5", opacity: 0.96, override: true };
+  if (side === "right" && !diff.leftLinks.has(key)) return { color: "#138a65", dashArray: "8 5", opacity: 0.96, override: true };
+  return base;
+}
+
+function ensureCompareStyleState(ctx) {
+  if (ctx.styleReady) return;
+  ctx.roleStyles = cloneStyles(state.roleStyles || DEFAULT_ROLE_STYLES);
+  ctx.nodeStyleRules = cloneRuleList(state.nodeStyleRules || []);
+  ctx.appliedNodeStyleRules = cloneRuleList(state.appliedNodeStyleRules || ctx.nodeStyleRules);
+  ctx.linkStyleRules = cloneRuleList(state.linkStyleRules || []);
+  ctx.appliedLinkStyleRules = cloneRuleList(state.appliedLinkStyleRules || ctx.linkStyleRules);
+  ctx.styleReady = true;
+}
+
+function compareResolveNodeStyle(ctx, node) {
+  ensureCompareStyleState(ctx);
+  const key = roleKey(node);
+  const style = { ...(ctx.roleStyles[key] || ctx.roleStyles.OTHER || DEFAULT_NODE_STYLE) };
+  ctx.appliedNodeStyleRules.forEach(rule => {
+    if (!normalizeRuleGroup(rule) || !matchesRule(node, rule)) return;
+    style.color = normalizeColor(rule.color, style.color);
+    style.size = clamp(Number(rule.size) || style.size, 4, 40);
+    style.shape = normalizeShape(rule.shape, style.shape);
+  });
+  return style;
+}
+
+function compareNodeFill(ctx, node) {
+  return compareResolveNodeStyle(ctx, node).color;
+}
+
+function compareMapNodeRadius(ctx, degree, node, active) {
+  const base = compareResolveNodeStyle(ctx, node).size;
+  return clamp(base / 2 + Math.sqrt(degree) * 0.9 + (active ? 1.5 : 0), 4, 22);
+}
+
+function compareResolveLinkStyle(ctx, link) {
+  ensureCompareStyleState(ctx);
+  const style = { ...DEFAULT_LINK_STYLE };
+  ctx.appliedLinkStyleRules.forEach(rule => {
+    if (!normalizeRuleGroup(rule) || !matchesRule(link, rule)) return;
+    style.color = normalizeColor(rule.color, style.color);
+    style.lineStyle = LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : style.lineStyle;
+    style.width = LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : style.width;
+  });
+  return {
+    color: style.color,
+    weight: linkWeight(style.width),
+    dashArray: linkDashArray(style.lineStyle)
+  };
+}
+
+function compareLinkWeight(width) {
+  if (width === "thin") return 1.8;
+  if (width === "thick") return 4.4;
+  return 2.8;
+}
+
+function renderCompareLegend(prefix) {
+  el[`${prefix}Legend`].innerHTML = `
+    <span><i style="color:#bd3b3b"></i>${escapeHtml(state.lang === "zh" ? "仅左侧存在" : "Left only")}</span>
+    <span><i style="color:#138a65"></i>${escapeHtml(state.lang === "zh" ? "仅右侧存在" : "Right only")}</span>
+    <span><i style="color:#c99a3d"></i>${escapeHtml(state.lang === "zh" ? "属性可能变化" : "Possible attribute change")}</span>
+    <span>${escapeHtml(t("compareDiffLegend"))}</span>
+  `;
+}
+
+function renderCompareStyleControls(side, version) {
+  const ctx = state.compare[side];
+  ensureCompareStyleState(ctx);
+  const prefix = side === "left" ? "compareLeft" : "compareRight";
+  const nodeFields = collectFields(version.nodes || [], REQUIRED_NE);
+  const linkFields = collectFields(version.links || [], REQUIRED_LINK);
+  const nodeField = firstAvailableField(nodeFields, REQUIRED_NE);
+  const linkField = firstAvailableField(linkFields, REQUIRED_LINK);
+  const roles = ROLE_ORDER.concat("OTHER");
+
+  el[`${prefix}StyleControls`].innerHTML = `
+    <div class="compare-style-group">
+      <div class="compare-style-title">${escapeHtml(t("styleTemplate"))}</div>
+      <label class="button-like">
+        <span>${escapeHtml(t("importStyleTemplate"))}</span>
+        <input type="file" accept=".json,application/json" data-import-compare-style-template>
+      </label>
+      <div class="message" data-compare-style-message></div>
+    </div>
+    <div class="compare-style-group">
+      <div class="compare-style-title">${escapeHtml(t("roleStyle"))}</div>
+      ${roles.map(role => {
+        const style = ctx.roleStyles[role] || DEFAULT_ROLE_STYLES.OTHER;
+        return `<div class="compare-role-row" data-compare-role="${escapeAttr(role)}">
+          <span>${escapeHtml(role)}</span>
+          <input type="color" value="${escapeAttr(normalizeColor(style.color, DEFAULT_NODE_STYLE.color))}" data-compare-role-field="color">
+          <input type="number" min="4" max="40" step="1" value="${escapeAttr(style.size || DEFAULT_NODE_STYLE.size)}" data-compare-role-field="size">
+          <select data-compare-role-field="shape">${compareShapeOptions(style.shape)}</select>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="compare-style-group">
+      <div class="compare-style-title">
+        <span>${escapeHtml(t("nodeStyleRules"))}</span>
+        <button type="button" data-add-compare-node-rule>${escapeHtml(t("addNodeStyleRule"))}</button>
+      </div>
+      <div class="compare-rule-list">
+        ${ctx.nodeStyleRules.length ? ctx.nodeStyleRules.map((rule, index) => compareNodeRuleMarkup(rule, index, nodeFields, nodeField)).join("") : `<div class="notice">${escapeHtml(t("noNodeStyleRule"))}</div>`}
+      </div>
+    </div>
+    <div class="compare-style-group">
+      <div class="compare-style-title">
+        <span>${escapeHtml(t("linkStyleRules"))}</span>
+        <button type="button" data-add-compare-link-rule>${escapeHtml(t("addLinkStyleRule"))}</button>
+      </div>
+      <div class="compare-rule-list">
+        ${ctx.linkStyleRules.length ? ctx.linkStyleRules.map((rule, index) => compareLinkRuleMarkup(rule, index, linkFields, linkField)).join("") : `<div class="notice">${escapeHtml(t("noLinkStyleRule"))}</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function firstAvailableField(fields, required) {
+  return fields.find(field => !required.includes(field)) || fields[0] || "";
+}
+
+function compareFieldOptions(fields, current) {
+  return fields.map(field => `<option value="${escapeAttr(field)}" ${field === current ? "selected" : ""}>${escapeHtml(field)}</option>`).join("");
+}
+
+function compareOpOptions(current) {
+  return OPS.map(([value, key]) => `<option value="${escapeAttr(value)}" ${value === current ? "selected" : ""}>${escapeHtml(t(key))}</option>`).join("");
+}
+
+function compareShapeOptions(current) {
+  return SHAPES.map(shape => `<option value="${escapeAttr(shape)}" ${shape === current ? "selected" : ""}>${escapeHtml(shapeLabel(shape))}</option>`).join("");
+}
+
+function compareLineStyleOptions(current) {
+  return LINE_STYLE_VALUES.map(value => `<option value="${escapeAttr(value)}" ${value === current ? "selected" : ""}>${escapeHtml(t(`line${value[0].toUpperCase()}${value.slice(1)}`))}</option>`).join("");
+}
+
+function compareLineWidthOptions(current) {
+  return LINE_WIDTH_VALUES.map(value => `<option value="${escapeAttr(value)}" ${value === current ? "selected" : ""}>${escapeHtml(t(`line${value[0].toUpperCase()}${value.slice(1)}`))}</option>`).join("");
+}
+
+function compareNodeRuleMarkup(rule, index, fields, fallbackField) {
+  const field = rule.field || fallbackField;
+  return `<div class="compare-rule-row" data-compare-node-rule="${index}">
+    <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-compare-node-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
+    <div class="compare-rule-grid">
+      <select data-compare-rule-field="field">${compareFieldOptions(fields, field)}</select>
+      <select data-compare-rule-field="op">${compareOpOptions(rule.op || "eq")}</select>
+    </div>
+    <input value="${escapeAttr(rule.value || "")}" data-compare-rule-field="value" placeholder="${escapeAttr(t("conditionValue"))}">
+    <div class="compare-rule-visual">
+      <input type="color" value="${escapeAttr(normalizeColor(rule.color, DEFAULT_NODE_STYLE.color))}" data-compare-rule-field="color">
+      <select data-compare-rule-field="shape">${compareShapeOptions(rule.shape || DEFAULT_NODE_STYLE.shape)}</select>
+      <input type="number" min="4" max="40" step="1" value="${escapeAttr(rule.size || DEFAULT_NODE_STYLE.size)}" data-compare-rule-field="size">
+    </div>
+    <button type="button" data-remove-compare-node-rule="${index}">${escapeHtml(t("removeRule"))}</button>
+  </div>`;
+}
+
+function compareLinkRuleMarkup(rule, index, fields, fallbackField) {
+  const field = rule.field || fallbackField;
+  return `<div class="compare-rule-row" data-compare-link-rule="${index}">
+    <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-compare-link-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
+    <div class="compare-rule-grid">
+      <select data-compare-rule-field="field">${compareFieldOptions(fields, field)}</select>
+      <select data-compare-rule-field="op">${compareOpOptions(rule.op || "eq")}</select>
+    </div>
+    <input value="${escapeAttr(rule.value || "")}" data-compare-rule-field="value" placeholder="${escapeAttr(t("conditionValue"))}">
+    <div class="compare-rule-visual">
+      <input type="color" value="${escapeAttr(normalizeColor(rule.color, DEFAULT_LINK_STYLE.color))}" data-compare-rule-field="color">
+      <select data-compare-rule-field="lineStyle">${compareLineStyleOptions(rule.lineStyle || DEFAULT_LINK_STYLE.lineStyle)}</select>
+      <select data-compare-rule-field="width">${compareLineWidthOptions(rule.width || DEFAULT_LINK_STYLE.width)}</select>
+    </div>
+    <button type="button" data-remove-compare-link-rule="${index}">${escapeHtml(t("removeRule"))}</button>
+  </div>`;
+}
+
+function handleCompareStyleClick(side, event) {
+  const ctx = state.compare[side];
+  ensureCompareStyleState(ctx);
+  const version = versionById(ctx.versionId) || { nodes: [], links: [] };
+  const nodeField = firstAvailableField(collectFields(version.nodes || [], REQUIRED_NE), REQUIRED_NE);
+  const linkField = firstAvailableField(collectFields(version.links || [], REQUIRED_LINK), REQUIRED_LINK);
+
+  if (event.target.closest("[data-add-compare-node-rule]")) {
+    ctx.nodeStyleRules.push({
+      source: CONDITION_SOURCES.NODES,
+      field: nodeField,
+      op: "eq",
+      value: "",
+      mode: "all",
+      conditions: [{ field: nodeField, op: "eq", value: "" }],
+      color: DEFAULT_NODE_STYLE.color,
+      shape: DEFAULT_NODE_STYLE.shape,
+      size: DEFAULT_NODE_STYLE.size
+    });
+    ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
+    renderCompare();
+    return;
+  }
+
+  if (event.target.closest("[data-add-compare-link-rule]")) {
+    ctx.linkStyleRules.push({
+      source: CONDITION_SOURCES.LINKS,
+      field: linkField,
+      op: "eq",
+      value: "",
+      mode: "all",
+      conditions: [{ field: linkField, op: "eq", value: "" }],
+      color: DEFAULT_LINK_STYLE.color,
+      lineStyle: DEFAULT_LINK_STYLE.lineStyle,
+      width: DEFAULT_LINK_STYLE.width
+    });
+    ctx.appliedLinkStyleRules = cloneRuleList(ctx.linkStyleRules);
+    renderCompare();
+    return;
+  }
+
+  const removeNode = event.target.closest("[data-remove-compare-node-rule]");
+  if (removeNode) {
+    ctx.nodeStyleRules.splice(Number(removeNode.getAttribute("data-remove-compare-node-rule")), 1);
+    ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
+    renderCompare();
+    return;
+  }
+
+  const editNode = event.target.closest("[data-edit-compare-node-rule-condition]");
+  if (editNode) {
+    openConditionModal("compareNodeStyle", {
+      side,
+      index: Number(editNode.getAttribute("data-edit-compare-node-rule-condition"))
+    });
+    return;
+  }
+
+  const editLink = event.target.closest("[data-edit-compare-link-rule-condition]");
+  if (editLink) {
+    openConditionModal("compareLinkStyle", {
+      side,
+      index: Number(editLink.getAttribute("data-edit-compare-link-rule-condition"))
+    });
+    return;
+  }
+
+  const removeLink = event.target.closest("[data-remove-compare-link-rule]");
+  if (removeLink) {
+    ctx.linkStyleRules.splice(Number(removeLink.getAttribute("data-remove-compare-link-rule")), 1);
+    ctx.appliedLinkStyleRules = cloneRuleList(ctx.linkStyleRules);
+    renderCompare();
+  }
+}
+
+function updateCompareStyleFromControl(side, event) {
+  const ctx = state.compare[side];
+  ensureCompareStyleState(ctx);
+  const target = event.target;
+  if (target.matches("[data-import-compare-style-template]")) {
+    importCompareStyleTemplateFromFile(side, event);
+    return;
+  }
+  const roleRow = target.closest("[data-compare-role]");
+  if (roleRow && target.dataset.compareRoleField) {
+    const role = roleRow.getAttribute("data-compare-role");
+    const field = target.dataset.compareRoleField;
+    const style = ctx.roleStyles[role] || (ctx.roleStyles[role] = { ...DEFAULT_NODE_STYLE });
+    if (field === "color") style.color = normalizeColor(target.value, style.color);
+    if (field === "size") style.size = clamp(Number(target.value) || style.size, 4, 40);
+    if (field === "shape") style.shape = normalizeShape(target.value, style.shape);
+    renderCompare();
+    return;
+  }
+
+  const nodeRow = target.closest("[data-compare-node-rule]");
+  if (nodeRow && target.dataset.compareRuleField) {
+    updateCompareRule(ctx.nodeStyleRules[Number(nodeRow.getAttribute("data-compare-node-rule"))], target);
+    ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
+    renderCompare();
+    return;
+  }
+
+  const linkRow = target.closest("[data-compare-link-rule]");
+  if (linkRow && target.dataset.compareRuleField) {
+    updateCompareRule(ctx.linkStyleRules[Number(linkRow.getAttribute("data-compare-link-rule"))], target);
+    ctx.appliedLinkStyleRules = cloneRuleList(ctx.linkStyleRules);
+    renderCompare();
+  }
+}
+
+function updateCompareRule(rule, target) {
+  if (!rule) return;
+  const field = target.dataset.compareRuleField;
+  if (field === "color") rule.color = normalizeColor(target.value, rule.color || DEFAULT_NODE_STYLE.color);
+  else if (field === "size") rule.size = clamp(Number(target.value) || rule.size || DEFAULT_NODE_STYLE.size, 4, 40);
+  else if (field === "shape") rule.shape = normalizeShape(target.value, rule.shape || DEFAULT_NODE_STYLE.shape);
+  else if (field === "lineStyle") rule.lineStyle = LINE_STYLE_VALUES.includes(target.value) ? target.value : DEFAULT_LINK_STYLE.lineStyle;
+  else if (field === "width") rule.width = LINE_WIDTH_VALUES.includes(target.value) ? target.value : DEFAULT_LINK_STYLE.width;
+  else rule[field] = target.value;
+  rule.source = rule.lineStyle || rule.width ? CONDITION_SOURCES.LINKS : CONDITION_SOURCES.NODES;
+  rule.mode = "all";
+  rule.conditions = [{ field: rule.field, op: rule.op, value: rule.value }];
+}
+
+function importCompareStyleTemplateFromFile(side, event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const template = JSON.parse(String(reader.result || ""));
+      importCompareStyleTemplate(side, template);
+    } catch (error) {
+      setCompareStyleMessage(side, t("styleTemplateInvalid"), "error");
+    } finally {
+      event.target.value = "";
+    }
+  };
+  reader.onerror = () => {
+    setCompareStyleMessage(side, t("styleTemplateReadFail"), "error");
+    event.target.value = "";
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+function importCompareStyleTemplate(side, template) {
+  const ctx = state.compare[side];
+  ensureCompareStyleState(ctx);
+  if (!template || template.schema !== STYLE_TEMPLATE_SCHEMA || !template.styles || typeof template.styles !== "object") {
+    setCompareStyleMessage(side, t("styleTemplateInvalid"), "error");
+    return;
+  }
+  if (Number(template.version) > STYLE_TEMPLATE_VERSION) {
+    setCompareStyleMessage(side, t("styleTemplateUnsupported"), "error");
+    return;
+  }
+
+  const version = versionById(ctx.versionId) || { nodes: [], links: [] };
+  const report = { adjusted: 0, skipped: 0 };
+  const styles = template.styles;
+  ctx.roleStyles = sanitizeRoleStyles(styles.roleStyles);
+  ctx.nodeStyleRules = sanitizeCompareStyleRuleList(styles.nodeStyleRules, "node", version, report);
+  ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
+  ctx.linkStyleRules = sanitizeCompareStyleRuleList(styles.linkStyleRules, "link", version, report);
+  ctx.appliedLinkStyleRules = cloneRuleList(ctx.linkStyleRules);
+  renderCompare();
+  setCompareStyleMessage(
+    side,
+    report.adjusted || report.skipped
+      ? t("styleTemplateImportedWithAdjustments", { adjusted: report.adjusted, skipped: report.skipped })
+      : t("styleTemplateImported"),
+    report.skipped ? "warning" : "ok"
+  );
+}
+
+function sanitizeCompareStyleRuleList(rules, type, version, report) {
+  if (!Array.isArray(rules)) return [];
+  return rules
+    .map(rule => sanitizeCompareStyleRule(rule, type, version, report))
+    .filter(Boolean);
+}
+
+function sanitizeCompareStyleRule(rule, type, version, report) {
+  if (!rule || typeof rule !== "object") {
+    report.skipped += 1;
+    return null;
+  }
+  const fields = type === "link"
+    ? collectFields(version.links || [], REQUIRED_LINK)
+    : collectFields(version.nodes || [], REQUIRED_NE);
+  const source = type === "link" ? CONDITION_SOURCES.LINKS : CONDITION_SOURCES.NODES;
+  const available = new Set(fields);
+  const fallback = firstAvailableField(fields, type === "link" ? REQUIRED_LINK : REQUIRED_NE);
+  const group = normalizeRuleGroup({ ...rule, source });
+  if (!group || !fallback) {
+    report.skipped += 1;
+    return null;
+  }
+  const sanitizedConditions = group.conditions.map(condition => {
+    if (!available.has(condition.field)) {
+      report.adjusted += 1;
+      return { field: fallback, op: normalizeOp(condition.op), value: "" };
+    }
+    return { field: condition.field, op: normalizeOp(condition.op), value: String(condition.value || "") };
+  });
+  const first = sanitizedConditions[0];
+  if (type === "node") {
+    return {
+      source,
+      mode: group.mode,
+      conditions: sanitizedConditions,
+      field: first.field,
+      op: first.op,
+      value: first.value,
+      color: normalizeColor(rule.color, DEFAULT_NODE_STYLE.color),
+      size: clamp(Number(rule.size) || DEFAULT_NODE_STYLE.size, 4, 40),
+      shape: normalizeShape(rule.shape, DEFAULT_NODE_STYLE.shape),
+      label: String(rule.label || "")
+    };
+  }
+  return {
+    source,
+    mode: group.mode,
+    conditions: sanitizedConditions,
+    field: first.field,
+    op: first.op,
+    value: first.value,
+    color: normalizeColor(rule.color, DEFAULT_LINK_STYLE.color),
+    lineStyle: LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : DEFAULT_LINK_STYLE.lineStyle,
+    width: LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : DEFAULT_LINK_STYLE.width
+  };
+}
+
+function setCompareStyleMessage(side, text, type) {
+  const prefix = side === "left" ? "compareLeft" : "compareRight";
+  const host = el[`${prefix}StyleControls`];
+  const target = host && host.querySelector("[data-compare-style-message]");
+  if (!target) return;
+  setMessage(target, text, type);
+}
+
+function fitCompareMaps() {
+  ["left", "right"].forEach(side => {
+    const ctx = state.compare[side];
+    const version = versionById(ctx.versionId);
+    if (!ctx.map || !version) return;
+    const data = getCompareVisibleData(version, state.compare.criteria);
+    const points = data.nodes.filter(hasCoord).map(node => [Number(node.Latitude), Number(node.Longitude)]);
+    if (points.length === 1) ctx.map.setView(points[0], 13);
+    else if (points.length > 1) ctx.map.fitBounds(points, { padding: [36, 36] });
+  });
+}
+
+function showCompareNodeDetails(side, node) {
+  const target = side === "left" ? el.compareLeftDetails : el.compareRightDetails;
+  const fields = collectFields([node], REQUIRED_NE);
+  target.innerHTML = `<h3>${escapeHtml(node["NE Name"] || t("unnamedDevice"))}</h3><div class="kv">${
+    fields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(node[field] ?? "")}</div>`).join("")
+  }</div>`;
+  target.classList.add("show");
+}
+
+function showCompareLinkDetails(side, link) {
+  const target = side === "left" ? el.compareLeftDetails : el.compareRightDetails;
+  const fields = collectFields([link], REQUIRED_LINK);
+  target.innerHTML = `<h3>${escapeHtml(link["Src NE Name"] || "")} ⇄ ${escapeHtml(link["Sink NE Name"] || "")}</h3><div class="kv">${
+    fields.map(field => `<div>${escapeHtml(field)}</div><div>${escapeHtml(link[field] ?? "")}</div>`).join("")
+  }</div>`;
+  target.classList.add("show");
+}
+
+function setCompareMessage(text, type) {
+  if (!el.compareMessage) return;
+  el.compareMessage.textContent = text || "";
+  el.compareMessage.classList.remove("error", "ok", "warning");
+  if (type) el.compareMessage.classList.add(type);
+}
+
+function updateCompareSuggestions() {
+  if (!el.compareNodeSuggestions) return;
+  const names = new Set();
+  state.versions.forEach(version => {
+    (version.nodes || []).slice(0, 2000).forEach(node => {
+      if (node["NE Name"]) names.add(node["NE Name"]);
+    });
+  });
+  el.compareNodeSuggestions.innerHTML = [...names].slice(0, 400).map(name => `<option value="${escapeAttr(name)}"></option>`).join("");
 }
 
 function switchLanguage(lang) {
@@ -738,6 +1679,7 @@ function switchLanguage(lang) {
   fillOperatorOptions();
   applyLanguage();
   renderTopologies();
+  if (state.compare.active) renderCompare();
   updateTable();
 }
 
@@ -993,6 +1935,7 @@ function renderVersionControls() {
   }).join("");
   el.projectVersionSelect.value = state.activeVersionId;
   if (el.deleteVersionBtn) el.deleteVersionBtn.disabled = !state.versions.length;
+  renderCompareVersionControls();
 }
 
 function updateSourceFileFromInput(type, input) {
@@ -1978,12 +2921,19 @@ function fillOperatorOptions() {
 function switchPage(page) {
   el.tabTopo.classList.toggle("active", page === "topo");
   el.tabData.classList.toggle("active", page === "data");
+  el.tabCompare.classList.toggle("active", page === "compare");
   el.topoPage.classList.toggle("hidden", page !== "topo");
   el.dataPage.classList.toggle("active", page === "data");
+  el.comparePage.classList.toggle("active", page === "compare");
+  state.compare.active = page === "compare";
 
   if (page === "data") updateTable();
   if (page === "topo" && state.map) {
     setTimeout(() => state.map.invalidateSize(), 50);
+  }
+  if (page === "compare") {
+    setupComparePage();
+    setTimeout(() => invalidateCompareMaps(), 80);
   }
 }
 
@@ -2403,6 +3353,7 @@ function refreshAll() {
   updateSuggestions();
   updateRuleSummaries();
   renderTopologies();
+  if (state.compare.active) renderCompare();
   updateTable();
 }
 
@@ -2570,7 +3521,7 @@ function openConditionModal(type, index = null) {
   state.conditionModalTarget = { type, index };
   const initialSource = type === "ringChainStyle"
     ? CONDITION_SOURCES.RING_CHAINS
-    : type === "linkStyle"
+    : type === "linkStyle" || type === "compareLinkStyle"
       ? CONDITION_SOURCES.LINKS
       : CONDITION_SOURCES.NODES;
   state.conditionDraft = cloneRuleGroup(conditionTargetRule(type, index)) || quickRuleGroupForTarget(type) || emptyRuleGroup("", initialSource);
@@ -2593,6 +3544,12 @@ function conditionTargetRule(type, index = null) {
   if (type === "nodeStyle") return state.nodeStyleRules[index];
   if (type === "linkStyle") return state.linkStyleRules[index];
   if (type === "ringChainStyle") return state.ringChainStyleRules[index];
+  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+    const target = state.conditionModalTarget && state.conditionModalTarget.index;
+    const ctx = target && state.compare[target.side];
+    if (!ctx) return null;
+    return type === "compareNodeStyle" ? ctx.nodeStyleRules[target.index] : ctx.linkStyleRules[target.index];
+  }
   return null;
 }
 
@@ -2604,6 +3561,14 @@ function quickRuleGroupForTarget(type) {
 
 function conditionFieldsForTarget(type) {
   const source = conditionSourceForTarget(type);
+  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+    const target = state.conditionModalTarget && state.conditionModalTarget.index;
+    const ctx = target && state.compare[target.side];
+    const version = ctx ? versionById(ctx.versionId) : null;
+    return type === "compareLinkStyle"
+      ? collectFields(version && version.links || [], REQUIRED_LINK)
+      : collectFields(version && version.nodes || [], REQUIRED_NE);
+  }
   if (type === "linkStyle") return state.linkFields;
   if (source === CONDITION_SOURCES.LINKS) return state.linkFields;
   if (source === CONDITION_SOURCES.RING_CHAINS) return state.ringChainFields;
@@ -2611,7 +3576,8 @@ function conditionFieldsForTarget(type) {
 }
 
 function conditionSourceForTarget(type) {
-  if (type === "linkStyle") return CONDITION_SOURCES.LINKS;
+  if (type === "linkStyle" || type === "compareLinkStyle") return CONDITION_SOURCES.LINKS;
+  if (type === "compareNodeStyle") return CONDITION_SOURCES.NODES;
   if (type === "ringChainStyle") return CONDITION_SOURCES.RING_CHAINS;
   return normalizeConditionSource(state.conditionDraft && state.conditionDraft.source);
 }
@@ -2680,6 +3646,15 @@ function conditionRowMarkup(condition, index) {
 function conditionValueOptions(field) {
   const type = state.conditionModalType;
   const source = conditionSourceForTarget(type);
+  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+    const target = state.conditionModalTarget && state.conditionModalTarget.index;
+    const ctx = target && state.compare[target.side];
+    const version = ctx ? versionById(ctx.versionId) : null;
+    const rows = type === "compareLinkStyle" ? version && version.links || [] : version && version.nodes || [];
+    return mergeSuggestionValues(collectValueOptions(rows, field), conditionValueHistory(type, field))
+      .map(value => `<option value="${escapeAttr(value)}"></option>`)
+      .join("");
+  }
   const rows = type === "linkStyle"
     ? state.links
     : source === CONDITION_SOURCES.RING_CHAINS
@@ -2739,7 +3714,9 @@ function conditionModalTitle(type) {
   if (type === "locate") return t("complexLocateTitle");
   if (type === "filter") return t("complexFilterTitle");
   if (type === "nodeStyle") return t("nodeStyleRules");
+  if (type === "compareNodeStyle") return t("nodeStyleRules");
   if (type === "linkStyle") return t("linkStyleRules");
+  if (type === "compareLinkStyle") return t("linkStyleRules");
   if (type === "ringChainStyle") return t("ringChainStyleRules");
   return t("complexHighlightTitle");
 }
@@ -2752,6 +3729,27 @@ function applyRuleGroupToTarget(target, group) {
   }
   if (target.type === "highlight" || target.type === "filter") {
     state[`${target.type}Rule`] = group;
+    return;
+  }
+  if (target.type === "compareNodeStyle" || target.type === "compareLinkStyle") {
+    const compareTarget = target.index || {};
+    const ctx = state.compare[compareTarget.side];
+    const rules = target.type === "compareNodeStyle" ? ctx && ctx.nodeStyleRules : ctx && ctx.linkStyleRules;
+    const rule = rules && rules[compareTarget.index];
+    if (!rule || !group) return;
+    rule.source = group.source;
+    rule.mode = group.mode;
+    rule.conditions = group.conditions.map(condition => ({ ...condition }));
+    const first = group.conditions[0];
+    rule.field = first.field;
+    rule.op = first.op;
+    rule.value = first.value;
+    if (target.type === "compareNodeStyle") {
+      rule.label = rule.label || rule.value;
+      ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
+    } else {
+      ctx.appliedLinkStyleRules = cloneRuleList(ctx.linkStyleRules);
+    }
     return;
   }
 
@@ -2864,6 +3862,10 @@ function applyConditionModal() {
   renderLinkStyleRules();
   renderRingChainStyleRules();
   closeConditionModal();
+  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+    renderCompare();
+    return;
+  }
   renderTopologies();
 }
 
