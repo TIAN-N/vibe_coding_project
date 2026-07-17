@@ -540,6 +540,8 @@ const state = {
       selectedLinkKey: "",
       showRoutes: true,
       showDiff: true,
+      filterRule: null,
+      highlightRule: null,
       width: "medium",
       styleReady: false,
       roleStyles: null,
@@ -558,6 +560,8 @@ const state = {
       selectedLinkKey: "",
       showRoutes: true,
       showDiff: true,
+      filterRule: null,
+      highlightRule: null,
       width: "medium",
       styleReady: false,
       roleStyles: null,
@@ -738,6 +742,7 @@ function bindEvents() {
     rememberSearchHistory("highlight", el.highlightValue.value);
     updateRuleSummaries();
     renderTopologies();
+    focusMainRuleResult("highlight");
   });
   el.advancedHighlightBtn.addEventListener("click", () => openConditionModal("highlight"));
   el.clearHighlightBtn.addEventListener("click", () => {
@@ -751,6 +756,7 @@ function bindEvents() {
     rememberSearchHistory("filter", el.filterValue.value);
     updateRuleSummaries();
     renderTopologies();
+    focusMainRuleResult("filter");
   });
   el.advancedFilterBtn.addEventListener("click", () => openConditionModal("filter"));
   el.clearFilterBtn.addEventListener("click", () => {
@@ -982,38 +988,83 @@ function buildVersionIndexes(version) {
   return { nodeByName, linksByNode };
 }
 
-function getCompareVisibleData(version, criteria) {
+function getCompareVisibleData(version, criteria, ctx = null) {
   const indexes = buildVersionIndexes(version);
   const allNodes = version.nodes || [];
   const allLinks = version.links || [];
+  let data;
   if (!criteria || criteria.mode === "all") {
-    return { nodes: allNodes, links: allLinks, nodeByName: indexes.nodeByName };
+    data = { nodes: allNodes, links: allLinks, nodeByName: indexes.nodeByName };
+  } else {
+    const names = criteria.mode === "hop"
+      ? compareHopNames(criteria.center, criteria.hops, indexes)
+      : compareTokenNames(criteria.tokens, indexes);
+    const visibleNames = new Set(names);
+    const links = [];
+    const seenLinks = new Set();
+    allLinks.forEach(link => {
+      const key = linkKey(link);
+      const src = link["Src NE Name"];
+      const sink = link["Sink NE Name"];
+      const bothVisible = visibleNames.has(src) && visibleNames.has(sink);
+      const directlyRequested = criteria.mode === "list" && names.has(key);
+      if ((bothVisible || directlyRequested) && !seenLinks.has(key)) {
+        seenLinks.add(key);
+        links.push(link);
+        visibleNames.add(src);
+        visibleNames.add(sink);
+      }
+    });
+    data = {
+      nodes: [...visibleNames].map(name => indexes.nodeByName.get(name)).filter(Boolean),
+      links,
+      nodeByName: indexes.nodeByName
+    };
+  }
+  return applyCompareFilter(version, data, ctx);
+}
+
+function applyCompareFilter(version, data, ctx) {
+  const group = normalizeRuleGroup(ctx && ctx.filterRule);
+  if (!group) return data;
+
+  const nodeByName = data.nodeByName;
+  const baseVisibleNames = new Set(data.nodes.map(node => node["NE Name"]).filter(Boolean));
+  const resultNames = new Set();
+  let resultLinks = [];
+
+  if (group.source === CONDITION_SOURCES.LINKS) {
+    resultLinks = data.links.filter(link => matchesRule(link, group));
+    resultLinks.forEach(link => {
+      resultNames.add(link["Src NE Name"]);
+      resultNames.add(link["Sink NE Name"]);
+    });
+  } else if (group.source === CONDITION_SOURCES.RING_CHAINS) {
+    compareRingChainNamesForRule(version, group).forEach(name => {
+      if (baseVisibleNames.has(name)) resultNames.add(name);
+    });
+    resultLinks = data.links.filter(link => resultNames.has(link["Src NE Name"]) && resultNames.has(link["Sink NE Name"]));
+  } else {
+    data.nodes.forEach(node => {
+      if (matchesRule(node, group)) resultNames.add(node["NE Name"]);
+    });
+    resultLinks = data.links.filter(link => resultNames.has(link["Src NE Name"]) && resultNames.has(link["Sink NE Name"]));
   }
 
-  const names = criteria.mode === "hop"
-    ? compareHopNames(criteria.center, criteria.hops, indexes)
-    : compareTokenNames(criteria.tokens, indexes);
-  const visibleNames = new Set(names);
-  const links = [];
-  const seenLinks = new Set();
-  allLinks.forEach(link => {
-    const key = linkKey(link);
-    const src = link["Src NE Name"];
-    const sink = link["Sink NE Name"];
-    const bothVisible = visibleNames.has(src) && visibleNames.has(sink);
-    const directlyRequested = criteria.mode === "list" && names.has(key);
-    if ((bothVisible || directlyRequested) && !seenLinks.has(key)) {
-      seenLinks.add(key);
-      links.push(link);
-      visibleNames.add(src);
-      visibleNames.add(sink);
-    }
-  });
   return {
-    nodes: [...visibleNames].map(name => indexes.nodeByName.get(name)).filter(Boolean),
-    links,
-    nodeByName: indexes.nodeByName
+    nodes: [...resultNames].map(name => nodeByName.get(name)).filter(Boolean),
+    links: resultLinks,
+    nodeByName
   };
+}
+
+function compareRingChainNamesForRule(version, group) {
+  const names = new Set();
+  (version.ringChains || []).forEach(row => {
+    if (!matchesRule(row, group)) return;
+    parseMemberPath(row.Member_path).forEach(name => names.add(name));
+  });
+  return names;
 }
 
 function compareHopNames(center, hops, indexes) {
@@ -1080,8 +1131,8 @@ function renderCompare(message = "", type = "") {
   }
   if (!leftVersion || !rightVersion) return;
 
-  const leftData = getCompareVisibleData(leftVersion, state.compare.criteria);
-  const rightData = getCompareVisibleData(rightVersion, state.compare.criteria);
+  const leftData = getCompareVisibleData(leftVersion, state.compare.criteria, state.compare.left);
+  const rightData = getCompareVisibleData(rightVersion, state.compare.criteria, state.compare.right);
   const diff = buildCompareDiff(leftData, rightData);
 
   renderCompareSide("left", leftVersion, leftData, diff);
@@ -1123,6 +1174,7 @@ function renderCompareSide(side, version, data, diff) {
   el[`${prefix}Stats`].textContent = `${data.nodes.length}/${version.nodes.length} ${t("devices")} · ${data.links.length}/${version.links.length} ${t("links")}`;
   renderCompareLegend(prefix);
   renderCompareStyleControls(side, version);
+  const highlight = compareHighlightInfo(version, data, ctx);
 
   const degreeMap = getNodeDegreeMap(data.links);
   data.links.forEach(link => {
@@ -1143,11 +1195,13 @@ function renderCompareSide(side, version, data, diff) {
       }
     }
     const selected = ctx.selectedLinkKey === linkKey(link);
+    const highlighted = highlight.linkKeys.has(linkKey(link));
+    const dimLink = highlight.active && !highlighted;
     const line = L.polyline([[Number(src.Latitude), Number(src.Longitude)], [Number(sink.Latitude), Number(sink.Longitude)]], {
       color: selected ? "#245a6e" : status.override ? status.color : sideStyle.color,
-      weight: selected ? Math.max(sideStyle.weight, compareLinkWeight(ctx.width)) + 1.4 : Math.max(sideStyle.weight, compareLinkWeight(ctx.width)),
+      weight: selected || highlighted ? Math.max(sideStyle.weight, compareLinkWeight(ctx.width)) + 1.4 : Math.max(sideStyle.weight, compareLinkWeight(ctx.width)),
       dashArray: status.dashArray || sideStyle.dashArray,
-      opacity: status.opacity
+      opacity: dimLink ? 0.18 : status.opacity
     }).addTo(map);
     line.bindTooltip(`${link["Src NE Name"]} ⇄ ${link["Sink NE Name"]}`);
     line.on("click", event => {
@@ -1164,15 +1218,17 @@ function renderCompareSide(side, version, data, diff) {
     if (!hasCoord(node)) return;
     const name = node["NE Name"];
     const selected = ctx.selectedName === name;
+    const highlighted = highlight.names.has(name);
+    const dimNode = highlight.active && !highlighted;
     const status = compareNodeStatus(side, node, diff, ctx.showDiff);
     const radius = compareMapNodeRadius(ctx, degreeMap.get(name) || 0, node, selected);
     const marker = L.circleMarker([Number(node.Latitude), Number(node.Longitude)], {
-      radius,
+      radius: highlighted ? radius + 2 : radius,
       fillColor: compareNodeFill(ctx, node),
-      color: selected ? "#245a6e" : status.color,
-      weight: selected ? 3.4 : status.weight,
-      fillOpacity: 0.94,
-      opacity: 1
+      color: selected ? "#245a6e" : highlighted ? "#c99a3d" : status.color,
+      weight: selected ? 3.4 : highlighted ? Math.max(status.weight, 3.4) : status.weight,
+      fillOpacity: dimNode ? 0.24 : 0.94,
+      opacity: dimNode ? 0.34 : 1
     }).addTo(map);
     marker.bindTooltip(name, { permanent: false, direction: "top", className: "node-tip" });
     marker.on("click", event => {
@@ -1204,6 +1260,41 @@ function compareLinkStatus(side, link, diff, showDiff) {
   if (side === "left" && !diff.rightLinks.has(key)) return { color: "#bd3b3b", dashArray: "8 5", opacity: 0.96, override: true };
   if (side === "right" && !diff.leftLinks.has(key)) return { color: "#138a65", dashArray: "8 5", opacity: 0.96, override: true };
   return base;
+}
+
+function compareHighlightInfo(version, data, ctx) {
+  const group = normalizeRuleGroup(ctx && ctx.highlightRule);
+  const names = new Set();
+  const linkKeys = new Set();
+  if (!group) return { active: false, names, linkKeys };
+
+  if (group.source === CONDITION_SOURCES.LINKS) {
+    data.links.forEach(link => {
+      if (!matchesRule(link, group)) return;
+      const key = linkKey(link);
+      linkKeys.add(key);
+      names.add(link["Src NE Name"]);
+      names.add(link["Sink NE Name"]);
+    });
+  } else if (group.source === CONDITION_SOURCES.RING_CHAINS) {
+    const ringNames = compareRingChainNamesForRule(version, group);
+    data.nodes.forEach(node => {
+      const name = node["NE Name"];
+      if (ringNames.has(name)) names.add(name);
+    });
+    data.links.forEach(link => {
+      if (names.has(link["Src NE Name"]) && names.has(link["Sink NE Name"])) linkKeys.add(linkKey(link));
+    });
+  } else {
+    data.nodes.forEach(node => {
+      if (matchesRule(node, group)) names.add(node["NE Name"]);
+    });
+    data.links.forEach(link => {
+      if (names.has(link["Src NE Name"]) || names.has(link["Sink NE Name"])) linkKeys.add(linkKey(link));
+    });
+  }
+
+  return { active: names.size > 0 || linkKeys.size > 0, names, linkKeys };
 }
 
 function ensureCompareStyleState(ctx) {
@@ -1287,6 +1378,16 @@ function renderCompareStyleControls(side, version) {
         <input type="file" accept=".json,application/json" data-import-compare-style-template>
       </label>
       <div class="message" data-compare-style-message></div>
+    </div>
+    <div class="compare-style-group">
+      <div class="compare-style-title">${escapeHtml(t("sectionHighlight"))}</div>
+      <div class="rule-condition"><span>${escapeHtml(ruleSummary(ctx.highlightRule))}</span><button type="button" data-edit-compare-highlight>${escapeHtml(t("advancedCondition"))}</button></div>
+      <button type="button" data-clear-compare-highlight>${escapeHtml(t("clear"))}</button>
+    </div>
+    <div class="compare-style-group">
+      <div class="compare-style-title">${escapeHtml(t("sectionFilter"))}</div>
+      <div class="rule-condition"><span>${escapeHtml(ruleSummary(ctx.filterRule))}</span><button type="button" data-edit-compare-filter>${escapeHtml(t("advancedCondition"))}</button></div>
+      <button type="button" data-clear-compare-filter>${escapeHtml(t("clear"))}</button>
     </div>
     <div class="compare-style-group">
       <div class="compare-style-title">${escapeHtml(t("roleStyle"))}</div>
@@ -1401,6 +1502,28 @@ function handleCompareStyleClick(side, event) {
       size: DEFAULT_NODE_STYLE.size
     });
     ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
+    renderCompare();
+    return;
+  }
+
+  if (event.target.closest("[data-edit-compare-highlight]")) {
+    openConditionModal("compareHighlight", { side });
+    return;
+  }
+
+  if (event.target.closest("[data-edit-compare-filter]")) {
+    openConditionModal("compareFilter", { side });
+    return;
+  }
+
+  if (event.target.closest("[data-clear-compare-highlight]")) {
+    ctx.highlightRule = null;
+    renderCompare();
+    return;
+  }
+
+  if (event.target.closest("[data-clear-compare-filter]")) {
+    ctx.filterRule = null;
     renderCompare();
     return;
   }
@@ -1629,11 +1752,35 @@ function fitCompareMaps() {
     const ctx = state.compare[side];
     const version = versionById(ctx.versionId);
     if (!ctx.map || !version) return;
-    const data = getCompareVisibleData(version, state.compare.criteria);
+    const data = getCompareVisibleData(version, state.compare.criteria, ctx);
     const points = data.nodes.filter(hasCoord).map(node => [Number(node.Latitude), Number(node.Longitude)]);
     if (points.length === 1) ctx.map.setView(points[0], 13);
     else if (points.length > 1) ctx.map.fitBounds(points, { padding: [36, 36] });
   });
+}
+
+function focusCompareRuleResult(side, kind) {
+  const ctx = state.compare[side];
+  const version = ctx && versionById(ctx.versionId);
+  if (!ctx || !ctx.map || !version) return;
+
+  const data = getCompareVisibleData(version, state.compare.criteria, ctx);
+  const nodes = kind === "filter"
+    ? data.nodes
+    : compareNodesForHighlight(version, data, ctx);
+  focusLeafletMapOnNodes(ctx.map, nodes, { padding: [58, 58], maxZoom: 14 });
+}
+
+function compareNodesForHighlight(version, data, ctx) {
+  const highlight = compareHighlightInfo(version, data, ctx);
+  if (!highlight.active) return [];
+  const names = new Set(highlight.names);
+  data.links.forEach(link => {
+    if (!highlight.linkKeys.has(linkKey(link))) return;
+    names.add(link["Src NE Name"]);
+    names.add(link["Sink NE Name"]);
+  });
+  return [...names].map(name => data.nodeByName.get(name)).filter(Boolean);
 }
 
 function showCompareNodeDetails(side, node) {
@@ -3541,6 +3688,11 @@ function closeConditionModal() {
 function conditionTargetRule(type, index = null) {
   if (type === "locate") return state.locateRule;
   if (type === "highlight" || type === "filter") return state[`${type}Rule`];
+  if (type === "compareHighlight" || type === "compareFilter") {
+    const target = state.conditionModalTarget && state.conditionModalTarget.index;
+    const ctx = target && state.compare[target.side];
+    return ctx ? ctx[type === "compareHighlight" ? "highlightRule" : "filterRule"] : null;
+  }
   if (type === "nodeStyle") return state.nodeStyleRules[index];
   if (type === "linkStyle") return state.linkStyleRules[index];
   if (type === "ringChainStyle") return state.ringChainStyleRules[index];
@@ -3561,11 +3713,13 @@ function quickRuleGroupForTarget(type) {
 
 function conditionFieldsForTarget(type) {
   const source = conditionSourceForTarget(type);
-  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+  if (type === "compareNodeStyle" || type === "compareLinkStyle" || type === "compareHighlight" || type === "compareFilter") {
     const target = state.conditionModalTarget && state.conditionModalTarget.index;
     const ctx = target && state.compare[target.side];
     const version = ctx ? versionById(ctx.versionId) : null;
-    return type === "compareLinkStyle"
+    const source = conditionSourceForTarget(type);
+    if (source === CONDITION_SOURCES.RING_CHAINS) return collectFields(version && version.ringChains || [], REQUIRED_RING_CHAIN);
+    return source === CONDITION_SOURCES.LINKS || type === "compareLinkStyle"
       ? collectFields(version && version.links || [], REQUIRED_LINK)
       : collectFields(version && version.nodes || [], REQUIRED_NE);
   }
@@ -3587,14 +3741,20 @@ function conditionSourceOptions(selected) {
     [CONDITION_SOURCES.NODES, "conditionSourceNodes"],
     [CONDITION_SOURCES.LINKS, "conditionSourceLinks"]
   ];
-  if (state.ringChains.length) options.push([CONDITION_SOURCES.RING_CHAINS, "conditionSourceRingChains"]);
+  const compareTarget = state.conditionModalTarget && state.conditionModalTarget.index;
+  const compareCtx = compareTarget && state.compare[compareTarget.side];
+  const compareVersion = compareCtx ? versionById(compareCtx.versionId) : null;
+  const hasRingChains = state.conditionModalType && state.conditionModalType.startsWith("compare")
+    ? Boolean(compareVersion && compareVersion.ringChains && compareVersion.ringChains.length)
+    : state.ringChains.length;
+  if (hasRingChains) options.push([CONDITION_SOURCES.RING_CHAINS, "conditionSourceRingChains"]);
   return options
     .map(([value, key]) => `<option value="${value}" ${value === selected ? "selected" : ""}>${escapeHtml(t(key))}</option>`)
     .join("");
 }
 
 function canChooseConditionSource(type) {
-  return type === "locate" || type === "highlight" || type === "filter";
+  return type === "locate" || type === "highlight" || type === "filter" || type === "compareHighlight" || type === "compareFilter";
 }
 
 function emptyRuleGroup(field = "", source = CONDITION_SOURCES.NODES) {
@@ -3646,11 +3806,16 @@ function conditionRowMarkup(condition, index) {
 function conditionValueOptions(field) {
   const type = state.conditionModalType;
   const source = conditionSourceForTarget(type);
-  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+  if (type === "compareNodeStyle" || type === "compareLinkStyle" || type === "compareHighlight" || type === "compareFilter") {
     const target = state.conditionModalTarget && state.conditionModalTarget.index;
     const ctx = target && state.compare[target.side];
     const version = ctx ? versionById(ctx.versionId) : null;
-    const rows = type === "compareLinkStyle" ? version && version.links || [] : version && version.nodes || [];
+    const source = conditionSourceForTarget(type);
+    const rows = source === CONDITION_SOURCES.RING_CHAINS
+      ? version && version.ringChains || []
+      : source === CONDITION_SOURCES.LINKS || type === "compareLinkStyle"
+        ? version && version.links || []
+        : version && version.nodes || [];
     return mergeSuggestionValues(collectValueOptions(rows, field), conditionValueHistory(type, field))
       .map(value => `<option value="${escapeAttr(value)}"></option>`)
       .join("");
@@ -3713,6 +3878,8 @@ function updateConditionRowSuggestions(event) {
 function conditionModalTitle(type) {
   if (type === "locate") return t("complexLocateTitle");
   if (type === "filter") return t("complexFilterTitle");
+  if (type === "compareFilter") return t("complexFilterTitle");
+  if (type === "compareHighlight") return t("complexHighlightTitle");
   if (type === "nodeStyle") return t("nodeStyleRules");
   if (type === "compareNodeStyle") return t("nodeStyleRules");
   if (type === "linkStyle") return t("linkStyleRules");
@@ -3729,6 +3896,14 @@ function applyRuleGroupToTarget(target, group) {
   }
   if (target.type === "highlight" || target.type === "filter") {
     state[`${target.type}Rule`] = group;
+    return;
+  }
+  if (target.type === "compareHighlight" || target.type === "compareFilter") {
+    const compareTarget = target.index || {};
+    const ctx = state.compare[compareTarget.side];
+    if (!ctx) return;
+    if (target.type === "compareHighlight") ctx.highlightRule = group;
+    else ctx.filterRule = group;
     return;
   }
   if (target.type === "compareNodeStyle" || target.type === "compareLinkStyle") {
@@ -3862,11 +4037,16 @@ function applyConditionModal() {
   renderLinkStyleRules();
   renderRingChainStyleRules();
   closeConditionModal();
-  if (type === "compareNodeStyle" || type === "compareLinkStyle") {
+  if (type === "compareNodeStyle" || type === "compareLinkStyle" || type === "compareHighlight" || type === "compareFilter") {
     renderCompare();
+    if (type === "compareHighlight" || type === "compareFilter") {
+      const compareTarget = target.index || {};
+      focusCompareRuleResult(compareTarget.side, type === "compareHighlight" ? "highlight" : "filter");
+    }
     return;
   }
   renderTopologies();
+  if (type === "highlight" || type === "filter") focusMainRuleResult(type);
 }
 
 function applyBulkQuery() {
@@ -5574,6 +5754,40 @@ function fitMap() {
 
   if (points.length === 1) state.map.setView(points[0], 13);
   else if (points.length > 1) state.map.fitBounds(points, { padding: [50, 50] });
+}
+
+function focusMainRuleResult(kind) {
+  if (!state.map || state.view !== "gis") return;
+  const data = getVisibleData();
+  const nodes = kind === "filter"
+    ? data.nodes
+    : mainNodesForHighlight(data);
+  focusLeafletMapOnNodes(state.map, nodes, { padding: [70, 70], maxZoom: 14 });
+}
+
+function mainNodesForHighlight(data) {
+  if (!data.highlightNames || !data.highlightNames.size && !data.highlightLinkKeys.size) return [];
+  const names = new Set(data.highlightNames);
+  data.links.forEach(link => {
+    if (!data.highlightLinkKeys.has(linkKey(link))) return;
+    names.add(link["Src NE Name"]);
+    names.add(link["Sink NE Name"]);
+  });
+  return [...names].map(name => data.nodeByName.get(name)).filter(Boolean);
+}
+
+function focusLeafletMapOnNodes(map, nodes, options = {}) {
+  if (!map || !Array.isArray(nodes)) return false;
+  const points = nodes
+    .filter(hasCoord)
+    .map(node => [Number(node.Latitude), Number(node.Longitude)]);
+  if (!points.length) return false;
+  if (points.length === 1) map.setView(points[0], options.singleZoom || 14);
+  else map.fitBounds(points, {
+    padding: options.padding || [70, 70],
+    maxZoom: options.maxZoom || 14
+  });
+  return true;
 }
 
 function showDetails(node) {
