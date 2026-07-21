@@ -575,6 +575,10 @@ const state = {
     key: "",
     styles: new Map()
   },
+  styleRuleMatchCache: {
+    key: "",
+    matches: new Map()
+  },
   logic: {
     positions: new Map(),
     layoutKey: "",
@@ -974,6 +978,8 @@ function versionById(id) {
 function buildVersionIndexes(version) {
   const nodeByName = new Map();
   const linksByNode = new Map();
+  const ringChainMembersByName = new Map();
+  const ringChainSegmentsByName = new Map();
   (version.nodes || []).forEach(node => {
     const name = node["NE Name"];
     if (name) nodeByName.set(name, node);
@@ -985,7 +991,20 @@ function buildVersionIndexes(version) {
       linksByNode.get(name).push(link);
     });
   });
-  return { nodeByName, linksByNode };
+  (version.ringChains || []).forEach((row, index) => {
+    const rowKey = ringChainRowKey(row, index);
+    const members = parseMemberPath(row.Member_path);
+    const validMembers = members.filter(name => nodeByName.has(name));
+    const segments = [];
+    for (let i = 1; i < members.length; i++) {
+      if (nodeByName.has(members[i - 1]) && nodeByName.has(members[i])) {
+        segments.push(linkPairKey(members[i - 1], members[i]));
+      }
+    }
+    ringChainMembersByName.set(rowKey, validMembers);
+    ringChainSegmentsByName.set(rowKey, segments);
+  });
+  return { nodeByName, linksByNode, ringChainMembersByName, ringChainSegmentsByName };
 }
 
 function getCompareVisibleData(version, criteria, ctx = null) {
@@ -1060,11 +1079,86 @@ function applyCompareFilter(version, data, ctx) {
 
 function compareRingChainNamesForRule(version, group) {
   const names = new Set();
-  (version.ringChains || []).forEach(row => {
+  const indexes = buildVersionIndexes(version);
+  (version.ringChains || []).forEach((row, index) => {
     if (!matchesRule(row, group)) return;
-    parseMemberPath(row.Member_path).forEach(name => names.add(name));
+    const rowKey = ringChainRowKey(row, index);
+    const members = indexes.ringChainMembersByName.get(rowKey) || parseMemberPath(row.Member_path);
+    members.forEach(name => names.add(name));
   });
   return names;
+}
+
+function compareNodeNamesForStyleRule(version, rule) {
+  const group = normalizeRuleGroup(rule);
+  const names = new Set();
+  if (!group || !version) return names;
+
+  if (group.source === CONDITION_SOURCES.LINKS) {
+    (version.links || []).forEach(link => {
+      if (!matchesRule(link, group)) return;
+      names.add(link["Src NE Name"]);
+      names.add(link["Sink NE Name"]);
+    });
+    return names;
+  }
+
+  if (group.source === CONDITION_SOURCES.RING_CHAINS) {
+    return compareRingChainNamesForRule(version, group);
+  }
+
+  (version.nodes || []).forEach(node => {
+    if (matchesRule(node, group)) names.add(node["NE Name"]);
+  });
+  return names;
+}
+
+function compareLinkKeysForStyleRule(version, rule) {
+  const group = normalizeRuleGroup(rule);
+  const keys = new Set();
+  if (!group || !version) return keys;
+
+  if (group.source === CONDITION_SOURCES.LINKS) {
+    (version.links || []).forEach(link => {
+      if (matchesRule(link, group)) keys.add(linkKey(link));
+    });
+    return keys;
+  }
+
+  if (group.source === CONDITION_SOURCES.RING_CHAINS) {
+    const indexes = buildVersionIndexes(version);
+    (version.ringChains || []).forEach((row, index) => {
+      if (!matchesRule(row, group)) return;
+      const rowKey = ringChainRowKey(row, index);
+      const segments = indexes.ringChainSegmentsByName.get(rowKey) || [];
+      segments.forEach(segmentKey => {
+        keys.add(segmentKey);
+        const [src, sink] = segmentKey.split("::");
+        keys.add(linkPairKey(sink, src));
+      });
+    });
+    return keys;
+  }
+
+  const names = compareNodeNamesForStyleRule(version, group);
+  (version.links || []).forEach(link => {
+    if (names.has(link["Src NE Name"]) && names.has(link["Sink NE Name"])) keys.add(linkKey(link));
+  });
+  return keys;
+}
+
+function compareNodeMatchesStyleRule(version, node, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return false;
+  if (group.source === CONDITION_SOURCES.NODES) return matchesRule(node, group);
+  return compareNodeNamesForStyleRule(version, group).has(node["NE Name"]);
+}
+
+function compareLinkMatchesStyleRule(version, link, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return false;
+  if (group.source === CONDITION_SOURCES.LINKS) return matchesRule(link, group);
+  return compareLinkKeysForStyleRule(version, group).has(linkKey(link));
 }
 
 function compareHopNames(center, hops, indexes) {
@@ -1309,10 +1403,11 @@ function ensureCompareStyleState(ctx) {
 
 function compareResolveNodeStyle(ctx, node) {
   ensureCompareStyleState(ctx);
+  const version = versionById(ctx.versionId);
   const key = roleKey(node);
   const style = { ...(ctx.roleStyles[key] || ctx.roleStyles.OTHER || DEFAULT_NODE_STYLE) };
   ctx.appliedNodeStyleRules.forEach(rule => {
-    if (!normalizeRuleGroup(rule) || !matchesRule(node, rule)) return;
+    if (!compareNodeMatchesStyleRule(version, node, rule)) return;
     style.color = normalizeColor(rule.color, style.color);
     style.size = clamp(Number(rule.size) || style.size, 4, 40);
     style.shape = normalizeShape(rule.shape, style.shape);
@@ -1331,9 +1426,10 @@ function compareMapNodeRadius(ctx, degree, node, active) {
 
 function compareResolveLinkStyle(ctx, link) {
   ensureCompareStyleState(ctx);
+  const version = versionById(ctx.versionId);
   const style = { ...DEFAULT_LINK_STYLE };
   ctx.appliedLinkStyleRules.forEach(rule => {
-    if (!normalizeRuleGroup(rule) || !matchesRule(link, rule)) return;
+    if (!compareLinkMatchesStyleRule(version, link, rule)) return;
     style.color = normalizeColor(rule.color, style.color);
     style.lineStyle = LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : style.lineStyle;
     style.width = LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : style.width;
@@ -1407,7 +1503,7 @@ function renderCompareStyleControls(side, version) {
         <button type="button" data-add-compare-node-rule>${escapeHtml(t("addNodeStyleRule"))}</button>
       </div>
       <div class="compare-rule-list">
-        ${ctx.nodeStyleRules.length ? ctx.nodeStyleRules.map((rule, index) => compareNodeRuleMarkup(rule, index, nodeFields, nodeField)).join("") : `<div class="notice">${escapeHtml(t("noNodeStyleRule"))}</div>`}
+        ${ctx.nodeStyleRules.length ? ctx.nodeStyleRules.map((rule, index) => compareNodeRuleMarkup(rule, index, version, nodeField)).join("") : `<div class="notice">${escapeHtml(t("noNodeStyleRule"))}</div>`}
       </div>
     </div>
     <div class="compare-style-group">
@@ -1416,7 +1512,7 @@ function renderCompareStyleControls(side, version) {
         <button type="button" data-add-compare-link-rule>${escapeHtml(t("addLinkStyleRule"))}</button>
       </div>
       <div class="compare-rule-list">
-        ${ctx.linkStyleRules.length ? ctx.linkStyleRules.map((rule, index) => compareLinkRuleMarkup(rule, index, linkFields, linkField)).join("") : `<div class="notice">${escapeHtml(t("noLinkStyleRule"))}</div>`}
+        ${ctx.linkStyleRules.length ? ctx.linkStyleRules.map((rule, index) => compareLinkRuleMarkup(rule, index, version, linkField)).join("") : `<div class="notice">${escapeHtml(t("noLinkStyleRule"))}</div>`}
       </div>
     </div>
   `;
@@ -1446,8 +1542,10 @@ function compareLineWidthOptions(current) {
   return LINE_WIDTH_VALUES.map(value => `<option value="${escapeAttr(value)}" ${value === current ? "selected" : ""}>${escapeHtml(t(`line${value[0].toUpperCase()}${value.slice(1)}`))}</option>`).join("");
 }
 
-function compareNodeRuleMarkup(rule, index, fields, fallbackField) {
-  const field = rule.field || fallbackField;
+function compareNodeRuleMarkup(rule, index, version, fallbackField) {
+  const source = normalizeConditionSource(rule.source || CONDITION_SOURCES.NODES);
+  const fields = compareStyleFieldsForSource(version, source);
+  const field = fields.includes(rule.field) ? rule.field : compareFallbackFieldForSource(fields, source) || fallbackField;
   return `<div class="compare-rule-row" data-compare-node-rule="${index}">
     <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-compare-node-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
     <div class="compare-rule-grid">
@@ -1464,8 +1562,10 @@ function compareNodeRuleMarkup(rule, index, fields, fallbackField) {
   </div>`;
 }
 
-function compareLinkRuleMarkup(rule, index, fields, fallbackField) {
-  const field = rule.field || fallbackField;
+function compareLinkRuleMarkup(rule, index, version, fallbackField) {
+  const source = normalizeConditionSource(rule.source || CONDITION_SOURCES.LINKS);
+  const fields = compareStyleFieldsForSource(version, source);
+  const field = fields.includes(rule.field) ? rule.field : compareFallbackFieldForSource(fields, source) || fallbackField;
   return `<div class="compare-rule-row" data-compare-link-rule="${index}">
     <div class="rule-condition"><span>${escapeHtml(ruleSummary(rule))}</span><button type="button" data-edit-compare-link-rule-condition="${index}">${escapeHtml(t("advancedCondition"))}</button></div>
     <div class="compare-rule-grid">
@@ -1601,7 +1701,7 @@ function updateCompareStyleFromControl(side, event) {
 
   const nodeRow = target.closest("[data-compare-node-rule]");
   if (nodeRow && target.dataset.compareRuleField) {
-    updateCompareRule(ctx.nodeStyleRules[Number(nodeRow.getAttribute("data-compare-node-rule"))], target);
+    updateCompareRule(ctx.nodeStyleRules[Number(nodeRow.getAttribute("data-compare-node-rule"))], target, CONDITION_SOURCES.NODES);
     ctx.appliedNodeStyleRules = cloneRuleList(ctx.nodeStyleRules);
     renderCompare();
     return;
@@ -1609,13 +1709,13 @@ function updateCompareStyleFromControl(side, event) {
 
   const linkRow = target.closest("[data-compare-link-rule]");
   if (linkRow && target.dataset.compareRuleField) {
-    updateCompareRule(ctx.linkStyleRules[Number(linkRow.getAttribute("data-compare-link-rule"))], target);
+    updateCompareRule(ctx.linkStyleRules[Number(linkRow.getAttribute("data-compare-link-rule"))], target, CONDITION_SOURCES.LINKS);
     ctx.appliedLinkStyleRules = cloneRuleList(ctx.linkStyleRules);
     renderCompare();
   }
 }
 
-function updateCompareRule(rule, target) {
+function updateCompareRule(rule, target, defaultSource = CONDITION_SOURCES.NODES) {
   if (!rule) return;
   const field = target.dataset.compareRuleField;
   if (field === "color") rule.color = normalizeColor(target.value, rule.color || DEFAULT_NODE_STYLE.color);
@@ -1624,7 +1724,7 @@ function updateCompareRule(rule, target) {
   else if (field === "lineStyle") rule.lineStyle = LINE_STYLE_VALUES.includes(target.value) ? target.value : DEFAULT_LINK_STYLE.lineStyle;
   else if (field === "width") rule.width = LINE_WIDTH_VALUES.includes(target.value) ? target.value : DEFAULT_LINK_STYLE.width;
   else rule[field] = target.value;
-  rule.source = rule.lineStyle || rule.width ? CONDITION_SOURCES.LINKS : CONDITION_SOURCES.NODES;
+  rule.source = normalizeConditionSource(rule.source || defaultSource);
   rule.mode = "all";
   rule.conditions = [{ field: rule.field, op: rule.op, value: rule.value }];
 }
@@ -1693,12 +1793,11 @@ function sanitizeCompareStyleRule(rule, type, version, report) {
     report.skipped += 1;
     return null;
   }
-  const fields = type === "link"
-    ? collectFields(version.links || [], REQUIRED_LINK)
-    : collectFields(version.nodes || [], REQUIRED_NE);
-  const source = type === "link" ? CONDITION_SOURCES.LINKS : CONDITION_SOURCES.NODES;
+  const defaultSource = type === "link" ? CONDITION_SOURCES.LINKS : CONDITION_SOURCES.NODES;
+  const source = normalizeConditionSource(rule.source || defaultSource);
+  const fields = compareStyleFieldsForSource(version, source);
   const available = new Set(fields);
-  const fallback = firstAvailableField(fields, type === "link" ? REQUIRED_LINK : REQUIRED_NE);
+  const fallback = compareFallbackFieldForSource(fields, source);
   const group = normalizeRuleGroup({ ...rule, source });
   if (!group || !fallback) {
     report.skipped += 1;
@@ -1737,6 +1836,18 @@ function sanitizeCompareStyleRule(rule, type, version, report) {
     lineStyle: LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : DEFAULT_LINK_STYLE.lineStyle,
     width: LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : DEFAULT_LINK_STYLE.width
   };
+}
+
+function compareStyleFieldsForSource(version, source) {
+  if (source === CONDITION_SOURCES.LINKS) return collectFields(version.links || [], REQUIRED_LINK);
+  if (source === CONDITION_SOURCES.RING_CHAINS) return collectFields(version.ringChains || [], REQUIRED_RING_CHAIN);
+  return collectFields(version.nodes || [], REQUIRED_NE);
+}
+
+function compareFallbackFieldForSource(fields, source) {
+  if (source === CONDITION_SOURCES.LINKS) return firstAvailableField(fields, REQUIRED_LINK);
+  if (source === CONDITION_SOURCES.RING_CHAINS) return firstAvailableField(fields, ["Member_path"]);
+  return firstAvailableField(fields, REQUIRED_NE);
 }
 
 function setCompareStyleMessage(side, text, type) {
@@ -2493,6 +2604,7 @@ function importStyleTemplate(template) {
   pruneLinkStyleRules();
   pruneRingChainStyleRules();
   clearRingChainStyleCache();
+  clearStyleRuleMatchCache();
   syncStyleControlsFromState();
   setMessage(
     el.styleTemplateMessage,
@@ -2543,8 +2655,10 @@ function sanitizeStyleRule(rule, type, report) {
     report.skipped += 1;
     return null;
   }
-  const config = styleRuleConfig(type);
-  const group = normalizeRuleGroup({ ...rule, source: config.source });
+  const defaultSource = type === "link" ? CONDITION_SOURCES.LINKS : type === "ringChain" ? CONDITION_SOURCES.RING_CHAINS : CONDITION_SOURCES.NODES;
+  const source = type === "ringChain" ? CONDITION_SOURCES.RING_CHAINS : normalizeConditionSource(rule.source || defaultSource);
+  const config = styleRuleConfig(source);
+  const group = normalizeRuleGroup({ ...rule, source });
   if (!group) {
     report.skipped += 1;
     return null;
@@ -2559,7 +2673,7 @@ function sanitizeStyleRule(rule, type, report) {
   const first = sanitizedConditions[0];
   if (type === "node") {
     return {
-      source: config.source,
+      source,
       mode: group.mode,
       conditions: sanitizedConditions,
       field: first.field,
@@ -2572,7 +2686,7 @@ function sanitizeStyleRule(rule, type, report) {
     };
   }
   return {
-    source: config.source,
+    source,
     mode: group.mode,
     conditions: sanitizedConditions,
     field: first.field,
@@ -2584,14 +2698,14 @@ function sanitizeStyleRule(rule, type, report) {
   };
 }
 
-function styleRuleConfig(type) {
-  if (type === "link") {
-    return { source: CONDITION_SOURCES.LINKS, available: new Set(state.linkFields), fallback: firstConfigurableLinkField() };
+function styleRuleConfig(source) {
+  if (source === CONDITION_SOURCES.LINKS) {
+    return { available: new Set(state.linkFields), fallback: firstConfigurableLinkField() };
   }
-  if (type === "ringChain") {
-    return { source: CONDITION_SOURCES.RING_CHAINS, available: new Set(state.ringChainFields), fallback: firstConfigurableRingChainField() };
+  if (source === CONDITION_SOURCES.RING_CHAINS) {
+    return { available: new Set(state.ringChainFields), fallback: firstConfigurableRingChainField() };
   }
-  return { source: CONDITION_SOURCES.NODES, available: new Set(state.nodeFields), fallback: firstConfigurableNodeField() };
+  return { available: new Set(state.nodeFields), fallback: firstConfigurableNodeField() };
 }
 
 function normalizeOp(op) {
@@ -2627,6 +2741,8 @@ function resetStyleControls() {
   state.appliedRingChainStyleRules = [];
   state.routePathStyle = { ...DEFAULT_ROUTE_PATH_STYLE };
   state.highlightContrast = DEFAULT_HIGHLIGHT_CONTRAST;
+  clearRingChainStyleCache();
+  clearStyleRuleMatchCache();
   el.highlightContrastInput.value = state.highlightContrast;
   el.routePathVisibleInput.checked = state.routePathStyle.visible;
   el.routePathColorInput.value = state.routePathStyle.color;
@@ -2683,6 +2799,7 @@ function updateRoleSwatches() {
 function addNodeStyleRule() {
   const field = firstConfigurableNodeField();
   state.nodeStyleRules.push({
+    source: CONDITION_SOURCES.NODES,
     field,
     op: "eq",
     value: "",
@@ -2724,6 +2841,7 @@ function removeNodeStyleRule(event) {
   if (!Number.isInteger(index)) return;
   state.nodeStyleRules.splice(index, 1);
   state.appliedNodeStyleRules = cloneRuleList(state.nodeStyleRules);
+  clearStyleRuleMatchCache();
   renderNodeStyleRules();
   renderTopologies();
 }
@@ -2756,6 +2874,7 @@ function updateNodeStyleRuleFromControl(event) {
 
 function applyNodeStyleRules() {
   state.appliedNodeStyleRules = cloneRuleList(state.nodeStyleRules);
+  clearStyleRuleMatchCache();
   renderTopologies();
 }
 
@@ -2811,9 +2930,9 @@ function firstConfigurableNodeField() {
 }
 
 function pruneNodeStyleRules() {
-  const available = new Set(state.nodeFields);
-  const fallback = firstConfigurableNodeField();
   [...state.nodeStyleRules, ...state.appliedNodeStyleRules].forEach(rule => {
+    rule.source = normalizeConditionSource(rule.source || CONDITION_SOURCES.NODES);
+    const { available, fallback } = styleRuleConfig(rule.source);
     if (!available.has(rule.field)) {
       rule.field = fallback;
       rule.value = "";
@@ -2890,6 +3009,7 @@ function updateLinkStyleRuleFromControl(event) {
 
 function applyLinkStyleRules() {
   state.appliedLinkStyleRules = cloneRuleList(state.linkStyleRules);
+  clearStyleRuleMatchCache();
   renderTopologies();
 }
 
@@ -2945,6 +3065,7 @@ function updateRingChainStyleRuleFromControl(event) {
 function applyRingChainStyleRules() {
   state.appliedRingChainStyleRules = cloneRuleList(state.ringChainStyleRules);
   clearRingChainStyleCache();
+  clearStyleRuleMatchCache();
   renderTopologies();
 }
 
@@ -2999,10 +3120,9 @@ function firstConfigurableRingChainField() {
 }
 
 function pruneLinkStyleRules() {
-  const available = new Set(state.linkFields);
-  const fallback = firstConfigurableLinkField();
   [...state.linkStyleRules, ...state.appliedLinkStyleRules].forEach(rule => {
-    rule.source = CONDITION_SOURCES.LINKS;
+    rule.source = normalizeConditionSource(rule.source || CONDITION_SOURCES.LINKS);
+    const { available, fallback } = styleRuleConfig(rule.source);
     if (!available.has(rule.field)) {
       rule.field = fallback;
       rule.value = "";
@@ -3398,6 +3518,7 @@ function setData(nodes, links, ringChains = [], options = {}) {
 }
 
 function rebuildIndexes() {
+  clearStyleRuleMatchCache();
   const nodeByName = new Map();
   const upperNameToName = new Map();
   const linksByNode = new Map();
@@ -3719,19 +3840,16 @@ function conditionFieldsForTarget(type) {
     const version = ctx ? versionById(ctx.versionId) : null;
     const source = conditionSourceForTarget(type);
     if (source === CONDITION_SOURCES.RING_CHAINS) return collectFields(version && version.ringChains || [], REQUIRED_RING_CHAIN);
-    return source === CONDITION_SOURCES.LINKS || type === "compareLinkStyle"
+    return source === CONDITION_SOURCES.LINKS
       ? collectFields(version && version.links || [], REQUIRED_LINK)
       : collectFields(version && version.nodes || [], REQUIRED_NE);
   }
-  if (type === "linkStyle") return state.linkFields;
   if (source === CONDITION_SOURCES.LINKS) return state.linkFields;
   if (source === CONDITION_SOURCES.RING_CHAINS) return state.ringChainFields;
   return state.nodeFields;
 }
 
 function conditionSourceForTarget(type) {
-  if (type === "linkStyle" || type === "compareLinkStyle") return CONDITION_SOURCES.LINKS;
-  if (type === "compareNodeStyle") return CONDITION_SOURCES.NODES;
   if (type === "ringChainStyle") return CONDITION_SOURCES.RING_CHAINS;
   return normalizeConditionSource(state.conditionDraft && state.conditionDraft.source);
 }
@@ -3754,7 +3872,15 @@ function conditionSourceOptions(selected) {
 }
 
 function canChooseConditionSource(type) {
-  return type === "locate" || type === "highlight" || type === "filter" || type === "compareHighlight" || type === "compareFilter";
+  return type === "locate"
+    || type === "highlight"
+    || type === "filter"
+    || type === "nodeStyle"
+    || type === "linkStyle"
+    || type === "compareHighlight"
+    || type === "compareFilter"
+    || type === "compareNodeStyle"
+    || type === "compareLinkStyle";
 }
 
 function emptyRuleGroup(field = "", source = CONDITION_SOURCES.NODES) {
@@ -3813,16 +3939,14 @@ function conditionValueOptions(field) {
     const source = conditionSourceForTarget(type);
     const rows = source === CONDITION_SOURCES.RING_CHAINS
       ? version && version.ringChains || []
-      : source === CONDITION_SOURCES.LINKS || type === "compareLinkStyle"
+      : source === CONDITION_SOURCES.LINKS
         ? version && version.links || []
         : version && version.nodes || [];
     return mergeSuggestionValues(collectValueOptions(rows, field), conditionValueHistory(type, field))
       .map(value => `<option value="${escapeAttr(value)}"></option>`)
       .join("");
   }
-  const rows = type === "linkStyle"
-    ? state.links
-    : source === CONDITION_SOURCES.RING_CHAINS
+  const rows = source === CONDITION_SOURCES.RING_CHAINS
       ? state.ringChains
       : source === CONDITION_SOURCES.LINKS
         ? state.links
@@ -4151,6 +4275,71 @@ function linkKeysForRule(rule, linkRows = state.links) {
     if (matchesRule(link, group)) keys.add(linkKey(link));
   });
   return keys;
+}
+
+function linkKeysForStyleRule(rule, linkRows = state.links) {
+  const group = normalizeRuleGroup(rule);
+  const keys = new Set();
+  if (!group) return keys;
+
+  if (group.source === CONDITION_SOURCES.LINKS) {
+    linkRows.forEach(link => {
+      if (matchesRule(link, group)) keys.add(linkKey(link));
+    });
+    return keys;
+  }
+
+  if (group.source === CONDITION_SOURCES.RING_CHAINS) {
+    state.ringChains.forEach((row, index) => {
+      if (!matchesRule(row, group)) return;
+      const rowKey = ringChainRowKey(row, index);
+      const segments = state.indexes.ringChainSegmentsByName.get(rowKey) || [];
+      segments.forEach(segmentKey => {
+        keys.add(segmentKey);
+        const [src, sink] = segmentKey.split("::");
+        keys.add(linkPairKey(sink, src));
+      });
+    });
+    return keys;
+  }
+
+  const names = nodeNamesForRule(group, state.nodes, linkRows);
+  linkRows.forEach(link => {
+    if (names.has(link["Src NE Name"]) && names.has(link["Sink NE Name"])) keys.add(linkKey(link));
+  });
+  return keys;
+}
+
+function styleRuleCacheKey(kind, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return "";
+  return `${kind}:${JSON.stringify(group)}:${state.nodes.length}:${state.links.length}:${state.ringChains.length}`;
+}
+
+function mainStyleRuleMatches(kind, rule) {
+  const key = styleRuleCacheKey(kind, rule);
+  if (!key) return new Set();
+  if (state.styleRuleMatchCache.matches.has(key)) return state.styleRuleMatchCache.matches.get(key);
+
+  const matches = kind === "links"
+    ? linkKeysForStyleRule(rule, state.links)
+    : nodeNamesForRule(rule, state.nodes, state.links);
+  state.styleRuleMatchCache.matches.set(key, matches);
+  return matches;
+}
+
+function nodeMatchesStyleRule(node, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return false;
+  if (group.source === CONDITION_SOURCES.NODES) return matchesRule(node, group);
+  return mainStyleRuleMatches("nodes", group).has(node["NE Name"]);
+}
+
+function linkMatchesStyleRule(link, rule) {
+  const group = normalizeRuleGroup(rule);
+  if (!group) return false;
+  if (group.source === CONDITION_SOURCES.LINKS) return matchesRule(link, group);
+  return mainStyleRuleMatches("links", group).has(linkKey(link));
 }
 
 function ringChainRowsForRule(rule) {
@@ -6076,7 +6265,7 @@ function getNodeDegreeMap(links) {
 function resolveLinkStyle(link) {
   const style = { ...DEFAULT_LINK_STYLE };
   state.appliedLinkStyleRules.forEach(rule => {
-    if (!normalizeRuleGroup(rule) || !matchesRule(link, rule)) return;
+    if (!linkMatchesStyleRule(link, rule)) return;
     style.color = normalizeColor(rule.color, style.color);
     style.lineStyle = LINE_STYLE_VALUES.includes(rule.lineStyle) ? rule.lineStyle : style.lineStyle;
     style.width = LINE_WIDTH_VALUES.includes(rule.width) ? rule.width : style.width;
@@ -6132,6 +6321,10 @@ function clearRingChainStyleCache() {
   state.ringChainStyleCache = { key: "", styles: new Map() };
 }
 
+function clearStyleRuleMatchCache() {
+  state.styleRuleMatchCache = { key: "", matches: new Map() };
+}
+
 function linkWeight(width) {
   if (width === "thin") return 1.7;
   if (width === "thick") return 4.2;
@@ -6158,7 +6351,7 @@ function resolveNodeStyle(node) {
   const roleKey = String(node.Role || "").trim().toUpperCase();
   const style = { ...(state.roleStyles[roleKey] || state.roleStyles.OTHER || DEFAULT_NODE_STYLE) };
   state.appliedNodeStyleRules.forEach(rule => {
-    if (!normalizeRuleGroup(rule) || !matchesRule(node, rule)) return;
+    if (!nodeMatchesStyleRule(node, rule)) return;
     style.color = normalizeColor(rule.color, style.color);
     style.size = clamp(Number(rule.size) || style.size, 4, 40);
     style.shape = normalizeShape(rule.shape, style.shape);

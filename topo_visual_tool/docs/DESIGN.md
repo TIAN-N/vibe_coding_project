@@ -604,9 +604,11 @@ The downstream behavior is shared:
 - Highlight preserves matched devices and links whose source and sink are both in the matched device set; unmatched elements are dimmed by user contrast.
 - For link-field conditions, matched links are restricted to the link rows that satisfy the condition group. Their source and sink devices form the matched device set.
 
+Node and link style rules use the same condition source model as highlight, filter, and locate. Node style rules can match device rows directly, resolve matched link rows to their endpoint devices, or resolve matched ring/chain rows to valid `Member_path` devices. Link style rules can match link rows directly, resolve matched device rows to links whose endpoints both match, or resolve matched ring/chain rows to adjacent `Member_path` segments.
+
 Ring/chain style rules are shown only after a ring/chain table exists. They reuse the compound condition card with the source fixed to ring/chain fields. A matched rule only styles adjacent `Member_path` segments, for example `A->B->C` affects `A-B` and `B-C`. If multiple ring/chain style rules match the same link, later applied rules override earlier ones.
 
-Condition value suggestions continue to merge current data enumerations with cached history. Device rules read values from the device table, link-field highlight/filter rules and link style rules read values from the link table, and ring/chain rules read values from the ring/chain table.
+Condition value suggestions continue to merge current data enumerations with cached history. Device-source rules read values from the device table, link-source rules read values from the link table, and ring/chain-source rules read values from the ring/chain table.
 
 ## 13. Project Name Record
 
@@ -701,7 +703,7 @@ Matched locate devices and locate links are rendered as a temporary visual state
 Link visual style is resolved in this order:
 
 1. Default link style.
-2. Applied link style rules.
+2. Applied link style rules. A rule's source can be device fields, link fields, or ring/chain fields; ring/chain-source link rules affect adjacent `Member_path` segments.
 3. Applied ring/chain style rules for adjacent `Member_path` segments.
 4. Selected link or selected route state.
 
