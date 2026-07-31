@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+backend/data/topo_visual.db
+backend/data/versions/*/
+backend/data/style_templates/*/
+backend/data/metric_templates/*/
+!backend/data/versions/.gitkeep
+!backend/data/style_templates/.gitkeep
+!backend/data/metric_templates/.gitkeep
+

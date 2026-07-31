@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Plan Topology Tool</title>
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>CoNET 拓扑工程平台</h1>
+        <p>FastAPI + SQLite + 统一查询接口 + 自适应逻辑布局</p>
+      </div>
+      <div class="top-actions">
+        <select id="versionSelect" aria-label="数据版本"></select>
+        <button id="refreshVersionsBtn" type="button">刷新版本</button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <section>
+        <h2>数据上传</h2>
+        <label>网元表<input id="deviceFile" type="file" accept=".csv,.xlsx,.xls"></label>
+        <label>链路表<input id="linkFile" type="file" accept=".csv,.xlsx,.xls"></label>
+        <label>环链表<input id="ringChainFile" type="file" accept=".csv,.xlsx,.xls"></label>
+        <input id="versionNameInput" type="text" placeholder="版本名称，可为空">
+        <button id="uploadBtn" class="primary" type="button">上传并解析</button>
+        <div id="uploadMessage" class="message"></div>
+      </section>
+
+      <section>
+        <h2>统一条件</h2>
+        <select id="sourceSelect">
+          <option value="nodes">网元字段</option>
+          <option value="links">链路字段</option>
+          <option value="ringChains">环链字段</option>
+        </select>
+        <input id="fieldInput" type="text" value="Role" placeholder="字段名">
+        <select id="opSelect">
+          <option value="contains">包含</option>
+          <option value="eq">等于</option>
+          <option value="neq">不等于</option>
+          <option value="not_empty">非空</option>
+          <option value="empty">为空</option>
+        </select>
+        <input id="valueInput" type="text" value="ASG" placeholder="条件值">
+        <div class="button-row">
+          <button id="filterBtn" type="button">过滤</button>
+          <button id="highlightBtn" type="button">高亮</button>
+          <button id="locateBtn" type="button">定位</button>
+          <button id="clearBtn" type="button">清除</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>模板</h2>
+        <input id="templateNameInput" type="text" placeholder="样式模板名称">
+        <button id="saveStyleTemplateBtn" type="button">保存当前样式模板</button>
+        <button id="loadTemplatesBtn" type="button">加载模板列表</button>
+        <div id="templateList" class="template-list"></div>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <div class="toolbar">
+        <div>
+          <button id="layoutBtn" class="primary" type="button">计算逻辑布局</button>
+          <button id="metricsToggleBtn" type="button">指标看板</button>
+          <button id="tableToggleBtn" type="button">数据明细</button>
+        </div>
+        <span id="viewMessage">等待上传数据。</span>
+      </div>
+      <svg id="logicCanvas" role="img" aria-label="逻辑拓扑画布"></svg>
+    </main>
+
+    <aside id="metricsDrawer" class="metrics-drawer open">
+      <h2>指标看板</h2>
+      <div id="metricsContent" class="metrics-grid"></div>
+      <h3>自定义指标模板</h3>
+      <textarea id="metricSpecInput" spellcheck="false">[
+  {"name":"按角色统计网元","dataset":"devices","aggregation":"group_count","group_by":"Role"},
+  {"name":"Down 链路数","dataset":"links","aggregation":"count","filters":[{"field":"Status","op":"eq","value":"Down"}]}
+]</textarea>
+      <button id="runMetricSpecBtn" type="button">运行指标模板</button>
+      <button id="saveMetricSpecBtn" type="button">保存指标模板</button>
+    </aside>
+
+    <section id="tableDrawer" class="table-drawer open">
+      <div class="table-toolbar">
+        <strong>数据明细</strong>
+        <div>
+          <button data-table="devices" type="button">网元表</button>
+          <button data-table="links" type="button">链路表</button>
+          <button data-table="ringChains" type="button">环链表</button>
+        </div>
+      </div>
+      <div id="tableContent" class="table-content"></div>
+    </section>
+  </div>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
+
