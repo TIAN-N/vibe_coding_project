@@ -4,9 +4,6 @@
 
 from typing import Any, Dict, List, Optional
 
-from app.schemas.condition_schema import ConditionGroup, MetricAggregation
-from app.services.condition_service import matches_condition
-
 
 class MetricEngine:
     """声明式指标执行引擎，适合由大模型生成指标 JSON 后安全运行."""
@@ -16,8 +13,8 @@ class MetricEngine:
 
     def run_metrics(
         self,
-        metrics: List[MetricAggregation],
-        condition_group: Optional[ConditionGroup] = None,
+        metrics: List[Any],
+        condition_group: Optional[Any] = None,
     ) -> List[Dict[str, Any]]:
         """执行一组指标定义."""
         results = []
@@ -32,14 +29,14 @@ class MetricEngine:
     def _apply_metric_filters(
         self,
         rows: List[Dict[str, Any]],
-        metric: MetricAggregation,
+        metric: Any,
     ) -> List[Dict[str, Any]]:
         """执行指标自身过滤条件."""
         if not metric.filters:
             return rows
         return [row for row in rows if all(matches_condition(row, item) for item in metric.filters)]
 
-    def _run_one(self, metric: MetricAggregation, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _run_one(self, metric: Any, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         """执行单个指标."""
         if metric.aggregation == "count":
             value: Any = len(rows)
@@ -68,6 +65,44 @@ def dataset_matches_condition_source(dataset: str, source: str) -> bool:
         or (dataset == "links" and source == "links")
         or (dataset == "ringChains" and source == "ringChains")
     )
+
+
+def matches_condition(row: Dict[str, Any], condition: Any) -> bool:
+    """判断单行是否满足单条条件，避免算法包依赖后端 app 包."""
+    left_text = safe_text(row.get(condition.field))
+    right_text = safe_text(condition.value)
+    op = condition.op
+    if op == "eq":
+        return left_text == right_text
+    if op == "neq":
+        return left_text != right_text
+    if op == "contains":
+        return right_text.lower() in left_text.lower()
+    if op == "not_contains":
+        return right_text.lower() not in left_text.lower()
+    if op == "startswith":
+        return left_text.startswith(right_text)
+    if op == "endswith":
+        return left_text.endswith(right_text)
+    if op == "in":
+        return left_text in {item.strip() for item in right_text.split(",")}
+    if op == "empty":
+        return left_text == ""
+    if op == "not_empty":
+        return left_text != ""
+    if op in ["gt", "gte", "lt", "lte"]:
+        left_num = safe_float(left_text)
+        right_num = safe_float(right_text)
+        if left_num is None or right_num is None:
+            return False
+        if op == "gt":
+            return left_num > right_num
+        if op == "gte":
+            return left_num >= right_num
+        if op == "lt":
+            return left_num < right_num
+        return left_num <= right_num
+    return False
 
 
 def safe_text(value: Any) -> str:

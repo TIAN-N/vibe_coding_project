@@ -15,7 +15,7 @@
 ## 启动方式
 
 ```powershell
-cd D:\vibe_coding_project\topo_visual_tool\Agent_plan_tool\backend
+cd D:\vibe_coding_project\Agent_plan_tool\backend
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8011
 ```
 
@@ -23,6 +23,12 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8011
 
 ```text
 http://127.0.0.1:8011/
+```
+
+Postman 接口测试说明见：
+
+```text
+docs/POSTMAN_TEST.md
 ```
 
 ## 关键接口
@@ -36,4 +42,3 @@ http://127.0.0.1:8011/
 - `POST /api/v1/metrics/templates`：保存指标模板。
 - `POST /api/v1/styles/templates`：保存样式模板。
 - `POST /api/v1/tables/query`：查询网元、链路、环链表格。
-
