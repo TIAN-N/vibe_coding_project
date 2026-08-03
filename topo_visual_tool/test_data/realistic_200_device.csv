@@ -1,0 +1,201 @@
+NE Name,Role,Longitude,Latitude,Region,District,Ring ID,Site Type
+ASG-BKK-01,ASG,100.501000,13.756000,Bangkok-Core,Pathum Wan,AGG,Aggregation Hub
+ASG-BKK-02,ASG,100.534000,13.731000,Bangkok-Core,Sathon,AGG,Aggregation Hub
+ASG-BKK-03,ASG,100.595000,13.803000,Bangkok-NorthEast,Bang Kapi,AGG,Aggregation Hub
+ASG-BKK-04,ASG,100.634000,13.708000,Bangkok-East,Prawet,AGG,Aggregation Hub
+ASG-BKK-05,ASG,100.424000,13.765000,Bangkok-West,Bang Phlat,AGG,Aggregation Hub
+ASG-BKK-06,ASG,100.395000,13.693000,Bangkok-SouthWest,Bang Khae,AGG,Aggregation Hub
+ASG-BKK-07,ASG,100.642000,13.865000,Bangkok-North,Khlong Sam Wa,AGG,Aggregation Hub
+ASG-BKK-08,ASG,100.543000,13.914000,Bangkok-North,Don Mueang,AGG,Aggregation Hub
+ASG-NON-01,ASG,100.493000,13.862000,Nonthaburi,Mueang Nonthaburi,AGG,Aggregation Hub
+ASG-NON-02,ASG,100.408000,13.881000,Nonthaburi,Bang Bua Thong,AGG,Aggregation Hub
+ASG-PTH-01,ASG,100.529000,14.016000,Pathum Thani,Rangsit,AGG,Aggregation Hub
+ASG-PTH-02,ASG,100.654000,14.058000,Pathum Thani,Khlong Luang,AGG,Aggregation Hub
+ASG-NPT-01,ASG,100.214000,13.812000,Nakhon Pathom,Sam Phran,AGG,Aggregation Hub
+ASG-SPK-01,ASG,100.609000,13.600000,Samut Prakan-Inland,Bang Phli,AGG,Aggregation Hub
+CSG-BKK-CBD-01-01,CSG,100.556180,13.719612,Bangkok-Core,CBD,BKK-CBD-01,Mobile Backhaul
+CSG-BKK-CBD-01-02,CSG,100.565774,13.728029,Bangkok-Core,CBD,BKK-CBD-01,Mobile Backhaul
+CSG-BKK-CBD-01-03,CSG,100.570664,13.739164,Bangkok-Core,CBD,BKK-CBD-01,Mobile Backhaul
+CSG-BKK-CBD-01-04,CSG,100.568476,13.750381,Bangkok-Core,CBD,BKK-CBD-01,Business Access
+CSG-BKK-CBD-01-05,CSG,100.568882,13.767462,Bangkok-Core,CBD,BKK-CBD-01,FTTx Aggregation
+CSG-BKK-CBD-01-06,CSG,100.556333,13.776824,Bangkok-Core,CBD,BKK-CBD-01,Mobile Backhaul
+CSG-BKK-CBD-02-01,CSG,100.578803,13.744541,Bangkok-Core,Din Daeng,BKK-CBD-02,Mobile Backhaul
+CSG-BKK-CBD-02-02,CSG,100.586725,13.758765,Bangkok-Core,Din Daeng,BKK-CBD-02,Mobile Backhaul
+CSG-BKK-CBD-02-03,CSG,100.589104,13.771164,Bangkok-Core,Din Daeng,BKK-CBD-02,Mobile Backhaul
+CSG-BKK-CBD-02-04,CSG,100.576863,13.777632,Bangkok-Core,Din Daeng,BKK-CBD-02,Business Access
+CSG-BKK-CBD-02-05,CSG,100.570431,13.790144,Bangkok-Core,Din Daeng,BKK-CBD-02,FTTx Aggregation
+CSG-BKK-CBD-03-01,CSG,100.529371,13.706202,Bangkok-Core,Thon Buri,BKK-CBD-03,Mobile Backhaul
+CSG-BKK-CBD-03-02,CSG,100.524278,13.717193,Bangkok-Core,Thon Buri,BKK-CBD-03,Mobile Backhaul
+CSG-BKK-CBD-03-03,CSG,100.530360,13.727073,Bangkok-Core,Thon Buri,BKK-CBD-03,Mobile Backhaul
+CSG-BKK-CBD-03-04,CSG,100.517049,13.731903,Bangkok-Core,Thon Buri,BKK-CBD-03,Business Access
+CSG-BKK-CBD-03-05,CSG,100.517431,13.740049,Bangkok-Core,Thon Buri,BKK-CBD-03,FTTx Aggregation
+CSG-BKK-CBD-03-06,CSG,100.498088,13.751196,Bangkok-Core,Thon Buri,BKK-CBD-03,Mobile Backhaul
+CSG-BKK-E-01-01,CSG,100.658590,13.734527,Bangkok-East,Suan Luang,BKK-E-01,Mobile Backhaul
+CSG-BKK-E-01-02,CSG,100.662038,13.747245,Bangkok-East,Suan Luang,BKK-E-01,Mobile Backhaul
+CSG-BKK-E-01-03,CSG,100.653512,13.762281,Bangkok-East,Suan Luang,BKK-E-01,Mobile Backhaul
+CSG-BKK-E-01-04,CSG,100.652914,13.767672,Bangkok-East,Suan Luang,BKK-E-01,Business Access
+CSG-BKK-E-01-05,CSG,100.639001,13.774363,Bangkok-East,Suan Luang,BKK-E-01,FTTx Aggregation
+CSG-BKK-E-01-06,CSG,100.625478,13.776928,Bangkok-East,Suan Luang,BKK-E-01,Mobile Backhaul
+CSG-BKK-E-02-01,CSG,100.713994,13.641945,Bangkok-East,Bang Na,BKK-E-02,Mobile Backhaul
+CSG-BKK-E-02-02,CSG,100.714943,13.655982,Bangkok-East,Bang Na,BKK-E-02,Mobile Backhaul
+CSG-BKK-E-02-03,CSG,100.707304,13.660350,Bangkok-East,Bang Na,BKK-E-02,Mobile Backhaul
+CSG-BKK-E-02-04,CSG,100.693887,13.676966,Bangkok-East,Bang Na,BKK-E-02,Business Access
+CSG-BKK-E-02-05,CSG,100.679013,13.686275,Bangkok-East,Bang Na,BKK-E-02,FTTx Aggregation
+CSG-BKK-E-02-06,CSG,100.661797,13.686984,Bangkok-East,Bang Na,BKK-E-02,Mobile Backhaul
+CSG-BKK-E-02-07,CSG,100.648217,13.692003,Bangkok-East,Bang Na,BKK-E-02,Mobile Backhaul
+CSG-BKK-E-03-01,CSG,100.658701,13.658688,Bangkok-East,Lat Krabang,BKK-E-03,Mobile Backhaul
+CSG-BKK-E-03-02,CSG,100.648256,13.676781,Bangkok-East,Lat Krabang,BKK-E-03,Mobile Backhaul
+CSG-BKK-E-03-03,CSG,100.633246,13.697974,Bangkok-East,Lat Krabang,BKK-E-03,Mobile Backhaul
+CSG-BKK-E-03-04,CSG,100.601811,13.702323,Bangkok-East,Lat Krabang,BKK-E-03,Business Access
+CSG-BKK-E-03-05,CSG,100.579001,13.713785,Bangkok-East,Lat Krabang,BKK-E-03,FTTx Aggregation
+CSG-BKK-W-01-01,CSG,100.435654,13.733838,Bangkok-West,Taling Chan,BKK-W-01,Mobile Backhaul
+CSG-BKK-W-01-02,CSG,100.431748,13.739212,Bangkok-West,Taling Chan,BKK-W-01,Mobile Backhaul
+CSG-BKK-W-01-03,CSG,100.424471,13.749365,Bangkok-West,Taling Chan,BKK-W-01,Mobile Backhaul
+CSG-BKK-W-01-04,CSG,100.405328,13.757879,Bangkok-West,Taling Chan,BKK-W-01,Business Access
+CSG-BKK-W-01-05,CSG,100.402597,13.759167,Bangkok-West,Taling Chan,BKK-W-01,FTTx Aggregation
+CSG-BKK-W-01-06,CSG,100.389276,13.757803,Bangkok-West,Taling Chan,BKK-W-01,Mobile Backhaul
+CSG-BKK-W-02-01,CSG,100.380375,13.789535,Bangkok-West,Phutthamonthon,BKK-W-02,Mobile Backhaul
+CSG-BKK-W-02-02,CSG,100.360409,13.799797,Bangkok-West,Phutthamonthon,BKK-W-02,Mobile Backhaul
+CSG-BKK-W-02-03,CSG,100.355385,13.809596,Bangkok-West,Phutthamonthon,BKK-W-02,Mobile Backhaul
+CSG-BKK-W-02-04,CSG,100.338732,13.821953,Bangkok-West,Phutthamonthon,BKK-W-02,Business Access
+CSG-BKK-W-02-05,CSG,100.324230,13.826571,Bangkok-West,Phutthamonthon,BKK-W-02,FTTx Aggregation
+CSG-BKK-W-02-06,CSG,100.304917,13.824162,Bangkok-West,Phutthamonthon,BKK-W-02,Mobile Backhaul
+CSG-BKK-W-02-07,CSG,100.290214,13.831309,Bangkok-West,Phutthamonthon,BKK-W-02,Mobile Backhaul
+CSG-BKK-W-03-01,CSG,100.331724,13.708137,Bangkok-West,Om Noi,BKK-W-03,Mobile Backhaul
+CSG-BKK-W-03-02,CSG,100.310815,13.730226,Bangkok-West,Om Noi,BKK-W-03,Mobile Backhaul
+CSG-BKK-W-03-03,CSG,100.281252,13.733883,Bangkok-West,Om Noi,BKK-W-03,Mobile Backhaul
+CSG-BKK-W-03-04,CSG,100.258634,13.738574,Bangkok-West,Om Noi,BKK-W-03,Business Access
+CSG-BKK-W-03-05,CSG,100.231614,13.741920,Bangkok-West,Om Noi,BKK-W-03,FTTx Aggregation
+CSG-BKK-N-01-01,CSG,100.616337,13.896031,Bangkok-North,Sai Mai,BKK-N-01,Mobile Backhaul
+CSG-BKK-N-01-02,CSG,100.610623,13.906265,Bangkok-North,Sai Mai,BKK-N-01,Mobile Backhaul
+CSG-BKK-N-01-03,CSG,100.592505,13.911682,Bangkok-North,Sai Mai,BKK-N-01,Mobile Backhaul
+CSG-BKK-N-01-04,CSG,100.576330,13.915148,Bangkok-North,Sai Mai,BKK-N-01,Business Access
+CSG-BKK-N-01-05,CSG,100.571703,13.920329,Bangkok-North,Sai Mai,BKK-N-01,FTTx Aggregation
+CSG-BKK-N-01-06,CSG,100.566516,13.916175,Bangkok-North,Sai Mai,BKK-N-01,Mobile Backhaul
+CSG-BKK-N-02-01,CSG,100.527824,13.893798,Bangkok-North,Lak Si,BKK-N-02,Mobile Backhaul
+CSG-BKK-N-02-02,CSG,100.512243,13.906566,Bangkok-North,Lak Si,BKK-N-02,Mobile Backhaul
+CSG-BKK-N-02-03,CSG,100.494183,13.908870,Bangkok-North,Lak Si,BKK-N-02,Mobile Backhaul
+CSG-BKK-N-02-04,CSG,100.486453,13.908570,Bangkok-North,Lak Si,BKK-N-02,Business Access
+CSG-BKK-N-02-05,CSG,100.479022,13.910098,Bangkok-North,Lak Si,BKK-N-02,FTTx Aggregation
+CSG-BKK-N-03-01,CSG,100.694440,13.976718,Bangkok-North,Lam Luk Ka,BKK-N-03,Mobile Backhaul
+CSG-BKK-N-03-02,CSG,100.683220,13.988767,Bangkok-North,Lam Luk Ka,BKK-N-03,Mobile Backhaul
+CSG-BKK-N-03-03,CSG,100.656964,13.992587,Bangkok-North,Lam Luk Ka,BKK-N-03,Mobile Backhaul
+CSG-BKK-N-03-04,CSG,100.637703,13.996971,Bangkok-North,Lam Luk Ka,BKK-N-03,Business Access
+CSG-BKK-N-03-05,CSG,100.632554,13.999288,Bangkok-North,Lam Luk Ka,BKK-N-03,FTTx Aggregation
+CSG-BKK-N-03-06,CSG,100.611874,13.999105,Bangkok-North,Lam Luk Ka,BKK-N-03,Mobile Backhaul
+CSG-BKK-N-03-07,CSG,100.605072,13.989795,Bangkok-North,Lam Luk Ka,BKK-N-03,Mobile Backhaul
+CSG-NON-01-01,CSG,100.459352,13.903427,Nonthaburi,Pak Kret,NON-01,Mobile Backhaul
+CSG-NON-01-02,CSG,100.441751,13.914460,Nonthaburi,Pak Kret,NON-01,Mobile Backhaul
+CSG-NON-01-03,CSG,100.416972,13.918735,Nonthaburi,Pak Kret,NON-01,Mobile Backhaul
+CSG-NON-01-04,CSG,100.407777,13.913632,Nonthaburi,Pak Kret,NON-01,Business Access
+CSG-NON-01-05,CSG,100.397964,13.916579,Nonthaburi,Pak Kret,NON-01,FTTx Aggregation
+CSG-NON-01-06,CSG,100.394870,13.907707,Nonthaburi,Pak Kret,NON-01,Mobile Backhaul
+CSG-NON-02-01,CSG,100.448718,13.849428,Nonthaburi,Bang Kruai,NON-02,Mobile Backhaul
+CSG-NON-02-02,CSG,100.441107,13.853325,Nonthaburi,Bang Kruai,NON-02,Mobile Backhaul
+CSG-NON-02-03,CSG,100.429593,13.855718,Nonthaburi,Bang Kruai,NON-02,Mobile Backhaul
+CSG-NON-02-04,CSG,100.417106,13.851795,Nonthaburi,Bang Kruai,NON-02,Business Access
+CSG-NON-02-05,CSG,100.413566,13.837666,Nonthaburi,Bang Kruai,NON-02,FTTx Aggregation
+CSG-NON-03-01,CSG,100.455911,13.972172,Nonthaburi,Bang Yai,NON-03,Mobile Backhaul
+CSG-NON-03-02,CSG,100.434136,13.983442,Nonthaburi,Bang Yai,NON-03,Mobile Backhaul
+CSG-NON-03-03,CSG,100.418164,13.977073,Nonthaburi,Bang Yai,NON-03,Mobile Backhaul
+CSG-NON-03-04,CSG,100.409791,13.983697,Nonthaburi,Bang Yai,NON-03,Business Access
+CSG-NON-03-05,CSG,100.403370,13.971849,Nonthaburi,Bang Yai,NON-03,FTTx Aggregation
+CSG-NON-03-06,CSG,100.398925,13.966102,Nonthaburi,Bang Yai,NON-03,Mobile Backhaul
+CSG-NON-03-07,CSG,100.398514,13.962337,Nonthaburi,Bang Yai,NON-03,Mobile Backhaul
+CSG-PTH-01-01,CSG,100.577201,14.060859,Pathum Thani,Rangsit,PTH-01,Mobile Backhaul
+CSG-PTH-01-02,CSG,100.570649,14.068260,Pathum Thani,Rangsit,PTH-01,Mobile Backhaul
+CSG-PTH-01-03,CSG,100.562798,14.066290,Pathum Thani,Rangsit,PTH-01,Mobile Backhaul
+CSG-PTH-01-04,CSG,100.551877,14.059769,Pathum Thani,Rangsit,PTH-01,Business Access
+CSG-PTH-01-05,CSG,100.549376,14.057465,Pathum Thani,Rangsit,PTH-01,FTTx Aggregation
+CSG-PTH-01-06,CSG,100.560167,14.045146,Pathum Thani,Rangsit,PTH-01,Mobile Backhaul
+CSG-PTH-02-01,CSG,100.495493,14.009380,Pathum Thani,Don Mueang North,PTH-02,Mobile Backhaul
+CSG-PTH-02-02,CSG,100.480690,14.004861,Pathum Thani,Don Mueang North,PTH-02,Mobile Backhaul
+CSG-PTH-02-03,CSG,100.465466,14.001950,Pathum Thani,Don Mueang North,PTH-02,Mobile Backhaul
+CSG-PTH-02-04,CSG,100.471092,13.991918,Pathum Thani,Don Mueang North,PTH-02,Business Access
+CSG-PTH-02-05,CSG,100.490419,13.979152,Pathum Thani,Don Mueang North,PTH-02,FTTx Aggregation
+CSG-PTH-03-01,CSG,100.582870,14.040521,Pathum Thani,Khu Khot,PTH-03,Mobile Backhaul
+CSG-PTH-03-02,CSG,100.573502,14.036896,Pathum Thani,Khu Khot,PTH-03,Mobile Backhaul
+CSG-PTH-03-03,CSG,100.568465,14.041547,Pathum Thani,Khu Khot,PTH-03,Mobile Backhaul
+CSG-PTH-03-04,CSG,100.572308,14.028658,Pathum Thani,Khu Khot,PTH-03,Business Access
+CSG-PTH-03-05,CSG,100.569602,14.026809,Pathum Thani,Khu Khot,PTH-03,FTTx Aggregation
+CSG-PTH-03-06,CSG,100.588809,14.014628,Pathum Thani,Khu Khot,PTH-03,Mobile Backhaul
+CSG-PTH-03-07,CSG,100.596230,14.005490,Pathum Thani,Khu Khot,PTH-03,Mobile Backhaul
+CSG-SPK-01-01,CSG,100.634802,13.639574,Samut Prakan-Inland,Bang Phli,SPK-01,Mobile Backhaul
+CSG-SPK-01-02,CSG,100.631393,13.639420,Samut Prakan-Inland,Bang Phli,SPK-01,Mobile Backhaul
+CSG-SPK-01-03,CSG,100.627222,13.637970,Samut Prakan-Inland,Bang Phli,SPK-01,Mobile Backhaul
+CSG-SPK-01-04,CSG,100.632044,13.631881,Samut Prakan-Inland,Bang Phli,SPK-01,Business Access
+CSG-SPK-01-05,CSG,100.639357,13.620998,Samut Prakan-Inland,Bang Phli,SPK-01,FTTx Aggregation
+CSG-SPK-01-06,CSG,100.642178,13.618516,Samut Prakan-Inland,Bang Phli,SPK-01,Mobile Backhaul
+CSG-SPK-02-01,CSG,100.549159,13.678309,Samut Prakan-Inland,Samrong,SPK-02,Mobile Backhaul
+CSG-SPK-02-02,CSG,100.544509,13.669644,Samut Prakan-Inland,Samrong,SPK-02,Mobile Backhaul
+CSG-SPK-02-03,CSG,100.552855,13.658164,Samut Prakan-Inland,Samrong,SPK-02,Mobile Backhaul
+CSG-SPK-02-04,CSG,100.562927,13.654234,Samut Prakan-Inland,Samrong,SPK-02,Business Access
+CSG-SPK-02-05,CSG,100.580197,13.634446,Samut Prakan-Inland,Samrong,SPK-02,FTTx Aggregation
+CSG-SPK-03-01,CSG,100.635661,13.731632,Samut Prakan-Inland,Suvarnabhumi,SPK-03,Mobile Backhaul
+CSG-SPK-03-02,CSG,100.637814,13.728438,Samut Prakan-Inland,Suvarnabhumi,SPK-03,Mobile Backhaul
+CSG-SPK-03-03,CSG,100.640774,13.722144,Samut Prakan-Inland,Suvarnabhumi,SPK-03,Mobile Backhaul
+CSG-SPK-03-04,CSG,100.663220,13.711860,Samut Prakan-Inland,Suvarnabhumi,SPK-03,Business Access
+CSG-SPK-03-05,CSG,100.672259,13.698142,Samut Prakan-Inland,Suvarnabhumi,SPK-03,FTTx Aggregation
+CSG-SPK-03-06,CSG,100.701631,13.684845,Samut Prakan-Inland,Suvarnabhumi,SPK-03,Mobile Backhaul
+CSG-NPT-01-01,CSG,100.178325,13.808623,Nakhon Pathom,Sam Phran,NPT-01,Mobile Backhaul
+CSG-NPT-01-02,CSG,100.189879,13.799971,Nakhon Pathom,Sam Phran,NPT-01,Mobile Backhaul
+CSG-NPT-01-03,CSG,100.200693,13.786511,Nakhon Pathom,Sam Phran,NPT-01,Mobile Backhaul
+CSG-NPT-01-04,CSG,100.212690,13.776327,Nakhon Pathom,Sam Phran,NPT-01,Business Access
+CSG-NPT-01-05,CSG,100.228422,13.763016,Nakhon Pathom,Sam Phran,NPT-01,FTTx Aggregation
+CSG-NPT-01-06,CSG,100.246151,13.745179,Nakhon Pathom,Sam Phran,NPT-01,Mobile Backhaul
+CSG-NPT-02-01,CSG,100.208417,13.880603,Nakhon Pathom,Salaya,NPT-02,Mobile Backhaul
+CSG-NPT-02-02,CSG,100.221151,13.864563,Nakhon Pathom,Salaya,NPT-02,Mobile Backhaul
+CSG-NPT-02-03,CSG,100.238053,13.849131,Nakhon Pathom,Salaya,NPT-02,Mobile Backhaul
+CSG-NPT-02-04,CSG,100.271307,13.833529,Nakhon Pathom,Salaya,NPT-02,Business Access
+CSG-NPT-02-05,CSG,100.297941,13.822167,Nakhon Pathom,Salaya,NPT-02,FTTx Aggregation
+CSG-NPT-03-01,CSG,100.279184,13.866622,Nakhon Pathom,Nakhon Chai Si,NPT-03,Mobile Backhaul
+CSG-NPT-03-02,CSG,100.293971,13.858251,Nakhon Pathom,Nakhon Chai Si,NPT-03,Mobile Backhaul
+CSG-NPT-03-03,CSG,100.305795,13.846419,Nakhon Pathom,Nakhon Chai Si,NPT-03,Mobile Backhaul
+CSG-NPT-03-04,CSG,100.321037,13.835930,Nakhon Pathom,Nakhon Chai Si,NPT-03,Business Access
+CSG-NPT-03-05,CSG,100.343666,13.817313,Nakhon Pathom,Nakhon Chai Si,NPT-03,FTTx Aggregation
+CSG-NPT-03-06,CSG,100.354130,13.811176,Nakhon Pathom,Nakhon Chai Si,NPT-03,Mobile Backhaul
+CSG-NPT-03-07,CSG,100.374026,13.800482,Nakhon Pathom,Nakhon Chai Si,NPT-03,Mobile Backhaul
+CSG-XREG-01-01,CSG,100.535278,13.953004,Cross-Region,Vibhavadi Corridor,XREG-01,Mobile Backhaul
+CSG-XREG-01-02,CSG,100.548383,13.947498,Cross-Region,Vibhavadi Corridor,XREG-01,Mobile Backhaul
+CSG-XREG-01-03,CSG,100.566592,13.931062,Cross-Region,Vibhavadi Corridor,XREG-01,Mobile Backhaul
+CSG-XREG-01-04,CSG,100.580901,13.917098,Cross-Region,Vibhavadi Corridor,XREG-01,Business Access
+CSG-XREG-01-05,CSG,100.599241,13.903643,Cross-Region,Vibhavadi Corridor,XREG-01,FTTx Aggregation
+CSG-XREG-01-06,CSG,100.625198,13.900734,Cross-Region,Vibhavadi Corridor,XREG-01,Mobile Backhaul
+CSG-XREG-02-01,CSG,100.394769,13.835709,Cross-Region,Rama V Corridor,XREG-02,Mobile Backhaul
+CSG-XREG-02-02,CSG,100.418956,13.821726,Cross-Region,Rama V Corridor,XREG-02,Mobile Backhaul
+CSG-XREG-02-03,CSG,100.444333,13.797096,Cross-Region,Rama V Corridor,XREG-02,Mobile Backhaul
+CSG-XREG-02-04,CSG,100.465254,13.779087,Cross-Region,Rama V Corridor,XREG-02,Business Access
+CSG-XREG-02-05,CSG,100.493675,13.769041,Cross-Region,Rama V Corridor,XREG-02,FTTx Aggregation
+CSG-XREG-03-01,CSG,100.515622,13.836590,Cross-Region,Ram Inthra Corridor,XREG-03,Mobile Backhaul
+CSG-XREG-03-02,CSG,100.529470,13.831039,Cross-Region,Ram Inthra Corridor,XREG-03,Mobile Backhaul
+CSG-XREG-03-03,CSG,100.561989,13.813176,Cross-Region,Ram Inthra Corridor,XREG-03,Mobile Backhaul
+CSG-XREG-03-04,CSG,100.577899,13.800000,Cross-Region,Ram Inthra Corridor,XREG-03,Business Access
+CSG-XREG-03-05,CSG,100.595741,13.796330,Cross-Region,Ram Inthra Corridor,XREG-03,FTTx Aggregation
+CSG-XREG-03-06,CSG,100.610884,13.781668,Cross-Region,Ram Inthra Corridor,XREG-03,Mobile Backhaul
+CSG-XREG-04-01,CSG,100.453008,13.922971,Cross-Region,Outer Ring West,XREG-04,Mobile Backhaul
+CSG-XREG-04-02,CSG,100.470036,13.904290,Cross-Region,Outer Ring West,XREG-04,Mobile Backhaul
+CSG-XREG-04-03,CSG,100.495251,13.888529,Cross-Region,Outer Ring West,XREG-04,Mobile Backhaul
+CSG-XREG-04-04,CSG,100.516365,13.872252,Cross-Region,Outer Ring West,XREG-04,Business Access
+CSG-XREG-04-05,CSG,100.529323,13.865399,Cross-Region,Outer Ring West,XREG-04,FTTx Aggregation
+CSG-XREG-05-01,CSG,100.391849,13.805206,Cross-Region,Ratchaphruek Corridor,XREG-05,Mobile Backhaul
+CSG-XREG-05-02,CSG,100.415336,13.792695,Cross-Region,Ratchaphruek Corridor,XREG-05,Mobile Backhaul
+CSG-XREG-05-03,CSG,100.439284,13.776528,Cross-Region,Ratchaphruek Corridor,XREG-05,Mobile Backhaul
+CSG-XREG-05-04,CSG,100.454842,13.761639,Cross-Region,Ratchaphruek Corridor,XREG-05,Business Access
+CSG-XREG-05-05,CSG,100.459249,13.752735,Cross-Region,Ratchaphruek Corridor,XREG-05,FTTx Aggregation
+CSG-XREG-05-06,CSG,100.464412,13.750378,Cross-Region,Ratchaphruek Corridor,XREG-05,Mobile Backhaul
+CSG-XREG-06-01,CSG,100.647243,13.793990,Cross-Region,Eastern Bypass,XREG-06,Mobile Backhaul
+CSG-XREG-06-02,CSG,100.666191,13.772995,Cross-Region,Eastern Bypass,XREG-06,Mobile Backhaul
+CSG-XREG-06-03,CSG,100.692266,13.765847,Cross-Region,Eastern Bypass,XREG-06,Mobile Backhaul
+CSG-XREG-06-04,CSG,100.700136,13.753174,Cross-Region,Eastern Bypass,XREG-06,Business Access
+CSG-XREG-06-05,CSG,100.714576,13.746147,Cross-Region,Eastern Bypass,XREG-06,FTTx Aggregation
+CSG-XREG-06-06,CSG,100.714093,13.739342,Cross-Region,Eastern Bypass,XREG-06,Mobile Backhaul
+CSG-SPUR--3,CSG,100.627720,14.008583,Pathum Thani,Khu Khot,PTH-03-SPUR,FTTx Spur
+CSG-SPUR--2,CSG,100.668535,13.606494,Samut Prakan-Inland,Bang Phli,SPK-01-SPUR,FTTx Spur
+CSG-SPUR--1,CSG,100.592049,13.650364,Samut Prakan-Inland,Samrong,SPK-02-SPUR,FTTx Spur
+CSG-SPUR-00,CSG,100.691317,13.686122,Samut Prakan-Inland,Suvarnabhumi,SPK-03-SPUR,FTTx Spur
+CSG-SPUR-01,CSG,100.228512,13.772880,Nakhon Pathom,Sam Phran,NPT-01-SPUR,FTTx Spur
+CSG-SPUR-02,CSG,100.276806,13.834967,Nakhon Pathom,Salaya,NPT-02-SPUR,FTTx Spur
+CSG-SPUR-03,CSG,100.343260,13.822552,Nakhon Pathom,Nakhon Chai Si,NPT-03-SPUR,FTTx Spur
+CSG-SPUR-04,CSG,100.585261,13.917603,Cross-Region,Vibhavadi Corridor,XREG-01-SPUR,FTTx Spur
+CSG-SPUR-05,CSG,100.448866,13.814569,Cross-Region,Rama V Corridor,XREG-02-SPUR,FTTx Spur
+CSG-SPUR-06,CSG,100.547203,13.822360,Cross-Region,Ram Inthra Corridor,XREG-03-SPUR,FTTx Spur

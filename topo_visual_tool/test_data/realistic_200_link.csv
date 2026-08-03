@@ -1,0 +1,249 @@
+Src NE Name,Sink NE Name,Link Type,Status,Capacity,Region,Protection
+ASG-BKK-01,ASG-BKK-02,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-01,ASG-BKK-05,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-02,ASG-BKK-04,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-03,ASG-BKK-07,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-05,ASG-BKK-06,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-07,ASG-BKK-08,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-NON-01,ASG-NON-02,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-PTH-01,ASG-PTH-02,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-NON-01,ASG-PTH-01,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-04,ASG-SPK-01,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-06,ASG-NPT-01,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-08,ASG-PTH-01,Aggregation-Interconnect,Active,100G,Metro-Bangkok,Protected
+ASG-BKK-01,CSG-BKK-CBD-01-01,Access-Ring,Active,25G,Bangkok-Core,Protected
+CSG-BKK-CBD-01-01,CSG-BKK-CBD-01-02,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-01-02,CSG-BKK-CBD-01-03,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-01-03,CSG-BKK-CBD-01-04,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-01-04,CSG-BKK-CBD-01-05,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-01-05,CSG-BKK-CBD-01-06,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-01-06,ASG-BKK-02,Access-Ring,Active,25G,Bangkok-Core,Protected
+ASG-BKK-01,CSG-BKK-CBD-02-01,Access-Ring,Active,25G,Bangkok-Core,Protected
+CSG-BKK-CBD-02-01,CSG-BKK-CBD-02-02,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-02-02,CSG-BKK-CBD-02-03,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-02-03,CSG-BKK-CBD-02-04,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-02-04,CSG-BKK-CBD-02-05,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-02-05,ASG-BKK-03,Access-Ring,Active,25G,Bangkok-Core,Protected
+ASG-BKK-02,CSG-BKK-CBD-03-01,Access-Ring,Active,25G,Bangkok-Core,Protected
+CSG-BKK-CBD-03-01,CSG-BKK-CBD-03-02,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-03-02,CSG-BKK-CBD-03-03,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-03-03,CSG-BKK-CBD-03-04,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-03-04,CSG-BKK-CBD-03-05,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-03-05,CSG-BKK-CBD-03-06,Access-Ring,Active,10G,Bangkok-Core,Protected
+CSG-BKK-CBD-03-06,ASG-BKK-05,Access-Ring,Active,25G,Bangkok-Core,Protected
+ASG-BKK-03,CSG-BKK-E-01-01,Access-Ring,Active,25G,Bangkok-East,Protected
+CSG-BKK-E-01-01,CSG-BKK-E-01-02,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-01-02,CSG-BKK-E-01-03,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-01-03,CSG-BKK-E-01-04,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-01-04,CSG-BKK-E-01-05,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-01-05,CSG-BKK-E-01-06,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-01-06,ASG-BKK-04,Access-Ring,Active,25G,Bangkok-East,Protected
+ASG-BKK-04,CSG-BKK-E-02-01,Access-Ring,Active,25G,Bangkok-East,Protected
+CSG-BKK-E-02-01,CSG-BKK-E-02-02,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-02-02,CSG-BKK-E-02-03,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-02-03,CSG-BKK-E-02-04,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-02-04,CSG-BKK-E-02-05,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-02-05,CSG-BKK-E-02-06,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-02-06,CSG-BKK-E-02-07,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-02-07,ASG-SPK-01,Access-Ring,Active,25G,Bangkok-East,Protected
+ASG-BKK-03,CSG-BKK-E-03-01,Access-Ring,Active,25G,Bangkok-East,Protected
+CSG-BKK-E-03-01,CSG-BKK-E-03-02,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-03-02,CSG-BKK-E-03-03,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-03-03,CSG-BKK-E-03-04,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-03-04,CSG-BKK-E-03-05,Access-Ring,Active,10G,Bangkok-East,Protected
+CSG-BKK-E-03-05,ASG-SPK-01,Access-Ring,Active,25G,Bangkok-East,Protected
+ASG-BKK-05,CSG-BKK-W-01-01,Access-Ring,Active,25G,Bangkok-West,Protected
+CSG-BKK-W-01-01,CSG-BKK-W-01-02,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-01-02,CSG-BKK-W-01-03,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-01-03,CSG-BKK-W-01-04,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-01-04,CSG-BKK-W-01-05,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-01-05,CSG-BKK-W-01-06,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-01-06,ASG-BKK-06,Access-Ring,Active,25G,Bangkok-West,Protected
+ASG-BKK-05,CSG-BKK-W-02-01,Access-Ring,Active,25G,Bangkok-West,Protected
+CSG-BKK-W-02-01,CSG-BKK-W-02-02,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-02-02,CSG-BKK-W-02-03,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-02-03,CSG-BKK-W-02-04,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-02-04,CSG-BKK-W-02-05,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-02-05,CSG-BKK-W-02-06,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-02-06,CSG-BKK-W-02-07,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-02-07,ASG-NPT-01,Access-Ring,Active,25G,Bangkok-West,Protected
+ASG-BKK-06,CSG-BKK-W-03-01,Access-Ring,Active,25G,Bangkok-West,Protected
+CSG-BKK-W-03-01,CSG-BKK-W-03-02,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-03-02,CSG-BKK-W-03-03,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-03-03,CSG-BKK-W-03-04,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-03-04,CSG-BKK-W-03-05,Access-Ring,Active,10G,Bangkok-West,Protected
+CSG-BKK-W-03-05,ASG-NPT-01,Access-Ring,Active,25G,Bangkok-West,Protected
+ASG-BKK-07,CSG-BKK-N-01-01,Access-Ring,Active,25G,Bangkok-North,Protected
+CSG-BKK-N-01-01,CSG-BKK-N-01-02,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-01-02,CSG-BKK-N-01-03,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-01-03,CSG-BKK-N-01-04,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-01-04,CSG-BKK-N-01-05,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-01-05,CSG-BKK-N-01-06,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-01-06,ASG-BKK-08,Access-Ring,Active,25G,Bangkok-North,Protected
+ASG-BKK-08,CSG-BKK-N-02-01,Access-Ring,Active,25G,Bangkok-North,Protected
+CSG-BKK-N-02-01,CSG-BKK-N-02-02,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-02-02,CSG-BKK-N-02-03,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-02-03,CSG-BKK-N-02-04,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-02-04,CSG-BKK-N-02-05,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-02-05,ASG-NON-01,Access-Ring,Active,25G,Bangkok-North,Protected
+ASG-BKK-07,CSG-BKK-N-03-01,Access-Ring,Active,25G,Bangkok-North,Protected
+CSG-BKK-N-03-01,CSG-BKK-N-03-02,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-03-02,CSG-BKK-N-03-03,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-03-03,CSG-BKK-N-03-04,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-03-04,CSG-BKK-N-03-05,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-03-05,CSG-BKK-N-03-06,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-03-06,CSG-BKK-N-03-07,Access-Ring,Active,10G,Bangkok-North,Protected
+CSG-BKK-N-03-07,ASG-PTH-02,Access-Ring,Active,25G,Bangkok-North,Protected
+ASG-NON-01,CSG-NON-01-01,Access-Ring,Active,25G,Nonthaburi,Protected
+CSG-NON-01-01,CSG-NON-01-02,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-01-02,CSG-NON-01-03,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-01-03,CSG-NON-01-04,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-01-04,CSG-NON-01-05,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-01-05,CSG-NON-01-06,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-01-06,ASG-NON-02,Access-Ring,Active,25G,Nonthaburi,Protected
+ASG-NON-01,CSG-NON-02-01,Access-Ring,Active,25G,Nonthaburi,Protected
+CSG-NON-02-01,CSG-NON-02-02,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-02-02,CSG-NON-02-03,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-02-03,CSG-NON-02-04,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-02-04,CSG-NON-02-05,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-02-05,ASG-BKK-05,Access-Ring,Active,25G,Nonthaburi,Protected
+ASG-NON-02,CSG-NON-03-01,Access-Ring,Active,25G,Nonthaburi,Protected
+CSG-NON-03-01,CSG-NON-03-02,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-03-02,CSG-NON-03-03,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-03-03,CSG-NON-03-04,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-03-04,CSG-NON-03-05,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-03-05,CSG-NON-03-06,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-03-06,CSG-NON-03-07,Access-Ring,Active,10G,Nonthaburi,Protected
+CSG-NON-03-07,ASG-PTH-01,Access-Ring,Active,25G,Nonthaburi,Protected
+ASG-PTH-01,CSG-PTH-01-01,Access-Ring,Active,25G,Pathum Thani,Protected
+CSG-PTH-01-01,CSG-PTH-01-02,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-01-02,CSG-PTH-01-03,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-01-03,CSG-PTH-01-04,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-01-04,CSG-PTH-01-05,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-01-05,CSG-PTH-01-06,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-01-06,ASG-PTH-02,Access-Ring,Active,25G,Pathum Thani,Protected
+ASG-PTH-01,CSG-PTH-02-01,Access-Ring,Active,25G,Pathum Thani,Protected
+CSG-PTH-02-01,CSG-PTH-02-02,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-02-02,CSG-PTH-02-03,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-02-03,CSG-PTH-02-04,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-02-04,CSG-PTH-02-05,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-02-05,ASG-BKK-08,Access-Ring,Active,25G,Pathum Thani,Protected
+ASG-PTH-02,CSG-PTH-03-01,Access-Ring,Active,25G,Pathum Thani,Protected
+CSG-PTH-03-01,CSG-PTH-03-02,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-03-02,CSG-PTH-03-03,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-03-03,CSG-PTH-03-04,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-03-04,CSG-PTH-03-05,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-03-05,CSG-PTH-03-06,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-03-06,CSG-PTH-03-07,Access-Ring,Active,10G,Pathum Thani,Protected
+CSG-PTH-03-07,ASG-BKK-07,Access-Ring,Active,25G,Pathum Thani,Protected
+ASG-SPK-01,CSG-SPK-01-01,Access-Ring,Active,25G,Samut Prakan-Inland,Protected
+CSG-SPK-01-01,CSG-SPK-01-02,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-01-02,CSG-SPK-01-03,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-01-03,CSG-SPK-01-04,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-01-04,CSG-SPK-01-05,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-01-05,CSG-SPK-01-06,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-01-06,ASG-BKK-04,Access-Ring,Active,25G,Samut Prakan-Inland,Protected
+ASG-SPK-01,CSG-SPK-02-01,Access-Ring,Active,25G,Samut Prakan-Inland,Protected
+CSG-SPK-02-01,CSG-SPK-02-02,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-02-02,CSG-SPK-02-03,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-02-03,CSG-SPK-02-04,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-02-04,CSG-SPK-02-05,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-02-05,ASG-BKK-02,Access-Ring,Active,25G,Samut Prakan-Inland,Protected
+ASG-SPK-01,CSG-SPK-03-01,Access-Ring,Active,25G,Samut Prakan-Inland,Protected
+CSG-SPK-03-01,CSG-SPK-03-02,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-03-02,CSG-SPK-03-03,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-03-03,CSG-SPK-03-04,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-03-04,CSG-SPK-03-05,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-03-05,CSG-SPK-03-06,Access-Ring,Active,10G,Samut Prakan-Inland,Protected
+CSG-SPK-03-06,ASG-BKK-03,Access-Ring,Active,25G,Samut Prakan-Inland,Protected
+ASG-NPT-01,CSG-NPT-01-01,Access-Ring,Active,25G,Nakhon Pathom,Protected
+CSG-NPT-01-01,CSG-NPT-01-02,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-01-02,CSG-NPT-01-03,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-01-03,CSG-NPT-01-04,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-01-04,CSG-NPT-01-05,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-01-05,CSG-NPT-01-06,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-01-06,ASG-BKK-06,Access-Ring,Active,25G,Nakhon Pathom,Protected
+ASG-NPT-01,CSG-NPT-02-01,Access-Ring,Active,25G,Nakhon Pathom,Protected
+CSG-NPT-02-01,CSG-NPT-02-02,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-02-02,CSG-NPT-02-03,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-02-03,CSG-NPT-02-04,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-02-04,CSG-NPT-02-05,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-02-05,ASG-NON-02,Access-Ring,Active,25G,Nakhon Pathom,Protected
+ASG-NPT-01,CSG-NPT-03-01,Access-Ring,Active,25G,Nakhon Pathom,Protected
+CSG-NPT-03-01,CSG-NPT-03-02,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-03-02,CSG-NPT-03-03,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-03-03,CSG-NPT-03-04,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-03-04,CSG-NPT-03-05,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-03-05,CSG-NPT-03-06,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-03-06,CSG-NPT-03-07,Access-Ring,Active,10G,Nakhon Pathom,Protected
+CSG-NPT-03-07,ASG-BKK-05,Access-Ring,Active,25G,Nakhon Pathom,Protected
+ASG-BKK-01,CSG-XREG-01-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-XREG-01-01,CSG-XREG-01-02,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-01-02,CSG-XREG-01-03,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-01-03,CSG-XREG-01-04,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-01-04,CSG-XREG-01-05,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-01-05,CSG-XREG-01-06,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-01-06,ASG-PTH-02,Access-Ring,Active,25G,Cross-Region,Protected
+ASG-BKK-02,CSG-XREG-02-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-XREG-02-01,CSG-XREG-02-02,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-02-02,CSG-XREG-02-03,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-02-03,CSG-XREG-02-04,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-02-04,CSG-XREG-02-05,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-02-05,ASG-NON-02,Access-Ring,Active,25G,Cross-Region,Protected
+ASG-BKK-04,CSG-XREG-03-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-XREG-03-01,CSG-XREG-03-02,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-03-02,CSG-XREG-03-03,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-03-03,CSG-XREG-03-04,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-03-04,CSG-XREG-03-05,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-03-05,CSG-XREG-03-06,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-03-06,ASG-NON-01,Access-Ring,Active,25G,Cross-Region,Protected
+ASG-BKK-06,CSG-XREG-04-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-XREG-04-01,CSG-XREG-04-02,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-04-02,CSG-XREG-04-03,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-04-03,CSG-XREG-04-04,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-04-04,CSG-XREG-04-05,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-04-05,ASG-PTH-01,Access-Ring,Active,25G,Cross-Region,Protected
+ASG-BKK-03,CSG-XREG-05-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-XREG-05-01,CSG-XREG-05-02,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-05-02,CSG-XREG-05-03,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-05-03,CSG-XREG-05-04,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-05-04,CSG-XREG-05-05,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-05-05,CSG-XREG-05-06,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-05-06,ASG-NPT-01,Access-Ring,Active,25G,Cross-Region,Protected
+ASG-BKK-07,CSG-XREG-06-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-XREG-06-01,CSG-XREG-06-02,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-06-02,CSG-XREG-06-03,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-06-03,CSG-XREG-06-04,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-06-04,CSG-XREG-06-05,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-06-05,CSG-XREG-06-06,Access-Ring,Active,10G,Cross-Region,Protected
+CSG-XREG-06-06,ASG-SPK-01,Access-Ring,Active,25G,Cross-Region,Protected
+CSG-BKK-CBD-01-03,CSG-BKK-CBD-02-03,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-BKK-E-01-04,CSG-BKK-E-02-04,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-BKK-W-01-03,CSG-BKK-W-02-05,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-BKK-N-01-04,CSG-BKK-N-02-03,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-NON-01-03,CSG-NON-03-04,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-PTH-01-04,CSG-PTH-03-05,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-SPK-01-03,CSG-SPK-03-04,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-NPT-01-04,CSG-NPT-03-05,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-XREG-01-03,CSG-PTH-02-03,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-XREG-03-04,CSG-BKK-N-03-04,Adjacent-Ring-CSG-Link,Active,10G,Metro-Bangkok,Protected
+CSG-BKK-CBD-03-02,CSG-XREG-02-04,Near-Ring-Protection,Active,10G,Metro-Bangkok,Protected
+CSG-BKK-E-03-03,CSG-XREG-06-05,Near-Ring-Protection,Active,10G,Metro-Bangkok,Protected
+CSG-BKK-W-03-02,CSG-NPT-02-04,Near-Ring-Protection,Active,10G,Metro-Bangkok,Protected
+CSG-NON-02-03,CSG-XREG-04-03,Near-Ring-Protection,Active,10G,Metro-Bangkok,Protected
+CSG-SPK-02-02,CSG-BKK-E-02-06,Near-Ring-Protection,Active,10G,Metro-Bangkok,Protected
+CSG-PTH-02-02,CSG-NON-03-05,Near-Ring-Protection,Active,10G,Metro-Bangkok,Protected
+CSG-PTH-03-01,CSG-SPUR--3,Access-Spur,Active,1G,Pathum Thani,Unprotected
+CSG-SPUR--3,ASG-PTH-02,Non-Standard-CSG-ASG-Protection,Active,10G,Pathum Thani,Protected
+CSG-SPK-01-06,CSG-SPUR--2,Access-Spur,Active,1G,Samut Prakan-Inland,Unprotected
+CSG-SPK-02-04,CSG-SPUR--1,Access-Spur,Active,1G,Samut Prakan-Inland,Unprotected
+CSG-SPK-03-02,CSG-SPUR-00,Access-Spur,Active,1G,Samut Prakan-Inland,Unprotected
+CSG-SPUR-00,ASG-BKK-03,Non-Standard-CSG-ASG-Protection,Active,10G,Samut Prakan-Inland,Protected
+CSG-NPT-01-03,CSG-SPUR-01,Access-Spur,Active,1G,Nakhon Pathom,Unprotected
+CSG-NPT-02-02,CSG-SPUR-02,Access-Spur,Active,1G,Nakhon Pathom,Unprotected
+CSG-NPT-03-07,CSG-SPUR-03,Access-Spur,Active,1G,Nakhon Pathom,Unprotected
+CSG-SPUR-03,ASG-NPT-01,Non-Standard-CSG-ASG-Protection,Active,10G,Nakhon Pathom,Protected
+CSG-XREG-01-01,CSG-SPUR-04,Access-Spur,Active,1G,Cross-Region,Unprotected
+CSG-XREG-02-01,CSG-SPUR-05,Access-Spur,Active,1G,Cross-Region,Unprotected
+CSG-XREG-03-03,CSG-SPUR-06,Access-Spur,Active,1G,Cross-Region,Unprotected
+CSG-SPUR-06,ASG-NON-01,Non-Standard-CSG-ASG-Protection,Active,10G,Cross-Region,Protected
