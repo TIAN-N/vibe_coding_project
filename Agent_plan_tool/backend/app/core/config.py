@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -17,7 +18,9 @@ class Settings:
         self.version_root = self.data_root / "versions"
         self.style_template_root = self.data_root / "style_templates"
         self.metric_template_root = self.data_root / "metric_templates"
-        self.database_path = self.data_root / "topo_visual.db"
+        self.database_path = Path(
+            os.environ.get("TOPO_DATABASE_PATH", str(self.data_root / "topo_visual.db"))
+        )
         self.logic_node_limit = 500
 
     def ensure_dirs(self) -> None:
@@ -42,4 +45,3 @@ class Settings:
 
 
 settings = Settings()
-

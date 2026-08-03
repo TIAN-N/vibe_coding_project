@@ -65,8 +65,27 @@
   border-bottom: 1px solid rgba(42, 60, 72, 0.1);
 }
 
+.agent-catalog-controls {
+  border-bottom: 1px solid rgba(42, 60, 72, 0.1);
+}
+
+.agent-catalog-controls .agent-version-row {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.agent-style-save-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px auto;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
 .agent-version-row select,
 .agent-version-row button,
+.agent-style-save-row input,
+.agent-style-save-row select,
+.agent-style-save-row button,
 .agent-table-panel select,
 .agent-table-panel button {
   min-height: 32px;
@@ -74,6 +93,23 @@
   border-radius: 6px;
   background: #fff;
   color: #1f3a44;
+}
+
+.agent-style-save-row input {
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.agent-catalog-status {
+  min-height: 20px;
+  padding: 2px 16px 10px;
+  color: #56707d;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.agent-catalog-status.error {
+  color: #b13b3b;
 }
 
 .agent-metric-cards {
@@ -197,5 +233,13 @@
 @media (max-width: 960px) {
   .agent-table-panel {
     left: 0;
+  }
+
+  .agent-style-save-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .agent-style-save-row input {
+    grid-column: 1 / -1;
   }
 }

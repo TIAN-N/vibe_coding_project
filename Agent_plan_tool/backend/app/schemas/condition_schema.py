@@ -39,6 +39,7 @@ class TopologyQueryRequest(BaseModel):
     version_id: str
     view: Literal["gis", "logic"] = "gis"
     actions: List[TopologyAction] = Field(default_factory=list)
+    apply_to_view: bool = False
 
 
 class TableQueryRequest(BaseModel):
@@ -86,3 +87,9 @@ class SaveStyleTemplateRequest(BaseModel):
     version_id: Optional[str] = None
     template: Dict[str, Any] = Field(default_factory=dict)
 
+
+class ApplyStyleTemplateRequest(BaseModel):
+    """将已保存的网元和链路样式模板应用到浏览器."""
+
+    target: str = "active"
+    requested_by: str = "style-template-api"

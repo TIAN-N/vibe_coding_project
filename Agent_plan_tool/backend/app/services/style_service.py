@@ -7,7 +7,7 @@ from datetime import datetime
 from uuid import uuid4
 from typing import Any, Dict, List, Optional
 
-from app.db.database import fetch_all, get_connection
+from app.db.database import fetch_all, fetch_one, get_connection
 from app.schemas.condition_schema import SaveStyleTemplateRequest
 
 
@@ -54,14 +54,22 @@ def list_style_templates(version_id: Optional[str] = None) -> List[Dict[str, Any
         )
     else:
         rows = fetch_all("SELECT * FROM style_templates ORDER BY updated_at DESC")
-    return [
-        {
-            "id": row["id"],
-            "name": row["name"],
-            "scope": row["scope"],
-            "version_id": row["version_id"],
-            "template": json.loads(row["template_json"]),
-            "updated_at": row["updated_at"],
-        }
-        for row in rows
-    ]
+    return [_decode_template(row) for row in rows]
+
+
+def get_style_template(template_id: str) -> Optional[Dict[str, Any]]:
+    """按标识读取单个样式模板."""
+    row = fetch_one("SELECT * FROM style_templates WHERE id = ?", (template_id,))
+    return _decode_template(row) if row else None
+
+
+def _decode_template(row: Dict[str, Any]) -> Dict[str, Any]:
+    """把数据库样式模板行转换为接口对象."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "scope": row["scope"],
+        "version_id": row["version_id"],
+        "template": json.loads(row["template_json"]),
+        "updated_at": row["updated_at"],
+    }

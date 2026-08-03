@@ -83,11 +83,64 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS topology_view_states (
+                version_id TEXT PRIMARY KEY,
+                revision INTEGER NOT NULL,
+                view TEXT NOT NULL,
+                actions_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(version_id) REFERENCES data_versions(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS ui_sessions (
+                id TEXT PRIMARY KEY,
+                client_id TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL,
+                is_focused INTEGER NOT NULL DEFAULT 0,
+                active_version_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ui_states (
+                session_id TEXT PRIMARY KEY,
+                revision INTEGER NOT NULL,
+                state_json TEXT NOT NULL,
+                source TEXT NOT NULL,
+                last_command_id TEXT,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES ui_sessions(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS ui_commands (
+                id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL UNIQUE,
+                session_id TEXT,
+                expected_revision INTEGER,
+                operations_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                requested_by TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                received_at TEXT,
+                rendered_at TEXT,
+                error_message TEXT,
+                result_json TEXT,
+                FOREIGN KEY(session_id) REFERENCES ui_sessions(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_device_version ON device_rows(version_id);
             CREATE INDEX IF NOT EXISTS idx_device_name ON device_rows(version_id, ne_name);
             CREATE INDEX IF NOT EXISTS idx_link_version ON link_rows(version_id);
             CREATE INDEX IF NOT EXISTS idx_link_pair ON link_rows(version_id, src_ne_name, sink_ne_name);
             CREATE INDEX IF NOT EXISTS idx_ring_chain_version ON ring_chain_rows(version_id);
+            CREATE INDEX IF NOT EXISTS idx_view_state_updated ON topology_view_states(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_ui_sessions_active
+                ON ui_sessions(status, is_focused, last_seen_at);
+            CREATE INDEX IF NOT EXISTS idx_ui_commands_session
+                ON ui_commands(session_id, status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_ui_commands_status
+                ON ui_commands(status, created_at);
             """
         )
 
@@ -116,4 +169,3 @@ def fetch_one(query: str, params: Tuple[Any, ...] = ()) -> Optional[Dict[str, An
     with get_connection() as conn:
         row = conn.execute(query, params).fetchone()
     return dict(row) if row else None
-

@@ -21,7 +21,7 @@ const LINE_STYLE_VALUES = ["solid", "dash", "dot"];
 const LINE_WIDTH_VALUES = ["thin", "medium", "thick"];
 const DEFAULT_NODE_STYLE = { color: "#718096", size: 10, shape: "circle", label: "Other" };
 const PERF = {
-  logicNodeLimit: 600,
+  logicNodeLimit: 500,
   logicLinkLimit: 1000,
   mapNodeLimit: 1500,
   mapLinkLimit: 1500,
@@ -41,12 +41,16 @@ const SEARCH_HISTORY_LIMIT = 12;
 const CONDITION_HISTORY_LIMIT = 8;
 const OPS = [
   ["contains", "opContains"],
+  ["notContains", "opNotContains"],
   ["eq", "opEq"],
   ["neq", "opNeq"],
   ["starts", "opStarts"],
   ["ends", "opEnds"],
+  ["in", "opIn"],
   ["gt", "opGt"],
+  ["gte", "opGte"],
   ["lt", "opLt"],
+  ["lte", "opLte"],
   ["empty", "opEmpty"],
   ["notEmpty", "opNotEmpty"]
 ];
@@ -136,12 +140,16 @@ const I18N = {
     addRow: "新增行",
     applyEdit: "应用编辑",
     opContains: "包含",
+    opNotContains: "不包含",
     opEq: "等于",
     opNeq: "不等于",
     opStarts: "开头是",
     opEnds: "结尾是",
+    opIn: "属于列表",
     opGt: "大于",
+    opGte: "大于等于",
     opLt: "小于",
+    opLte: "小于等于",
     opEmpty: "为空",
     opNotEmpty: "非空",
     leafletMissing: "Leaflet 未加载，GIS 地图不可用；可使用 Logic Topo。",
@@ -341,12 +349,16 @@ const I18N = {
     addRow: "Add Row",
     applyEdit: "Apply Edit",
     opContains: "Contains",
+    opNotContains: "Does not contain",
     opEq: "Equals",
     opNeq: "Not equal",
     opStarts: "Starts with",
     opEnds: "Ends with",
+    opIn: "In list",
     opGt: "Greater than",
+    opGte: "Greater than or equal",
     opLt: "Less than",
+    opLte: "Less than or equal",
     opEmpty: "Empty",
     opNotEmpty: "Not empty",
     leafletMissing: "Leaflet is not loaded. GIS map is unavailable; Logic Topo is still available.",
@@ -595,6 +607,12 @@ const state = {
   logic: {
     positions: new Map(),
     layoutKey: "",
+    pendingKey: "",
+    failedKey: "",
+    layoutPending: false,
+    layoutError: "",
+    layoutRequestId: 0,
+    layoutAlgorithm: "",
     layoutWidth: 1280,
     layoutHeight: 820,
     zoom: 1,
@@ -811,6 +829,7 @@ function bindEvents() {
     updateRuleSummaries();
     renderTopologies();
     focusMainRuleResult("highlight");
+    publishUiIntent("manual-highlight");
   });
   el.advancedHighlightBtn.addEventListener("click", () => openConditionModal("highlight"));
   el.clearHighlightBtn.addEventListener("click", () => {
@@ -818,6 +837,7 @@ function bindEvents() {
     el.highlightValue.value = "";
     updateRuleSummaries();
     renderTopologies();
+    publishUiIntent("manual-clear-highlight");
   });
   el.applyFilterBtn.addEventListener("click", () => {
     state.filterRule = ruleGroupFromQuickControls("filter");
@@ -825,6 +845,7 @@ function bindEvents() {
     updateRuleSummaries();
     renderTopologies();
     focusMainRuleResult("filter");
+    publishUiIntent("manual-filter");
   });
   el.advancedFilterBtn.addEventListener("click", () => openConditionModal("filter"));
   el.clearFilterBtn.addEventListener("click", () => {
@@ -832,6 +853,7 @@ function bindEvents() {
     el.filterValue.value = "";
     updateRuleSummaries();
     renderTopologies();
+    publishUiIntent("manual-clear-filter");
   });
   el.conditionModalClose.addEventListener("click", closeConditionModal);
   el.cancelConditionModalBtn.addEventListener("click", closeConditionModal);
@@ -2205,8 +2227,7 @@ function loadVersionIntoState(version) {
   restoreVersionViewState(version.viewState || emptyVersionViewState());
   if (el.bulkQueryInput) el.bulkQueryInput.value = state.bulkQuery ? state.bulkQuery.raw || "" : "";
   resetTransientSelection();
-  state.logic.positions = new Map();
-  state.logic.layoutKey = "";
+  invalidateLogicLayout();
   clearRingChainStyleCache();
   renderFileSources();
 }
@@ -2680,6 +2701,7 @@ function importStyleTemplate(template) {
     report.skipped ? "warning" : "ok"
   );
   renderTopologies();
+  publishUiIntent("manual-style-template");
 }
 
 function syncStyleControlsFromState() {
@@ -2821,6 +2843,7 @@ function resetStyleControls() {
   renderLinkStyleRules();
   renderRingChainStyleRules();
   renderTopologies();
+  publishUiIntent("manual-clear-styles");
 }
 
 function renderRoleStyleEditor() {
@@ -2910,6 +2933,7 @@ function removeNodeStyleRule(event) {
   clearStyleRuleMatchCache();
   renderNodeStyleRules();
   renderTopologies();
+  publishUiIntent("manual-node-style");
 }
 
 function updateNodeStyleRuleFromControl(event) {
@@ -2942,6 +2966,7 @@ function applyNodeStyleRules() {
   state.appliedNodeStyleRules = cloneRuleList(state.nodeStyleRules);
   clearStyleRuleMatchCache();
   renderTopologies();
+  publishUiIntent("manual-node-style");
 }
 
 function cloneRuleList(rules) {
@@ -3077,6 +3102,7 @@ function applyLinkStyleRules() {
   state.appliedLinkStyleRules = cloneRuleList(state.linkStyleRules);
   clearStyleRuleMatchCache();
   renderTopologies();
+  publishUiIntent("manual-link-style");
 }
 
 function addRingChainStyleRule() {
@@ -3282,6 +3308,7 @@ function switchTopoView(view) {
     setTimeout(() => state.map.invalidateSize(), 50);
   }
   renderTopologies();
+  publishUiIntent("manual-view-switch");
 }
 
 async function loadUploadedFiles() {
@@ -3574,8 +3601,7 @@ function setData(nodes, links, ringChains = [], options = {}) {
   state.appliedRingChainStyleRules = state.ringChains.length ? state.appliedRingChainStyleRules : [];
   clearRingChainStyleCache();
 
-  state.logic.positions = new Map();
-  state.logic.layoutKey = "";
+  invalidateLogicLayout();
   persistActiveVersionState();
   renderVersionControls();
   refreshAll();
@@ -3838,12 +3864,16 @@ function matchesCondition(row, rule) {
   const right = target.toLowerCase();
 
   if (rule.op === "contains") return left.includes(right);
+  if (rule.op === "notContains") return !left.includes(right);
   if (rule.op === "eq") return left === right;
   if (rule.op === "neq") return left !== right;
   if (rule.op === "starts") return left.startsWith(right);
   if (rule.op === "ends") return left.endsWith(right);
+  if (rule.op === "in") return right.split(",").map(item => item.trim().toLowerCase()).includes(left);
   if (rule.op === "gt") return Number(value) > Number(target);
+  if (rule.op === "gte") return Number(value) >= Number(target);
   if (rule.op === "lt") return Number(value) < Number(target);
+  if (rule.op === "lte") return Number(value) <= Number(target);
   if (rule.op === "empty") return value === "";
   if (rule.op === "notEmpty") return value !== "";
 
@@ -4236,7 +4266,10 @@ function applyConditionModal() {
     return;
   }
   renderTopologies();
-  if (type === "highlight" || type === "filter") focusMainRuleResult(type);
+  if (type === "highlight" || type === "filter") {
+    focusMainRuleResult(type);
+    publishUiIntent(`manual-${type}`);
+  }
 }
 
 function applyBulkQuery() {
@@ -4545,6 +4578,7 @@ function renderTopologies() {
   else renderLogic(data);
 
   updateStats(data);
+  updateNodeLegend(data);
   updateViewMessage(data);
 }
 
@@ -4923,9 +4957,9 @@ function shapePixelOffsets(radius, shape) {
 
 function renderLogic(data = getVisibleData()) {
   const svg = el.logicCanvas;
-  const rect = svg.getBoundingClientRect();
-  const width = Math.max(320, rect.width || 900);
-  const height = Math.max(240, rect.height || 600);
+  const viewport = getLogicViewportSize();
+  const width = viewport.width;
+  const height = viewport.height;
 
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   if (data.nodes.length > PERF.logicNodeLimit || data.links.length > PERF.logicLinkLimit) {
@@ -4937,15 +4971,28 @@ function renderLogic(data = getVisibleData()) {
   svg.style.setProperty("--logic-link-dim-opacity", String(highlightDimOpacity("linkLine")));
   svg.style.setProperty("--logic-node-dim-opacity", String(highlightDimOpacity("node")));
   const degreeMap = getNodeDegreeMap(data.links);
-  const connectedNodes = data.nodes.filter(node => (degreeMap.get(node["NE Name"]) || 0) > 0);
-  const isolatedNodes = data.nodes.filter(node => (degreeMap.get(node["NE Name"]) || 0) === 0);
-  const isolatedLayout = getIsolatedLayoutMetrics(isolatedNodes.length, width, height, connectedNodes.length);
-  const layoutKey = logicLayoutKey(connectedNodes, data.links, isolatedNodes.length);
-  if (layoutKey !== state.logic.layoutKey || !hasPositionsFor(connectedNodes)) {
-    computeLogicLayout(true, connectedNodes, data.links, isolatedLayout.bandHeight);
+  const layoutKey = logicLayoutKey(data.nodes, data.links, width, height);
+  const needsLayout = layoutKey !== state.logic.layoutKey || !hasPositionsFor(data.nodes);
+  if (needsLayout && state.logic.pendingKey !== layoutKey && state.logic.failedKey !== layoutKey) {
+    computeLogicLayout(true, data.nodes, data.links);
     state.logic.layoutKey = layoutKey;
   }
-  layoutIsolatedNodes(isolatedNodes, width, height, isolatedLayout);
+
+  if (state.logic.layoutPending && !hasPositionsFor(data.nodes)) {
+    svg.innerHTML = logicLayoutStatusMarkup(
+      width,
+      height,
+      state.lang === "en" ? "Computing Python / NetworkX layout..." : "正在计算 Python / NetworkX 最佳布局...",
+      false
+    );
+    return;
+  }
+  if (!hasPositionsFor(data.nodes)) {
+    const message = state.logic.layoutError
+      || (state.lang === "en" ? "Python layout coordinates are unavailable." : "Python 布局坐标不可用。");
+    svg.innerHTML = logicLayoutStatusMarkup(width, height, message, true);
+    return;
+  }
 
   const linkMarkup = data.links.map((link, index) => {
     const src = state.logic.positions.get(link["Src NE Name"]);
@@ -5076,33 +5123,107 @@ function bindLogicEvents() {
   }, { passive: false });
 }
 
-function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLinks = state.links, reservedBottomHeight = 0) {
-  const viewportWidth = Math.max(320, el.logicCanvas.clientWidth || 900);
-  const viewportHeight = Math.max(240, el.logicCanvas.clientHeight || 600);
-  const paths = logicRingChainPaths(new Set(layoutNodes.map(node => node["NE Name"])));
-  const layoutSize = getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, reservedBottomHeight);
-  const width = layoutSize.width;
-  const layoutHeight = layoutSize.height;
-  const positions = new Map();
-  state.logic.layoutWidth = width;
-  state.logic.layoutHeight = layoutHeight;
+async function computeLogicLayout(
+  resetTransform,
+  layoutNodes = state.nodes,
+  layoutLinks = state.links
+) {
+  const viewport = getLogicViewportSize();
+  const viewportWidth = viewport.width;
+  const viewportHeight = viewport.height;
+  const requestKey = logicLayoutKey(
+    layoutNodes,
+    layoutLinks,
+    viewportWidth,
+    viewportHeight
+  );
+  if (state.logic.layoutPending && state.logic.pendingKey === requestKey) return;
 
-  const componentLayoutApplied = computeRingChainComponentLayout(positions, width, layoutHeight, layoutNodes, layoutLinks, paths);
-  if (!componentLayoutApplied) {
-    computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks, paths);
-    if (layoutNodes.length <= 300) {
-      applyKamadaKawaiLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
-    } else {
-      applySpringLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+  const requestId = ++state.logic.layoutRequestId;
+  state.logic.layoutPending = true;
+  state.logic.pendingKey = requestKey;
+  state.logic.failedKey = "";
+  state.logic.layoutError = "";
+  state.logic.positions = new Map();
+
+  try {
+    const response = await fetch("/api/v1/layout/logic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        canvas_width: viewportWidth,
+        canvas_height: viewportHeight,
+        devices: layoutNodes,
+        links: layoutLinks,
+        actions: []
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) {
+      throw new Error(payload.message || `HTTP ${response.status}`);
     }
-  }
-  resolveLogicNodeOverlap(positions, width, layoutHeight, layoutNodes, layoutLinks, componentLayoutApplied ? 10 : 8);
-  normalizeLogicPositions(positions, width, layoutHeight, layoutNodes);
+    const result = payload.data || {};
+    if (!result.layout_available) {
+      throw new Error(result.reason || "Python layout is unavailable");
+    }
+    if (requestId !== state.logic.layoutRequestId || requestKey !== state.logic.pendingKey) return;
 
-  state.logic.positions = positions;
-  if (resetTransform) {
-    fitLogicToBounds(layoutNodes);
+    const positions = new Map();
+    (result.nodes || []).forEach(node => positions.set(node.id, { x: node.x, y: node.y }));
+    if (!positions.size || layoutNodes.some(node => !positions.has(node["NE Name"]))) {
+      throw new Error(state.lang === "en"
+        ? "Python layout did not return all visible devices."
+        : "Python 布局未返回全部可见网元坐标。");
+    }
+
+    state.logic.positions = positions;
+    state.logic.layoutKey = requestKey;
+    state.logic.layoutWidth = result.canvas ? result.canvas.width : viewportWidth;
+    state.logic.layoutHeight = result.canvas ? result.canvas.height : viewportHeight;
+    state.logic.layoutAlgorithm = result.algorithm || "networkx";
+    state.logic.layoutPending = false;
+    state.logic.pendingKey = "";
+    state.logic.failedKey = "";
+    state.logic.layoutError = "";
+    if (resetTransform) {
+      const locatedNodes = layoutNodes.filter(node => state.locatedNames.has(node["NE Name"]));
+      if (locatedNodes.length) focusLogicOnNodes(locatedNodes);
+      else fitLogicToBounds(layoutNodes);
+    }
+    el.viewMessage.textContent = state.lang === "en"
+      ? `Python / NetworkX layout completed (${result.node_count || 0} nodes).`
+      : `Python / NetworkX 布局完成（${result.node_count || 0} 个网元）。`;
+    if (state.view === "logic") renderLogic(getVisibleData());
+  } catch (error) {
+    if (requestId !== state.logic.layoutRequestId) return;
+    state.logic.layoutPending = false;
+    state.logic.pendingKey = "";
+    state.logic.failedKey = requestKey;
+    state.logic.layoutError = state.lang === "en"
+      ? `Python layout failed: ${error.message || String(error)}`
+      : `Python 布局失败：${error.message || String(error)}`;
+    el.viewMessage.textContent = state.logic.layoutError;
+    if (state.view === "logic") renderLogic(getVisibleData());
   }
+}
+
+function getLogicViewportSize() {
+  const canvasRect = el.logicCanvas.getBoundingClientRect();
+  const containerRect = el.logicCanvas.parentElement
+    ? el.logicCanvas.parentElement.getBoundingClientRect()
+    : canvasRect;
+  return {
+    width: Math.max(320, canvasRect.width || containerRect.width || 900),
+    height: Math.max(240, canvasRect.height || containerRect.height || 600)
+  };
+}
+
+function logicLayoutStatusMarkup(width, height, message, isError) {
+  const color = isError ? "#b42318" : "#334b5e";
+  return `<g aria-label="python-layout-status">
+    <rect x="${width / 2 - 210}" y="${height / 2 - 36}" width="420" height="72" rx="6" fill="#ffffff" stroke="#cbd5df"></rect>
+    <text x="${width / 2}" y="${height / 2 + 5}" text-anchor="middle" fill="${color}" font-size="14">${escapeHtml(message)}</text>
+  </g>`;
 }
 
 function getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, reservedBottomHeight = 0) {
@@ -5425,12 +5546,12 @@ function computeStructureAwareInitialLayout(positions, width, height, layoutNode
   });
 }
 
-function logicRingChainPaths(nodeSet) {
-  if (!state.ringChains.length) return [];
+function logicRingChainPaths(nodeSet, ringChains = state.ringChains) {
+  if (!ringChains.length) return [];
   const paths = [];
-  state.ringChains.forEach((row, index) => {
+  ringChains.forEach((row, index) => {
     const rowKey = ringChainRowKey(row, index);
-    const members = (state.indexes.ringChainMembersByName.get(rowKey) || parseMemberPath(row.Member_path))
+    const members = parseMemberPath(row.Member_path)
       .filter(name => nodeSet.has(name));
     const uniqueMembers = members.filter((name, memberIndex) => memberIndex === 0 || name !== members[memberIndex - 1]);
     if (uniqueMembers.length < 2) return;
@@ -5680,16 +5801,22 @@ function hasPositionsFor(nodes) {
   return nodes.every(node => state.logic.positions.has(node["NE Name"]));
 }
 
-function logicLayoutKey(nodes, links, isolatedCount) {
-  const layoutVersion = "logic-v3-ring-chain-component";
+function invalidateLogicLayout() {
+  state.logic.layoutRequestId += 1;
+  state.logic.positions = new Map();
+  state.logic.layoutKey = "";
+  state.logic.pendingKey = "";
+  state.logic.failedKey = "";
+  state.logic.layoutPending = false;
+  state.logic.layoutError = "";
+  state.logic.layoutAlgorithm = "";
+}
+
+function logicLayoutKey(nodes, links, width, height) {
+  const layoutVersion = "logic-v5-native-kamada-kawai";
   const names = nodes.map(node => node["NE Name"]).sort().join("|");
   const edgeKeys = links.map(link => linkKey(link)).sort().join("|");
-  const nodeSet = new Set(nodes.map(node => node["NE Name"]));
-  const pathKeys = logicRingChainPaths(nodeSet)
-    .map(path => `${path.category}:${path.name}:${path.members.join(">")}`)
-    .sort()
-    .join("|");
-  return `${layoutVersion}:${nodes.length}:${links.length}:${isolatedCount}:${names}:${edgeKeys}:${pathKeys}`;
+  return `${layoutVersion}:${Math.round(width)}:${Math.round(height)}:${nodes.length}:${links.length}:${names}:${edgeKeys}`;
 }
 
 function getIsolatedLayoutMetrics(count, width, height, connectedCount) {
@@ -6153,6 +6280,7 @@ function applyLocateRule(rule, syncQuickInput = false) {
   if (!result.names.size) {
     setMessage(el.locateMessage, t("locateMissing"), "error");
     renderTopologies();
+    publishUiIntent("manual-locate");
     return;
   }
 
@@ -6179,6 +6307,7 @@ function applyLocateRule(rule, syncQuickInput = false) {
     showDetails(firstNode);
   }
   renderTopologies();
+  publishUiIntent("manual-locate");
 }
 
 function locateMatchesForRule(rule) {
@@ -6215,6 +6344,13 @@ function clearLocateRule() {
   el.searchInput.value = "";
   setMessage(el.locateMessage, "", "");
   renderTopologies();
+  publishUiIntent("manual-clear-locate");
+}
+
+function publishUiIntent(reason) {
+  if (window.topoUiController && typeof window.topoUiController.publishCurrentState === "function") {
+    window.topoUiController.publishCurrentState(reason);
+  }
 }
 
 function focusLocatedNodes(nodes) {
@@ -6584,8 +6720,7 @@ function applyTableEdits() {
   pruneRingChainStyleRules();
   rebuildIndexes();
   clearRingChainStyleCache();
-  state.logic.positions = new Map();
-  state.logic.layoutKey = "";
+  invalidateLogicLayout();
   persistActiveVersionState();
   renderVersionControls();
   refreshAll();
@@ -6739,14 +6874,22 @@ function normalizeColor(color, fallback) {
   return /^#[0-9a-f]{6}$/i.test(String(color || "")) ? color : fallback;
 }
 
-function updateNodeLegend() {
+function updateNodeLegend(data = getVisibleData()) {
   if (!el.nodeLegend) return;
+
+  const visibleRoleCounts = new Map(ROLE_ORDER.concat("OTHER").map(role => [role, 0]));
+  data.nodes.forEach(node => {
+    const role = ROLE_ORDER.includes(String(node.Role || "").toUpperCase())
+      ? String(node.Role).toUpperCase()
+      : "OTHER";
+    visibleRoleCounts.set(role, (visibleRoleCounts.get(role) || 0) + 1);
+  });
 
   el.nodeLegend.innerHTML = ROLE_ORDER.concat("OTHER").map(role => {
     const style = state.roleStyles[role] || DEFAULT_ROLE_STYLES.OTHER;
     const color = normalizeColor(style.color, DEFAULT_NODE_STYLE.color);
     const shape = normalizeShape(style.shape, DEFAULT_NODE_STYLE.shape);
-    return `<span><i class="shape-${shape}" style="background:${escapeAttr(color)};color:${escapeAttr(color)}"></i><span>${escapeHtml(role)}</span></span>`;
+    return `<span><i class="shape-${shape}" style="background:${escapeAttr(color)};color:${escapeAttr(color)}"></i><span>${escapeHtml(role)} (${visibleRoleCounts.get(role) || 0})</span></span>`;
   }).join("");
 }
 

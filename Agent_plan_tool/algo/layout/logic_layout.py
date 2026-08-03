@@ -2,36 +2,49 @@
 # -*- coding: utf-8 -*-
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 
-import math
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
 
 
 class LogicLayoutEngine:
-    """逻辑拓扑布局引擎，将旧绘图类重构为坐标 JSON 输出能力."""
+    """基于原始 ``logic_topo_visual.py`` 的通用逻辑布局引擎."""
+
+    _PADDING = 72.0
 
     def __init__(
         self,
         devices: List[Dict[str, Any]],
         links: List[Dict[str, Any]],
-        ring_chains: List[Dict[str, Any]],
         canvas_width: float,
         canvas_height: float,
         node_limit: int = 500,
     ) -> None:
+        """初始化网元、链路和目标画布.
+
+        Args:
+            devices: 当前需要呈现的网元记录.
+            links: 当前需要呈现的链路记录.
+            canvas_width: 浏览器 Canvas 宽度.
+            canvas_height: 浏览器 Canvas 高度.
+            node_limit: 逻辑视图允许的最大网元数.
+        """
         self.devices = devices
         self.links = links
-        self.ring_chains = ring_chains
-        self.canvas_width = max(canvas_width, 800.0)
-        self.canvas_height = max(canvas_height, 600.0)
+        self.canvas_width = max(float(canvas_width), 320.0)
+        self.canvas_height = max(float(canvas_height), 240.0)
         self.node_limit = node_limit
-        self.node_names = [str(row.get("NE Name", "")).strip() for row in devices if row.get("NE Name")]
+        self.device_by_name = self._build_device_map(devices, links)
+        self.node_names = list(self.device_by_name.keys())
         self.node_set = set(self.node_names)
 
     def compute(self) -> Dict[str, Any]:
-        """计算逻辑视图坐标."""
+        """使用原始 NetworkX 算法计算 Canvas 逻辑坐标.
+
+        Returns:
+            包含算法名称、画布信息和全部节点横纵坐标的字典.
+        """
         if len(self.node_names) > self.node_limit:
             return {
                 "layout_available": False,
@@ -40,223 +53,165 @@ class LogicLayoutEngine:
                 "node_count": len(self.node_names),
             }
 
-        graph = self._build_graph()
-        if self._has_ring_chain_paths():
-            pos = self._ring_chain_first_layout(graph)
-        else:
-            pos = self._networkx_layout(graph)
+        if not self.node_names:
+            return self._empty_result()
 
-        pos = self._resolve_node_overlap(pos)
-        pos = self._normalize_to_canvas(pos)
-        return {
-            "layout_available": True,
-            "node_limit": self.node_limit,
-            "node_count": len(self.node_names),
-            "canvas": {"width": self.canvas_width, "height": self.canvas_height},
-            "nodes": [
-                {
-                    "id": name,
-                    "x": round(float(pos[name][0]), 3),
-                    "y": round(float(pos[name][1]), 3),
-                    "role": str(device.get("Role", "")),
-                }
-                for name, device in self._device_items()
-                if name in pos
-            ],
-        }
+        graph = self._build_graph()
+        positions, algorithm = self._compute_native_layout(graph)
+        positions = self._resolve_node_overlap(positions)
+        canvas_positions = self._map_to_canvas(positions)
+        return self._build_result(canvas_positions, algorithm, graph.number_of_edges())
+
+    @staticmethod
+    def _build_device_map(
+        devices: List[Dict[str, Any]],
+        links: List[Dict[str, Any]],
+    ) -> Dict[str, Dict[str, Any]]:
+        """按输入顺序合并网元表节点和链路端点."""
+        result: Dict[str, Dict[str, Any]] = {}
+        for row in devices:
+            name = str(row.get("NE Name", "")).strip()
+            if name and name not in result:
+                result[name] = row
+
+        for row in links:
+            for field in ("Src NE Name", "Sink NE Name"):
+                name = str(row.get(field, "")).strip()
+                if name and name not in result:
+                    result[name] = {"NE Name": name, "Role": ""}
+        return result
 
     def _build_graph(self) -> nx.Graph:
-        """基于链路和环链路径构建布局图."""
+        """仅使用网元表和链路表构建 NetworkX 无向图."""
         graph = nx.Graph()
         graph.add_nodes_from(self.node_names)
         for row in self.links:
             src = str(row.get("Src NE Name", "")).strip()
             sink = str(row.get("Sink NE Name", "")).strip()
-            if src in self.node_set and sink in self.node_set:
-                graph.add_edge(src, sink, weight=1.0)
-        for row in self.ring_chains:
-            members = self._valid_members(row)
-            for index in range(1, len(members)):
-                graph.add_edge(members[index - 1], members[index], weight=2.0)
+            if src in self.node_set and sink in self.node_set and src != sink:
+                graph.add_edge(src, sink)
         return graph
 
-    def _has_ring_chain_paths(self) -> bool:
-        """判断是否存在可用环链路径."""
-        return any(len(self._valid_members(row)) >= 2 for row in self.ring_chains)
-
-    def _ring_chain_first_layout(self, graph: nx.Graph) -> Dict[str, np.ndarray]:
-        """环链优先布局：先保留路径结构，再用轻量力导向调整剩余节点."""
-        pos: Dict[str, np.ndarray] = {}
-        groups = self._group_ring_chains()
-        group_boxes = self._component_boxes(max(len(groups), 1))
-
-        for box, rows in zip(group_boxes, groups.values()):
-            self._place_group(box, rows, pos)
-
-        remaining = [name for name in self.node_names if name not in pos]
-        if remaining:
-            self._place_remaining_components(graph, remaining, pos)
-
-        fixed = set(pos.keys())
-        if graph.number_of_edges() and len(graph) > 2:
-            try:
-                refined = nx.spring_layout(
-                    graph,
-                    pos={name: pos[name] for name in fixed},
-                    fixed=list(fixed) if len(fixed) < len(graph) else None,
-                    seed=42,
-                    k=1.0 / math.sqrt(max(len(graph), 1)),
-                    iterations=60,
-                    weight="weight",
-                )
-                pos.update({name: np.array(value) for name, value in refined.items()})
-            except (nx.NetworkXException, ValueError):
-                pass
-        return pos
-
-    def _networkx_layout(self, graph: nx.Graph) -> Dict[str, np.ndarray]:
-        """无环链路径时使用 NetworkX 布局."""
-        if len(graph) <= 1:
-            return {name: np.array([0.0, 0.0]) for name in graph.nodes}
-        if len(graph) <= 300:
-            try:
-                return {name: np.array(value) for name, value in nx.kamada_kawai_layout(graph).items()}
-            except (nx.NetworkXException, ValueError):
-                pass
-        return {
-            name: np.array(value)
-            for name, value in nx.spring_layout(graph, seed=42, iterations=120).items()
-        }
-
-    def _group_ring_chains(self) -> Dict[str, List[Dict[str, Any]]]:
-        """按业务聚合字段组织环链组件."""
-        groups: Dict[str, List[Dict[str, Any]]] = {}
-        for row in self.ring_chains:
-            members = self._valid_members(row)
-            if len(members) < 2:
-                continue
-            key = (
-                str(row.get("Belong_agg", "")).strip()
-                or str(row.get("Uplink_pair", "")).strip()
-                or str(row.get("Root1", "")).strip() + "***" + str(row.get("Root2", "")).strip()
-                or str(row.get("Name", "")).strip()
-            )
-            groups.setdefault(key, []).append(row)
-        return groups
-
-    def _component_boxes(self, count: int) -> List[Tuple[float, float, float, float]]:
-        """根据画布尺寸生成组件布局盒."""
-        columns = max(1, math.ceil(math.sqrt(count * self.canvas_width / self.canvas_height)))
-        rows = max(1, math.ceil(count / columns))
-        box_width = self.canvas_width / columns
-        box_height = self.canvas_height / rows
-        boxes = []
-        for index in range(count):
-            row = index // columns
-            column = index % columns
-            boxes.append((column * box_width, row * box_height, box_width, box_height))
-        return boxes
-
-    def _place_group(
-        self,
-        box: Tuple[float, float, float, float],
-        rows: List[Dict[str, Any]],
-        pos: Dict[str, np.ndarray],
-    ) -> None:
-        """在组件盒内放置环和链."""
-        x0, y0, width, height = box
-        center_x = x0 + width / 2
-        center_y = y0 + height / 2
-        lane_count = max(1, len(rows))
-        lane_gap = height / (lane_count + 1)
-
-        for index, row in enumerate(rows):
-            members = self._valid_members(row)
-            if not members:
-                continue
-            category = str(row.get("Category", "")).lower()
-            if category == "ring" and len(members) >= 3:
-                radius_x = max(60.0, width * 0.34 * (1 - index * 0.04))
-                radius_y = max(45.0, height * 0.28 * (1 - index * 0.04))
-                for member_index, member in enumerate(members):
-                    angle = 2 * math.pi * member_index / len(members) - math.pi / 2
-                    pos.setdefault(
-                        member,
-                        np.array([center_x + radius_x * math.cos(angle), center_y + radius_y * math.sin(angle)]),
-                    )
-            else:
-                y = y0 + lane_gap * (index + 1)
-                start_x = x0 + width * 0.16
-                step = width * 0.68 / max(len(members) - 1, 1)
-                for member_index, member in enumerate(members):
-                    pos.setdefault(member, np.array([start_x + step * member_index, y]))
-
-    def _place_remaining_components(
-        self,
+    @staticmethod
+    def _compute_native_layout(
         graph: nx.Graph,
-        remaining: List[str],
-        pos: Dict[str, np.ndarray],
-    ) -> None:
-        """将未被环链覆盖的节点按连通组件铺排."""
-        subgraph = graph.subgraph(remaining)
-        components = [list(item) for item in nx.connected_components(subgraph)] if len(subgraph) else [remaining]
-        boxes = self._component_boxes(len(components))
-        for box, component in zip(boxes, components):
-            x0, y0, width, height = box
-            columns = max(1, math.ceil(math.sqrt(len(component))))
-            for index, node in enumerate(sorted(component)):
-                row = index // columns
-                column = index % columns
-                x = x0 + width * (column + 1) / (columns + 1)
-                y = y0 + height * (row + 1) / (math.ceil(len(component) / columns) + 1)
-                pos.setdefault(node, np.array([x, y]))
+    ) -> Tuple[Dict[str, np.ndarray], str]:
+        """复用原始脚本的 Kamada-Kawai/Spring 选择逻辑."""
+        if len(graph) > 1000:
+            positions = nx.spring_layout(graph, k=0.5, iterations=50, seed=42)
+            return positions, "networkx-spring"
+        positions = nx.kamada_kawai_layout(graph)
+        return positions, "networkx-kamada-kawai"
 
-    def _resolve_node_overlap(self, pos: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-        """按画布尺寸自适应消除节点重叠."""
-        if len(pos) < 2:
-            return pos
-        min_distance = max(26.0, min(self.canvas_width, self.canvas_height) / math.sqrt(len(pos)) * 0.22)
-        nodes = list(pos.keys())
-        for _ in range(8):
-            moved = False
-            for i, node_a in enumerate(nodes):
-                for node_b in nodes[i + 1:]:
-                    diff = pos[node_a] - pos[node_b]
-                    distance = float(np.linalg.norm(diff))
-                    if 0 < distance < min_distance:
-                        offset = (min_distance - distance) / 2
-                        direction = diff / distance
-                        pos[node_a] = pos[node_a] + direction * offset
-                        pos[node_b] = pos[node_b] - direction * offset
-                        moved = True
-            if not moved:
-                break
-        return pos
-
-    def _normalize_to_canvas(self, pos: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
-        """将任意布局坐标映射到目标画布."""
-        if not pos:
+    @staticmethod
+    def _resolve_node_overlap(
+        positions: Dict[str, np.ndarray],
+        min_distance: Optional[float] = None,
+    ) -> Dict[str, np.ndarray]:
+        """使用原始脚本的通用位置偏移方法处理节点重叠."""
+        if not positions:
             return {}
-        values = np.array(list(pos.values()))
+
+        normalized = {name: np.array(value, dtype=float) for name, value in positions.items()}
+        if min_distance is None:
+            all_coords = np.array(list(normalized.values()))
+            x_range = all_coords[:, 0].max() - all_coords[:, 0].min()
+            y_range = all_coords[:, 1].max() - all_coords[:, 1].min()
+            min_distance = max(x_range, y_range, 1.0) * 0.01
+
+        resolved = {name: value.copy() for name, value in normalized.items()}
+        nodes = list(resolved.keys())
+        for index, left_name in enumerate(nodes):
+            for right_name in nodes[index + 1:]:
+                difference = resolved[left_name] - resolved[right_name]
+                distance = np.linalg.norm(difference)
+                if 0 < distance < min_distance:
+                    direction = difference / distance
+                    offset = (min_distance - distance) / 2.0 + 0.001
+                    resolved[left_name] = resolved[left_name] + direction * offset
+                    resolved[right_name] = resolved[right_name] - direction * offset
+        return resolved
+
+    def _map_to_canvas(
+        self,
+        positions: Dict[str, np.ndarray],
+    ) -> Dict[str, np.ndarray]:
+        """将 NetworkX 归一化坐标等比映射到目标 Canvas."""
+        if len(positions) == 1:
+            name = next(iter(positions))
+            return {
+                name: np.array([self.canvas_width / 2.0, self.canvas_height / 2.0])
+            }
+
+        values = np.array(list(positions.values()), dtype=float)
         min_x, min_y = values.min(axis=0)
         max_x, max_y = values.max(axis=0)
-        padding = max(48.0, min(self.canvas_width, self.canvas_height) * 0.06)
-        range_x = max(float(max_x - min_x), 1.0)
-        range_y = max(float(max_y - min_y), 1.0)
-        scale = min((self.canvas_width - 2 * padding) / range_x, (self.canvas_height - 2 * padding) / range_y)
-        offset_x = padding + (self.canvas_width - 2 * padding - range_x * scale) / 2
-        offset_y = padding + (self.canvas_height - 2 * padding - range_y * scale) / 2
+        x_range = float(max_x - min_x)
+        y_range = float(max_y - min_y)
+        available_width = max(self.canvas_width - 2.0 * self._PADDING, 1.0)
+        available_height = max(self.canvas_height - 2.0 * self._PADDING, 1.0)
+        scales = []
+        if x_range > 0:
+            scales.append(available_width / x_range)
+        if y_range > 0:
+            scales.append(available_height / y_range)
+        scale = min(scales) if scales else 1.0
+        content_width = x_range * scale
+        content_height = y_range * scale
+        offset_x = (self.canvas_width - content_width) / 2.0
+        offset_y = (self.canvas_height - content_height) / 2.0
+
         return {
-            name: np.array([offset_x + (value[0] - min_x) * scale, offset_y + (value[1] - min_y) * scale])
-            for name, value in pos.items()
+            name: np.array([
+                offset_x + (float(value[0]) - min_x) * scale,
+                offset_y + (max_y - float(value[1])) * scale,
+            ])
+            for name, value in positions.items()
         }
 
-    def _valid_members(self, row: Dict[str, Any]) -> List[str]:
-        """解析 Member_path 中存在于网元表的成员."""
-        members = [item.strip() for item in str(row.get("Member_path", "")).split("->") if item.strip()]
-        return [item for item in members if item in self.node_set]
+    def _empty_result(self) -> Dict[str, Any]:
+        """返回空拓扑的有效布局结果."""
+        return {
+            "layout_available": True,
+            "node_limit": self.node_limit,
+            "node_count": 0,
+            "edge_count": 0,
+            "algorithm": "networkx-empty",
+            "canvas": self._canvas_payload(),
+            "nodes": [],
+        }
 
-    def _device_items(self) -> List[Tuple[str, Dict[str, Any]]]:
-        """返回网元名和原始记录."""
-        return [(str(row.get("NE Name", "")).strip(), row) for row in self.devices if row.get("NE Name")]
+    def _build_result(
+        self,
+        positions: Dict[str, np.ndarray],
+        algorithm: str,
+        edge_count: int,
+    ) -> Dict[str, Any]:
+        """构建前端可直接消费的布局响应."""
+        return {
+            "layout_available": True,
+            "node_limit": self.node_limit,
+            "node_count": len(self.node_names),
+            "edge_count": edge_count,
+            "algorithm": algorithm,
+            "canvas": self._canvas_payload(),
+            "nodes": [
+                {
+                    "id": name,
+                    "x": round(float(positions[name][0]), 3),
+                    "y": round(float(positions[name][1]), 3),
+                    "role": str(self.device_by_name[name].get("Role", "")),
+                }
+                for name in self.node_names
+                if name in positions
+            ],
+        }
 
+    def _canvas_payload(self) -> Dict[str, float]:
+        """返回布局使用的 Canvas 尺寸."""
+        return {
+            "width": round(self.canvas_width, 3),
+            "height": round(self.canvas_height, 3),
+            "viewport_width": round(self.canvas_width, 3),
+            "viewport_height": round(self.canvas_height, 3),
+        }

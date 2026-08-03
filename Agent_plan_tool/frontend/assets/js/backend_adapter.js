@@ -1,14 +1,21 @@
 (function () {
   "use strict";
 
+  const CATALOG_SYNC_INTERVAL_MS = 5000;
+  const BACKEND_VERSION_PREFIX = "backend:";
+
   const adapter = {
     versionId: "",
     versions: [],
+    styles: [],
+    catalogSyncTimer: 0,
+    catalogSyncInFlight: false,
+    catalogsReady: false,
+    followLatest: true,
+    loadingVersionId: "",
     tableType: "devices",
-    layoutCacheKey: "",
-    layoutCache: null,
     oldLoadUploadedFiles: null,
-    oldComputeLogicLayout: null,
+    oldRenderVersionControls: null,
     oldRenderTopologies: null
   };
 
@@ -19,9 +26,9 @@
     }
     buildPanels();
     hookUpload();
-    hookBackendLayout();
+    hookBackendCatalogControls();
     hookRenderRefresh();
-    loadBackendVersions();
+    startBackendCatalogSync();
     refreshAdapterPanels();
   }
 
@@ -50,9 +57,24 @@
         <h2>动态指标看板</h2>
         <button id="agentCloseMetricsBtn" type="button">收起</button>
       </div>
-      <div class="agent-version-row">
-        <select id="agentBackendVersionSelect" aria-label="后端数据版本"></select>
-        <button id="agentLoadBackendVersionBtn" type="button">加载</button>
+      <div class="agent-catalog-controls">
+        <div class="agent-version-row">
+          <select id="agentBackendVersionSelect" aria-label="数据库规划版本"></select>
+          <button id="agentLoadBackendVersionBtn" type="button">加载版本</button>
+        </div>
+        <div class="agent-version-row">
+          <select id="agentBackendStyleSelect" aria-label="数据库样式版本"></select>
+          <button id="agentApplyBackendStyleBtn" type="button">应用样式</button>
+        </div>
+        <div class="agent-style-save-row">
+          <input id="agentStyleNameInput" type="text" maxlength="80" placeholder="样式模板名称">
+          <select id="agentStyleScopeSelect" aria-label="样式模板范围">
+            <option value="global">全局共享</option>
+            <option value="version">当前版本</option>
+          </select>
+          <button id="agentSaveBackendStyleBtn" type="button">保存</button>
+        </div>
+        <div id="agentCatalogStatus" class="agent-catalog-status">正在同步数据库版本...</div>
       </div>
       <div id="agentMetricCards" class="agent-metric-cards"></div>
     `;
@@ -82,6 +104,8 @@
     tableToggle.addEventListener("click", () => tablePanel.classList.toggle("open"));
     document.getElementById("agentCloseMetricsBtn").addEventListener("click", () => drawer.classList.remove("open"));
     document.getElementById("agentLoadBackendVersionBtn").addEventListener("click", loadSelectedBackendVersion);
+    document.getElementById("agentApplyBackendStyleBtn").addEventListener("click", applySelectedBackendStyle);
+    document.getElementById("agentSaveBackendStyleBtn").addEventListener("click", saveCurrentBackendStyle);
     document.getElementById("agentRefreshTableBtn").addEventListener("click", refreshAdapterTable);
     document.getElementById("agentTableTypeSelect").addEventListener("change", event => {
       adapter.tableType = event.target.value;
@@ -96,19 +120,46 @@
     el.loadFilesBtn.addEventListener("click", async event => {
       event.preventDefault();
       event.stopImmediatePropagation();
-      await uploadToBackend();
-      await adapter.oldLoadUploadedFiles();
-      refreshAdapterPanels();
+      try {
+        const saved = await uploadToBackend();
+        if (saved && typeof switchTopoView === "function") switchTopoView("gis");
+        await adapter.oldLoadUploadedFiles();
+        refreshAdapterPanels();
+      } catch (error) {
+        setBackendMessage(error.message || String(error), "error");
+      }
     }, true);
   }
 
-  function hookBackendLayout() {
-    if (typeof computeLogicLayout !== "function") return;
-    adapter.oldComputeLogicLayout = computeLogicLayout;
-    computeLogicLayout = function (resetTransform, layoutNodes, layoutLinks, reservedBottomHeight) {
-      adapter.oldComputeLogicLayout(resetTransform, layoutNodes, layoutLinks, reservedBottomHeight);
-      requestBackendLayout(resetTransform, layoutNodes || state.nodes, layoutLinks || state.links);
-    };
+  function hookBackendCatalogControls() {
+    if (typeof renderVersionControls === "function") {
+      adapter.oldRenderVersionControls = renderVersionControls;
+      renderVersionControls = function () {
+        adapter.oldRenderVersionControls();
+        renderBackendVersionOptions();
+      };
+    }
+    if (el.projectVersionSelect) {
+      el.projectVersionSelect.addEventListener("change", event => {
+        const value = String(event.target.value || "");
+        if (value.startsWith(BACKEND_VERSION_PREFIX)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          loadBackendVersionById(value.slice(BACKEND_VERSION_PREFIX.length));
+          return;
+        }
+        if (adapter.versionId) {
+          adapter.followLatest = false;
+          activateBackendVersion("");
+        }
+      }, true);
+    }
+    if (el.newVersionBtn) {
+      el.newVersionBtn.addEventListener("click", () => {
+        adapter.followLatest = false;
+        activateBackendVersion("");
+      }, true);
+    }
   }
 
   function hookRenderRefresh() {
@@ -124,7 +175,7 @@
     const neFile = el.neFile && el.neFile.files[0];
     const linkFile = el.linkFile && el.linkFile.files[0];
     const ringChainFile = el.ringChainFile && el.ringChainFile.files[0];
-    if (!neFile || !linkFile) return;
+    if (!neFile || !linkFile) return false;
 
     const form = new FormData();
     form.append("device_file", neFile);
@@ -136,39 +187,77 @@
 
     setBackendMessage("正在同步保存到后端数据库...");
     const result = await api("/api/v1/uploads/topology", { method: "POST", body: form });
-    adapter.versionId = result.version_id;
+    activateBackendVersion(result.version_id);
+    adapter.followLatest = true;
     setBackendMessage(`后端已保存版本：${result.version_name || result.parse_timestamp}`);
-    await loadBackendVersions();
+    await syncBackendCatalogs(true);
+    return true;
   }
 
-  async function loadBackendVersions() {
+  function startBackendCatalogSync() {
+    syncBackendCatalogs(true);
+    window.clearInterval(adapter.catalogSyncTimer);
+    adapter.catalogSyncTimer = window.setInterval(() => syncBackendCatalogs(false), CATALOG_SYNC_INTERVAL_MS);
+    window.addEventListener("focus", () => syncBackendCatalogs(false));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) syncBackendCatalogs(false);
+    });
+  }
+
+  async function syncBackendCatalogs(force) {
+    if (adapter.catalogSyncInFlight) return;
+    adapter.catalogSyncInFlight = true;
+    const previousLatestId = adapter.versions.length ? adapter.versions[0].id : "";
+    const firstSync = !adapter.catalogsReady;
     try {
-      adapter.versions = await api("/api/v1/versions");
-      const select = document.getElementById("agentBackendVersionSelect");
-      if (!select) return;
-      select.innerHTML = adapter.versions.map(item => {
-        const summary = item.summary || {};
-        const selected = item.id === adapter.versionId ? " selected" : "";
-        return `<option value="${escapeAttrLocal(item.id)}"${selected}>${escapeHtmlLocal(item.version_name)} · ${summary.devices || 0}/${summary.links || 0}</option>`;
-      }).join("");
-      if (!adapter.versionId && adapter.versions.length) {
-        adapter.versionId = adapter.versions[0].id;
-        select.value = adapter.versionId;
+      const [versions, styles] = await Promise.all([
+        api("/api/v1/versions"),
+        api("/api/v1/styles/templates")
+      ]);
+      adapter.versions = Array.isArray(versions) ? versions : [];
+      adapter.styles = Array.isArray(styles) ? styles : [];
+      adapter.catalogsReady = true;
+      renderBackendCatalogs();
+
+      const latest = adapter.versions[0];
+      const shouldLoadInitial = firstSync && latest && !adapter.versionId && !state.nodes.length;
+      const shouldFollowNew = !firstSync
+        && latest
+        && previousLatestId
+        && latest.id !== previousLatestId
+        && adapter.followLatest
+        && adapter.versionId === previousLatestId;
+      if ((shouldLoadInitial || shouldFollowNew) && !adapter.loadingVersionId) {
+        await loadBackendVersionById(latest.id, { followLatest: true, silent: true });
       }
+      setCatalogStatus(`已同步 ${adapter.versions.length} 个规划版本、${adapter.styles.length} 个样式版本`);
     } catch (error) {
-      setBackendMessage(error.message || String(error));
+      if (force || firstSync) setCatalogStatus(`同步失败：${error.message || String(error)}`, "error");
+    } finally {
+      adapter.catalogSyncInFlight = false;
     }
   }
 
   async function loadSelectedBackendVersion() {
     const select = document.getElementById("agentBackendVersionSelect");
     if (!select || !select.value) return;
-    adapter.versionId = select.value;
+    await loadBackendVersionById(select.value);
+  }
+
+  async function loadBackendVersionById(selectedVersionId, options = {}) {
+    if (!selectedVersionId || adapter.loadingVersionId === selectedVersionId) return;
+    adapter.loadingVersionId = selectedVersionId;
+    setCatalogStatus("正在加载数据库规划版本...");
+    const latestId = adapter.versions.length ? adapter.versions[0].id : "";
+    adapter.followLatest = options.followLatest == null ? selectedVersionId === latestId : Boolean(options.followLatest);
+    try {
     const payload = await api("/api/v1/topology/query", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ version_id: adapter.versionId, view: "gis", actions: [] })
+      body: JSON.stringify({ version_id: selectedVersionId, view: "gis", actions: [] })
     });
+    activateBackendVersion(selectedVersionId);
+    if (typeof switchTopoView === "function") switchTopoView("gis");
     if (typeof setData === "function") {
       setData(payload.devices || [], payload.links || [], payload.ringChains || []);
       if (el.projectNameInput) {
@@ -177,99 +266,154 @@
         if (typeof updateProjectNameFromControl === "function") updateProjectNameFromControl();
       }
     }
-    refreshAdapterPanels();
+      renderBackendCatalogs();
+      setCatalogStatus(`已加载规划版本：${versionDisplayName(selectedVersionId)}`);
+      refreshAdapterPanels();
+    } catch (error) {
+      setCatalogStatus(`版本加载失败：${error.message || String(error)}`, "error");
+      if (!options.silent) setBackendMessage(error.message || String(error), "error");
+    } finally {
+      adapter.loadingVersionId = "";
+      if (!options.fromRemote && window.topoUiController) {
+        window.topoUiController.publishCurrentState("manual-version-switch");
+      }
+    }
   }
 
-  async function requestBackendLayout(resetTransform, layoutNodes, layoutLinks) {
-    if (!adapter.versionId || !layoutNodes || !layoutNodes.length) return;
-    if (layoutNodes.length > 500) return;
+  function renderBackendCatalogs() {
+    renderBackendVersionSelect();
+    renderBackendStyleSelect();
+    renderBackendVersionOptions();
+  }
 
-    const rect = el.logicCanvas.getBoundingClientRect();
-    const layoutKey = [
-      adapter.versionId,
-      layoutNodes.map(node => node["NE Name"]).sort().join("|"),
-      layoutLinks.map(link => `${link["Src NE Name"]}->${link["Sink NE Name"]}`).sort().join("|"),
-      Math.round(rect.width),
-      Math.round(rect.height)
-    ].join("::");
-    if (layoutKey === adapter.layoutCacheKey && adapter.layoutCache) {
-      applyBackendLayout(adapter.layoutCache, resetTransform, layoutNodes);
+  function renderBackendVersionSelect() {
+    const select = document.getElementById("agentBackendVersionSelect");
+    if (!select) return;
+    const selectedId = adapter.versionId || select.value;
+    select.innerHTML = adapter.versions.length
+      ? adapter.versions.map(item => {
+        const summary = item.summary || {};
+        const selected = item.id === selectedId ? " selected" : "";
+        return `<option value="${escapeAttrLocal(item.id)}"${selected}>${escapeHtmlLocal(item.version_name)} · ${summary.devices || 0}/${summary.links || 0}</option>`;
+      }).join("")
+      : '<option value="">暂无数据库规划版本</option>';
+  }
+
+  function renderBackendVersionOptions() {
+    if (!el.projectVersionSelect) return;
+    const oldGroup = el.projectVersionSelect.querySelector("optgroup[data-backend-versions]");
+    if (oldGroup) oldGroup.remove();
+    if (!adapter.versions.length) return;
+    const group = document.createElement("optgroup");
+    group.label = "数据库规划版本";
+    group.setAttribute("data-backend-versions", "true");
+    adapter.versions.forEach(item => {
+      const summary = item.summary || {};
+      const option = document.createElement("option");
+      option.value = `${BACKEND_VERSION_PREFIX}${item.id}`;
+      option.textContent = `${item.version_name} · ${summary.devices || 0}/${summary.links || 0}`;
+      group.appendChild(option);
+    });
+    el.projectVersionSelect.appendChild(group);
+    if (adapter.versionId) el.projectVersionSelect.value = `${BACKEND_VERSION_PREFIX}${adapter.versionId}`;
+  }
+
+  function renderBackendStyleSelect() {
+    const select = document.getElementById("agentBackendStyleSelect");
+    if (!select) return;
+    const selectedId = select.value;
+    select.innerHTML = adapter.styles.length
+      ? adapter.styles.map(item => {
+        const scope = item.scope === "global" ? "全局" : "版本";
+        const selected = item.id === selectedId ? " selected" : "";
+        return `<option value="${escapeAttrLocal(item.id)}"${selected}>${escapeHtmlLocal(item.name)} · ${scope}</option>`;
+      }).join("")
+      : '<option value="">暂无数据库样式版本</option>';
+  }
+
+  function versionDisplayName(versionId) {
+    const version = adapter.versions.find(item => item.id === versionId);
+    return version ? version.version_name : versionId;
+  }
+
+  function applySelectedBackendStyle() {
+    const select = document.getElementById("agentBackendStyleSelect");
+    const style = select ? adapter.styles.find(item => item.id === select.value) : null;
+    if (!style || typeof importStyleTemplate !== "function") {
+      setCatalogStatus("请选择可用的数据库样式版本。", "error");
       return;
     }
+    const template = style.template && style.template.schema
+      ? style.template
+      : {
+        schema: "topo_visual_tool_style_template",
+        version: 1,
+        styles: style.template || {}
+      };
+    importStyleTemplate(template);
+    setCatalogStatus(`已应用样式版本：${style.name}`);
+  }
 
+  async function saveCurrentBackendStyle() {
+    const nameInput = document.getElementById("agentStyleNameInput");
+    const scopeSelect = document.getElementById("agentStyleScopeSelect");
+    const name = nameInput ? nameInput.value.trim() : "";
+    const scope = scopeSelect ? scopeSelect.value : "global";
+    if (!name) {
+      setCatalogStatus("请输入样式模板名称。", "error");
+      return;
+    }
+    if (scope === "version" && !adapter.versionId) {
+      setCatalogStatus("版本样式必须先加载一个数据库规划版本。", "error");
+      return;
+    }
     try {
-      const result = await api("/api/v1/layout/logic", {
+      await api("/api/v1/styles/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          version_id: adapter.versionId,
-          canvas_width: Math.max(900, rect.width || 900),
-          canvas_height: Math.max(600, rect.height || 600),
-          actions: buildBackendActions()
+          name,
+          scope,
+          version_id: scope === "version" ? adapter.versionId : null,
+          template: currentStyleTemplate()
         })
       });
-      if (!result.layout_available) return;
-      adapter.layoutCacheKey = layoutKey;
-      adapter.layoutCache = result;
-      applyBackendLayout(result, resetTransform, layoutNodes);
+      nameInput.value = "";
+      await syncBackendCatalogs(true);
+      setCatalogStatus(`已保存样式版本：${name}`);
     } catch (error) {
-      setBackendMessage(error.message || String(error));
+      setCatalogStatus(`样式保存失败：${error.message || String(error)}`, "error");
     }
   }
 
-  function applyBackendLayout(result, resetTransform, layoutNodes) {
-    const positions = new Map();
-    (result.nodes || []).forEach(node => {
-      positions.set(node.id, { x: node.x, y: node.y });
-    });
-    if (!positions.size) return;
-    state.logic.positions = positions;
-    state.logic.layoutWidth = result.canvas ? result.canvas.width : el.logicCanvas.clientWidth;
-    state.logic.layoutHeight = result.canvas ? result.canvas.height : el.logicCanvas.clientHeight;
-    if (resetTransform && typeof fitLogicToBounds === "function") {
-      fitLogicToBounds(layoutNodes);
-    }
-    if (state.view === "logic" && typeof renderLogic === "function" && typeof getVisibleData === "function") {
-      renderLogic(getVisibleData());
-    }
+  function currentStyleTemplate() {
+    return {
+      schema: "topo_visual_tool_style_template",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      projectName: state.projectName || "",
+      styles: JSON.parse(JSON.stringify({
+        roleStyles: state.roleStyles,
+        nodeStyleRules: state.nodeStyleRules,
+        appliedNodeStyleRules: state.appliedNodeStyleRules,
+        linkStyleRules: state.linkStyleRules,
+        appliedLinkStyleRules: state.appliedLinkStyleRules,
+        ringChainStyleRules: state.ringChainStyleRules,
+        appliedRingChainStyleRules: state.appliedRingChainStyleRules,
+        routePathStyle: state.routePathStyle
+      }))
+    };
   }
 
-  function buildBackendActions() {
-    const actions = [];
-    const filter = normalizeBackendGroup(state.filterRule);
-    const highlight = normalizeBackendGroup(state.highlightRule);
-    const locate = normalizeBackendGroup(state.locateRule);
-    if (filter) actions.push({ type: "filter", ...filter });
-    if (highlight) actions.push({ type: "highlight", ...highlight, contrast: state.highlightContrast || 0.72 });
-    if (locate) actions.push({ type: "locate", ...locate });
-    return actions;
+  function setCatalogStatus(message, level = "ok") {
+    const target = document.getElementById("agentCatalogStatus");
+    if (!target) return;
+    target.textContent = message;
+    target.classList.toggle("error", level === "error");
   }
 
-  function normalizeBackendGroup(rule) {
-    if (!rule) return null;
-    const source = rule.source || "nodes";
-    const mode = rule.mode || "all";
-    const conditions = Array.isArray(rule.conditions) && rule.conditions.length
-      ? rule.conditions
-      : [{ field: rule.field, op: rule.op, value: rule.value }];
-    const clean = conditions
-      .filter(item => item && item.field)
-      .map(item => ({
-        field: item.field,
-        op: normalizeOp(item.op),
-        value: item.value == null ? "" : item.value
-      }));
-    if (!clean.length) return null;
-    return { source, mode, conditions: clean };
-  }
-
-  function normalizeOp(op) {
-    const value = String(op || "contains");
-    if (value === "notEmpty") return "not_empty";
-    if (value === "notContains") return "not_contains";
-    if (value === "startsWith") return "startswith";
-    if (value === "endsWith") return "endswith";
-    return value;
+  function activateBackendVersion(versionId) {
+    adapter.versionId = versionId;
   }
 
   function refreshAdapterPanels() {
@@ -363,9 +507,9 @@
     return payload.data;
   }
 
-  function setBackendMessage(message) {
+  function setBackendMessage(message, level = "ok") {
     if (el.uploadMessage && typeof setMessage === "function") {
-      setMessage(el.uploadMessage, message, "ok");
+      setMessage(el.uploadMessage, message, level);
     }
   }
 
@@ -382,6 +526,14 @@
   function escapeAttrLocal(value) {
     return escapeHtmlLocal(value).replace(/`/g, "&#96;");
   }
+
+  window.topoBackendAdapter = {
+    getVersionId: () => adapter.versionId,
+    isLoading: () => Boolean(adapter.loadingVersionId),
+    loadVersionById: loadBackendVersionById,
+    refreshCatalogs: () => syncBackendCatalogs(true),
+    refreshPanels: refreshAdapterPanels
+  };
 
   boot();
 })();

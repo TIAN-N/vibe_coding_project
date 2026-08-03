@@ -1,10 +1,15 @@
 __pycache__/
 *.py[cod]
+.venv-mcp/
+frontend/tests/*.png
+backend/data/*-e2e.db
+backend/data/*-e2e.db-journal
 backend/data/topo_visual.db
+backend/data/*.bak
+backend/data/*.tmp
 backend/data/versions/*/
 backend/data/style_templates/*/
 backend/data/metric_templates/*/
 !backend/data/versions/.gitkeep
 !backend/data/style_templates/.gitkeep
 !backend/data/metric_templates/.gitkeep
-

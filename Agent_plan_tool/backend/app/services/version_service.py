@@ -3,6 +3,7 @@
 #  Copyright (c) Huawei Technologies Co., Ltd. 2025-2026. All rights reserved.
 
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,26 @@ from app.db.database import fetch_all, fetch_one, get_connection
 
 def now_timestamp() -> str:
     """生成版本时间戳."""
-    return datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    return datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")[:-3]
+
+
+def sanitize_version_name(version_name: Optional[str]) -> str:
+    """生成适用于 Windows 文件夹名称的版本名.
+
+    Args:
+        version_name: 用户输入的版本名称.
+
+    Returns:
+        清理非法字符并限制长度后的版本名称.
+    """
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(version_name or "").strip())
+    cleaned = re.sub(r"\s+", " ", cleaned).rstrip(". ")
+    return (cleaned or "未命名版本")[:80]
+
+
+def build_version_folder_name(parse_timestamp: str, version_name: str) -> str:
+    """按时间戳和版本名生成版本文件夹名称."""
+    return f"{parse_timestamp}_{sanitize_version_name(version_name)}"
 
 
 def create_version(
@@ -27,7 +47,8 @@ def create_version(
     """创建数据版本并持久化三张表."""
     parse_timestamp = now_timestamp()
     version_id = parse_timestamp.replace("-", "")
-    folder_name = parse_timestamp
+    display_name = str(version_name or parse_timestamp).strip() or parse_timestamp
+    folder_name = build_version_folder_name(parse_timestamp, display_name)
     version_folder = settings.version_root / folder_name
     version_folder.mkdir(parents=True, exist_ok=True)
 
@@ -39,21 +60,6 @@ def create_version(
             saved_names[key] = target.name
 
     summary = build_summary(device_rows, link_rows, ring_chain_rows)
-    snapshot_path = version_folder / "parsed_snapshot.json"
-    snapshot_path.write_text(
-        json.dumps(
-            {
-                "devices": device_rows,
-                "links": link_rows,
-                "ringChains": ring_chain_rows,
-                "summary": summary,
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
     with get_connection() as conn:
         conn.execute(
             """
@@ -64,14 +70,14 @@ def create_version(
             """,
             (
                 version_id,
-                version_name or parse_timestamp,
+                display_name,
                 parse_timestamp,
                 folder_name,
                 saved_names["device"],
                 saved_names["link"],
                 saved_names["ring_chain"],
                 json.dumps(summary, ensure_ascii=False),
-                datetime.now().isoformat(timespec="seconds"),
+                datetime.now().isoformat(timespec="milliseconds"),
             ),
         )
         insert_device_rows(conn, version_id, device_rows)
@@ -80,7 +86,7 @@ def create_version(
 
     return {
         "version_id": version_id,
-        "version_name": version_name or parse_timestamp,
+        "version_name": display_name,
         "parse_timestamp": parse_timestamp,
         "folder_name": folder_name,
         "summary": summary,
@@ -225,4 +231,3 @@ def get_version(version_id: str) -> Optional[Dict[str, Any]]:
     if row:
         row["summary"] = json.loads(row.pop("summary_json"))
     return row
-
