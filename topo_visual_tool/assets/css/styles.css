@@ -703,11 +703,7 @@ input[type="file"] {
   inset: 0;
 }
 #map {
-  background:
-    linear-gradient(0deg, rgba(190, 205, 216, .22) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(190, 205, 216, .22) 1px, transparent 1px),
-    #eef3f7;
-  background-size: 32px 32px;
+  background: #f3f7fa;
 }
 #logicCanvas {
   background: #ffffff;
@@ -715,7 +711,10 @@ input[type="file"] {
   user-select: none;
 }
 #logicCanvas:active { cursor: grabbing; }
-#map.light-basemap .leaflet-tile-pane { display: none; }
+#map.light-basemap .leaflet-tile-pane,
+.compare-map.light-basemap .leaflet-tile-pane {
+  display: none;
+}
 .colocated-marker-wrap {
   background: transparent;
   border: 0;
@@ -1125,11 +1124,7 @@ input[type="file"] {
 .compare-map {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(0deg, rgba(190, 205, 216, .22) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(190, 205, 216, .22) 1px, transparent 1px),
-    #eef3f7;
-  background-size: 32px 32px;
+  background: #f3f7fa;
 }
 .compare-drawer {
   position: absolute;
