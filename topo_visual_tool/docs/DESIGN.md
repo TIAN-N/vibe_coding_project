@@ -227,6 +227,34 @@ The JavaScript Kamada-Kawai implementation follows the NetworkX layout idea with
 
 Ring/chain seed placement is component based. Rows that share `Belong_agg` or `Uplink_pair` are placed in the same layout cell: the primary ring receives a minimum visual radius, extra chain rows are placed inside or near the ring, and secondary rings are nested with smaller radius. This keeps one ASG pair plus its access ring and in-ring chains readable as one business component.
 
+### 2.8.2 Ring/Chain Component Logic Layout
+
+For hundred-node ring/chain topologies, the layout treats ring/chain groups as first-class components instead of letting all devices compete in one global force model.
+
+- Ring/chain rows are grouped by `Belong_agg`, then `Uplink_pair`, then `Root1***Root2`, then `Name`.
+- Each group receives an independent component bounding box sized by path count and member count.
+- Shared roots such as an ASG pair are pinned near the top of the component, so many access rings can visually hang from the same aggregation pair without averaging the ASG coordinates across every ring.
+- Each `Category=Ring` path is placed in its own internal cell as a compact ellipse according to `Member_path` order.
+- Each `Category=Link` path is placed as a small chain lane inside the same component.
+- Devices connected to a component but not listed in a ring/chain path are placed along the component edge as peripheral nodes.
+- Component layout bypasses the later node-level Kamada-Kawai/spring optimization to avoid collapsing clear ring shapes back into a mixed force-directed cluster.
+- Node labels in component layout can use per-node label direction metadata. Ring labels are pushed outward from the ring center, chain labels alternate above and below the chain lane, and ASG root labels are placed outside the root anchors.
+
+The previous browser-side Kamada-Kawai and spring layouts remain the fallback when no ring/chain paths exist.
+
+### 2.8.3 真实化 300 节点接入网布局样例
+
+`logic_component_300_*` 测试数据从单一 ASG 对压力测试调整为更贴近运营商城域接入网的验证样例。
+
+- 样例包含 North、East、South、West 4 个城域汇聚片区。
+- 每个片区包含一对双归属 ASG，城域核心包含 4 台 PE，并形成核心互联。
+- 每对 ASG 下挂 7 个接入环，每环成员数量从 6 到 12 个 CSG 不等，总计 28 个接入环。
+- 链路表保留 PE-ASG 上联、ASG 互联、接入环段、相邻环保护链路、跨汇聚保护链路和 FTTx 支线链路。
+- 环链表只保留 28 条接入环记录。保护链路和跨汇聚链路作为普通链路表记录存在，避免它们额外生成布局组件并覆盖本地汇聚组件的坐标。
+- 网元表新增 `Site Type`，用于区分 Core POP、Aggregation Hub、Mobile Backhaul、Business Access 和 FTTx Spur。
+
+针对该样例，组件化布局的节点重叠消解补充了“近似垂直贴近节点”的确定性横向分离逻辑，避免不同环上的椭圆右侧节点落在同一 X 坐标时只发生纵向推开。
+
 ### 2.9 批量网元/链路查询过滤
 
 页面新增自适应批量查询框，支持用户从 Word、Excel、CSV 或其他三方软件复制内容后直接粘贴：
@@ -262,10 +290,11 @@ Ring/chain seed placement is component based. Rows that share `Belong_agg` or `U
 大数据规模下，GIS 放大或连续拖动时可能同时触发在线地图瓦片请求和大量业务图层重绘。如果瓦片服务响应慢、浏览器请求被限流，或本地网络不稳定，Leaflet 可能短时间显示灰色色块。为降低该问题影响，本轮增加以下策略：
 
 - 地图缩放和拖动过程中不立即重绘网元/链路，改为 `moveend` / `zoomend` 后防抖刷新，避免瓦片加载期间反复清空和重建业务图层。
-- 在线瓦片使用 `updateWhenIdle`、`updateWhenZooming=false` 和更大的 `keepBuffer`，减少缩放过程中的无效瓦片请求。
-- 连续瓦片加载失败达到阈值后，自动切换为本地浅色简洁底图，保留 GIS 坐标投影、网元和链路绘制能力，避免灰块长期影响业务拓扑判读。
+- 在线瓦片使用 `updateWhenIdle=true`、`updateWhenZooming=false`、`updateInterval=280` 和更大的 `keepBuffer`，减少拖拽/缩放过程中的无效瓦片请求，并尽量保留旧瓦片缓冲。
+- 主拓扑和对比页 GIS 地图统一监听 `tileloadstart`、`tileload`、`tileabort`、`load` 和 `tileerror`。首屏或拖拽后瓦片长时间未完成加载时，主动切换为本地浅色简洁底图。
+- 连续瓦片加载失败达到较低阈值后，自动切换为本地浅色简洁底图，保留 GIS 坐标投影、网元和链路绘制能力，避免灰块长期影响业务拓扑判读。
 - GIS 业务对象渲染上限进一步收敛，超大数据场景优先保证交互响应，再通过定位、过滤和批量查询查看局部拓扑。
-- 地图容器提供浅色背景兜底，即使在线瓦片尚未加载完成，也不会出现突兀灰底。
+- 地图容器提供纯浅色背景兜底，不再使用可见网格背景；即使在线瓦片尚未加载完成，也不会出现零散灰色网格瓦片。
 
 该方案不改变用户上传数据格式，也不引入后端服务；在线地图可用时继续显示底图，在线地图不可用或失败较多时自动退化为简洁底图。
 
@@ -395,7 +424,8 @@ Logic Topo 在白色 SVG 画布上展示逻辑关系，布局依据链路表自�
 
 搜索框根据网元名称提供联想匹配。点击定位后：
 
-- 如果在 GIS Topo，地图定位到网元经纬度。
+- 如果在 GIS Topo，单个网元命中时地图使用高缩放级别强聚焦到该网元经纬度；多个网元命中时继续按有效坐标范围 `fitBounds`。
+- 如果在 Logic Topo，单个网元命中时使用最高交互缩放级别居中目标节点；多个网元命中时按命中节点布局包围盒适配。
 - 如果在 Logic Topo，画布平移到网元所在位置。
 - 目标网元会被临时选中并显示详情。
 

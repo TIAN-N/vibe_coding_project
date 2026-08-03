@@ -29,9 +29,14 @@ const PERF = {
   largeNodeCount: 5000,
   largeLinkCount: 8000
 };
-const MAP_TILE_ERROR_LIMIT = 24;
+const MAP_TILE_ERROR_LIMIT = 8;
 const MAP_TILE_ERROR_WINDOW_MS = 15000;
+const MAP_TILE_SLOW_FALLBACK_MS = 2600;
 const MAP_RENDER_DEBOUNCE_MS = 180;
+const LOCATE_SINGLE_GIS_ZOOM = 18;
+const LOCATE_SINGLE_LOGIC_ZOOM = 3;
+const LOCATE_MULTI_GIS_MAX_ZOOM = 14;
+const LOCATE_MULTI_LOGIC_MAX_ZOOM = 2.2;
 const SEARCH_HISTORY_KEY = "topo_visual_tool_search_history_v1";
 const CONDITION_HISTORY_KEY = "topo_visual_tool_condition_history_v1";
 const STYLE_TEMPLATE_SCHEMA = "topo_visual_tool_style_template";
@@ -521,6 +526,8 @@ const state = {
   tileLayer: null,
   tileErrorCount: 0,
   tileErrorTimer: null,
+  tileSlowTimer: null,
+  tileLoadPending: 0,
   mapRenderTimer: null,
   mapMoving: false,
   lightBasemap: false,
@@ -535,6 +542,11 @@ const state = {
       versionId: "",
       map: null,
       tileLayer: null,
+      tileErrorCount: 0,
+      tileErrorTimer: null,
+      tileSlowTimer: null,
+      tileLoadPending: 0,
+      lightBasemap: false,
       layers: [],
       selectedName: "",
       selectedLinkKey: "",
@@ -555,6 +567,11 @@ const state = {
       versionId: "",
       map: null,
       tileLayer: null,
+      tileErrorCount: 0,
+      tileErrorTimer: null,
+      tileSlowTimer: null,
+      tileLoadPending: 0,
+      lightBasemap: false,
       layers: [],
       selectedName: "",
       selectedLinkKey: "",
@@ -647,46 +664,97 @@ function initMap() {
 function installOnlineTileLayer() {
   if (!state.map || !window.L) return;
 
-  state.tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  state.tileLayer = createOnlineTileLayer(state.map);
+  bindTileLayerHealth(state.tileLayer, state, el.map, () => {
+    el.viewMessage.textContent = state.lang === "en"
+      ? "Online map tiles are slow or unstable. Switched to the light local basemap."
+      : "在线地图瓦片加载较慢或不稳定，已切换为本地浅色简洁底图。";
+    scheduleMapRender(0);
+  });
+}
+
+function createOnlineTileLayer(map) {
+  return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 20,
     maxNativeZoom: 19,
     opacity: 1,
     attribution: "&copy; OpenStreetMap",
-    updateWhenIdle: false,
-    updateWhenZooming: true,
-    keepBuffer: 4,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
+    updateInterval: 280,
+    keepBuffer: 8,
     detectRetina: true,
     crossOrigin: true
-  }).addTo(state.map);
-  state.tileLayer.on("tileerror", onTileError);
+  }).addTo(map);
 }
 
-function onTileError() {
-  state.tileErrorCount += 1;
-  window.clearTimeout(state.tileErrorTimer);
-  state.tileErrorTimer = window.setTimeout(() => {
-    state.tileErrorCount = 0;
+function bindTileLayerHealth(tileLayer, target, container, onFallback) {
+  if (!tileLayer || !target || !container) return;
+
+  tileLayer.on("tileloadstart", () => {
+    target.tileLoadPending = (target.tileLoadPending || 0) + 1;
+    container.classList.add("tile-loading");
+    scheduleTileSlowFallback(target, container, onFallback);
+  });
+  tileLayer.on("tileload tileabort", () => {
+    target.tileLoadPending = Math.max(0, (target.tileLoadPending || 0) - 1);
+    if (!target.tileLoadPending) clearTileLoadingState(target, container);
+  });
+  tileLayer.on("load", () => {
+    target.tileLoadPending = 0;
+    clearTileLoadingState(target, container);
+  });
+  tileLayer.on("tileerror", () => {
+    target.tileLoadPending = Math.max(0, (target.tileLoadPending || 0) - 1);
+    onTileError(target, container, onFallback);
+  });
+}
+
+function scheduleTileSlowFallback(target, container, onFallback) {
+  if (target.tileSlowTimer || target.lightBasemap) return;
+  target.tileSlowTimer = window.setTimeout(() => {
+    target.tileSlowTimer = null;
+    if ((target.tileLoadPending || 0) > 0) enableLightBasemap(target, container, onFallback);
+  }, MAP_TILE_SLOW_FALLBACK_MS);
+}
+
+function clearTileLoadingState(target, container) {
+  window.clearTimeout(target.tileSlowTimer);
+  target.tileSlowTimer = null;
+  if (container) container.classList.remove("tile-loading");
+}
+
+function onTileError(target, container, onFallback) {
+  target.tileErrorCount = (target.tileErrorCount || 0) + 1;
+  window.clearTimeout(target.tileErrorTimer);
+  target.tileErrorTimer = window.setTimeout(() => {
+    target.tileErrorCount = 0;
   }, MAP_TILE_ERROR_WINDOW_MS);
 
-  if (state.tileErrorCount >= MAP_TILE_ERROR_LIMIT) {
-    enableLightBasemap();
+  if (target.tileErrorCount >= MAP_TILE_ERROR_LIMIT) {
+    enableLightBasemap(target, container, onFallback);
   }
 }
 
-function enableLightBasemap() {
-  if (!state.map || state.lightBasemap) return;
+function enableLightBasemap(target = state, container = el.map, onFallback = null) {
+  if (!target || target.lightBasemap) return;
 
-  state.lightBasemap = true;
-  if (state.tileLayer) {
-    state.tileLayer.off("tileerror", onTileError);
-    state.tileLayer.remove();
-    state.tileLayer = null;
+  target.lightBasemap = true;
+  target.tileLoadPending = 0;
+  clearTileLoadingState(target, container);
+  window.clearTimeout(target.tileErrorTimer);
+  target.tileErrorTimer = null;
+  if (target.tileLayer) {
+    target.tileLayer.off("tileloadstart");
+    target.tileLayer.off("tileload");
+    target.tileLayer.off("tileabort");
+    target.tileLayer.off("load");
+    target.tileLayer.off("tileerror");
+    target.tileLayer.remove();
+    target.tileLayer = null;
   }
-  el.map.classList.add("light-basemap");
-  el.viewMessage.textContent = state.lang === "en"
-    ? "Online map tiles are unstable. Switched to the light local basemap."
-    : "在线地图瓦片不稳定，已切换为本地浅色简洁底图。";
-  scheduleMapRender(0);
+  if (container) container.classList.add("light-basemap");
+  if (typeof onFallback === "function") onFallback();
 }
 
 function scheduleMapRender(delay = MAP_RENDER_DEBOUNCE_MS) {
@@ -909,14 +977,16 @@ function initCompareMap(side, containerId) {
     renderer: L.canvas({ padding: 0.75 })
   }).setView([13.7563, 100.5018], 10);
   L.control.zoom({ position: "bottomright" }).addTo(ctx.map);
-  ctx.tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 20,
-    maxNativeZoom: 19,
-    attribution: "&copy; OpenStreetMap",
-    keepBuffer: 4,
-    detectRetina: true,
-    crossOrigin: true
-  }).addTo(ctx.map);
+  ctx.tileLayer = createOnlineTileLayer(ctx.map);
+  bindTileLayerHealth(ctx.tileLayer, ctx, document.getElementById(containerId), () => {
+    setCompareMessage(
+      state.lang === "en"
+        ? "Online map tiles are slow or unstable. Switched to the light local basemap."
+        : "在线地图瓦片加载较慢或不稳定，已切换为本地浅色简洁底图。",
+      "warning"
+    );
+    renderCompare();
+  });
   ctx.map.on("moveend zoomend", () => syncCompareView(side));
   ctx.map.on("click", () => {
     ctx.selectedName = "";
@@ -4912,10 +4982,11 @@ function renderLogic(data = getVisibleData()) {
     const radius = logicNodeRadius(degreeMap.get(name) || 0, node);
     const cls = `logic-node ${selected ? "selected" : ""} ${neighbor ? "neighbor" : ""} ${located ? "located" : ""} ${highlighted ? "highlight" : ""} ${hasHighlight && !highlighted && !selected && !neighbor && !located ? "dim" : ""}`;
     const shapeMarkup = svgShapeMarkup(nodeShape(node), radius, nodeFill(node));
+    const label = logicNodeLabelAttrs(position, radius);
     const style = "";
     return `<g class="${cls}"${style} data-node="${escapeAttr(name)}" transform="translate(${position.x},${position.y})">
       ${shapeMarkup}
-      <text x="${radius + 7}" y="4">${escapeHtml(name)}</text>
+      <text x="${label.x}" y="${label.y}" text-anchor="${label.anchor}">${escapeHtml(name)}</text>
     </g>`;
   }).join("");
 
@@ -5020,13 +5091,16 @@ function computeLogicLayout(resetTransform, layoutNodes = state.nodes, layoutLin
   state.logic.layoutWidth = width;
   state.logic.layoutHeight = layoutHeight;
 
-  computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks, paths);
-  if (layoutNodes.length <= 300) {
-    applyKamadaKawaiLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
-  } else {
-    applySpringLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+  const componentLayoutApplied = computeRingChainComponentLayout(positions, width, layoutHeight, layoutNodes, layoutLinks, paths);
+  if (!componentLayoutApplied) {
+    computeStructureAwareInitialLayout(positions, width, layoutHeight, layoutNodes, layoutLinks, paths);
+    if (layoutNodes.length <= 300) {
+      applyKamadaKawaiLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+    } else {
+      applySpringLayout(positions, width, layoutHeight, layoutNodes, layoutLinks);
+    }
   }
-  resolveLogicNodeOverlap(positions, width, layoutHeight, layoutNodes, layoutLinks, 8);
+  resolveLogicNodeOverlap(positions, width, layoutHeight, layoutNodes, layoutLinks, componentLayoutApplied ? 10 : 8);
   normalizeLogicPositions(positions, width, layoutHeight, layoutNodes);
 
   state.logic.positions = positions;
@@ -5049,6 +5123,282 @@ function getLogicLayoutSize(viewportWidth, viewportHeight, layoutNodes, paths, r
     width: Math.ceil(width),
     height: Math.ceil(height)
   };
+}
+
+function computeRingChainComponentLayout(positions, width, height, layoutNodes, layoutLinks, paths) {
+  if (!paths || !paths.length) return false;
+
+  const components = buildRingChainLayoutComponents(layoutNodes, layoutLinks, paths);
+  if (!components.length) return false;
+  layoutRingChainComponentBoxes(components, width, height);
+  components.forEach(component => {
+    if (component.paths.length) layoutRingChainComponentInternals(positions, component);
+    else layoutPlainComponentInternals(positions, component);
+  });
+
+  layoutNodes.forEach((node, index) => {
+    const name = node["NE Name"];
+    if (positions.has(name)) return;
+    const angle = (Math.PI * 2 * index) / Math.max(1, layoutNodes.length);
+    const r = Math.min(width, height) * 0.38;
+    positions.set(name, {
+      x: width / 2 + Math.cos(angle) * r,
+      y: height / 2 + Math.sin(angle) * r
+    });
+  });
+  return true;
+}
+
+function buildRingChainLayoutComponents(layoutNodes, layoutLinks, paths) {
+  const nodeByName = new Map(layoutNodes.map(node => [node["NE Name"], node]));
+  const componentsById = new Map();
+  const nodeToComponent = new Map();
+  const componentForPath = path => {
+    const id = path.group || path.name;
+    if (!componentsById.has(id)) {
+      componentsById.set(id, {
+        id,
+        paths: [],
+        nodes: new Map(),
+        peripheral: new Map(),
+        links: [],
+        box: null
+      });
+    }
+    return componentsById.get(id);
+  };
+
+  paths.forEach(path => {
+    const component = componentForPath(path);
+    component.paths.push(path);
+    path.members.forEach(name => {
+      const node = nodeByName.get(name);
+      if (!node) return;
+      component.nodes.set(name, node);
+      if (!nodeToComponent.has(name)) nodeToComponent.set(name, component.id);
+    });
+  });
+
+  layoutLinks.forEach(link => {
+    const src = link["Src NE Name"];
+    const sink = link["Sink NE Name"];
+    const srcComponent = nodeToComponent.get(src);
+    const sinkComponent = nodeToComponent.get(sink);
+    if (srcComponent && sinkComponent && srcComponent === sinkComponent) {
+      componentsById.get(srcComponent).links.push(link);
+      return;
+    }
+    if (srcComponent && !sinkComponent && nodeByName.has(sink)) {
+      const component = componentsById.get(srcComponent);
+      component.peripheral.set(sink, nodeByName.get(sink));
+      nodeToComponent.set(sink, srcComponent);
+    }
+    if (sinkComponent && !srcComponent && nodeByName.has(src)) {
+      const component = componentsById.get(sinkComponent);
+      component.peripheral.set(src, nodeByName.get(src));
+      nodeToComponent.set(src, sinkComponent);
+    }
+  });
+
+  const assigned = new Set(nodeToComponent.keys());
+  const remaining = layoutNodes.filter(node => !assigned.has(node["NE Name"]));
+  logicConnectedComponents(remaining, layoutLinks).forEach((nodes, index) => {
+    const id = `unassigned-${index}`;
+    const component = {
+      id,
+      paths: [],
+      nodes: new Map(nodes.map(node => [node["NE Name"], node])),
+      peripheral: new Map(),
+      links: [],
+      box: null
+    };
+    componentsById.set(id, component);
+  });
+
+  return [...componentsById.values()]
+    .map(component => {
+      component.peripheral.forEach((node, name) => component.nodes.set(name, node));
+      component.metrics = ringChainComponentMetrics(component);
+      return component;
+    })
+    .sort((a, b) => b.metrics.area - a.metrics.area || String(a.id).localeCompare(String(b.id)));
+}
+
+function ringChainComponentMetrics(component) {
+  const pathCount = Math.max(1, component.paths.length);
+  const nodeCount = Math.max(1, component.nodes.size);
+  const columns = Math.max(1, Math.ceil(Math.sqrt(pathCount * 1.35)));
+  const rows = Math.max(1, Math.ceil(pathCount / columns));
+  const width = component.paths.length
+    ? Math.max(640, columns * 360 + 180, Math.sqrt(nodeCount) * 135)
+    : Math.max(260, Math.sqrt(nodeCount) * 120);
+  const height = component.paths.length
+    ? Math.max(440, rows * 240 + 220, Math.sqrt(nodeCount) * 105)
+    : Math.max(210, Math.sqrt(nodeCount) * 90);
+  return { pathCount, nodeCount, columns, rows, width, height, area: width * height };
+}
+
+function layoutRingChainComponentBoxes(components, width, height) {
+  const gap = 120;
+  const columns = Math.max(1, Math.ceil(Math.sqrt(components.length * (width / Math.max(1, height)))));
+  const columnWidths = Array(columns).fill(0);
+  components.forEach((component, index) => {
+    const column = index % columns;
+    columnWidths[column] = Math.max(columnWidths[column], component.metrics.width);
+  });
+  const xOffsets = [];
+  let cursorX = 90;
+  columnWidths.forEach(columnWidth => {
+    xOffsets.push(cursorX);
+    cursorX += columnWidth + gap;
+  });
+  const rowHeights = [];
+  components.forEach((component, index) => {
+    const row = Math.floor(index / columns);
+    rowHeights[row] = Math.max(rowHeights[row] || 0, component.metrics.height);
+  });
+  const yOffsets = [];
+  let cursorY = 90;
+  rowHeights.forEach(rowHeight => {
+    yOffsets.push(cursorY);
+    cursorY += rowHeight + gap;
+  });
+  components.forEach((component, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    component.box = {
+      x: xOffsets[column],
+      y: yOffsets[row],
+      width: component.metrics.width,
+      height: component.metrics.height
+    };
+  });
+}
+
+function layoutRingChainComponentInternals(positions, component) {
+  const box = component.box;
+  const paths = component.paths.slice().sort((a, b) => {
+    if (a.category !== b.category) return a.category === "ring" ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name));
+  });
+  const roots = inferComponentRoots(component);
+  const rootY = box.y + Math.min(88, box.height * 0.18);
+  if (roots.length >= 2) {
+    positions.set(roots[0], { x: box.x + box.width * 0.18, y: rootY, labelDx: -16, labelDy: -12, labelAnchor: "end" });
+    positions.set(roots[1], { x: box.x + box.width * 0.82, y: rootY, labelDx: 16, labelDy: -12, labelAnchor: "start" });
+  } else if (roots.length === 1) {
+    positions.set(roots[0], { x: box.x + box.width * 0.5, y: rootY, labelDx: 0, labelDy: -18, labelAnchor: "middle" });
+  }
+
+  const gridTop = box.y + Math.min(150, box.height * 0.28);
+  const gridHeight = Math.max(160, box.height - (gridTop - box.y) - 42);
+  const columns = component.metrics.columns;
+  const rows = component.metrics.rows;
+  const cellW = box.width / columns;
+  const cellH = gridHeight / rows;
+
+  paths.forEach((path, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const cell = {
+      x: box.x + column * cellW + 22,
+      y: gridTop + row * cellH + 18,
+      width: Math.max(120, cellW - 44),
+      height: Math.max(92, cellH - 36)
+    };
+    if (path.category === "ring") layoutAccessRingPath(positions, path, cell, roots);
+    else layoutAccessChainPath(positions, path, cell, roots);
+  });
+
+  const placed = new Set(positions.keys());
+  const extra = [...component.nodes.values()].filter(node => !placed.has(node["NE Name"]));
+  layoutPeripheralNodes(positions, extra, box);
+}
+
+function inferComponentRoots(component) {
+  const counts = new Map();
+  component.paths.forEach(path => {
+    [path.root1, path.root2].forEach(name => {
+      if (!name || !component.nodes.has(name)) return;
+      counts.set(name, (counts.get(name) || 0) + 1);
+    });
+  });
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))
+    .slice(0, 2)
+    .map(([name]) => name);
+}
+
+function layoutAccessRingPath(positions, path, cell, roots) {
+  const rootSet = new Set(roots);
+  const members = path.members.filter(name => !rootSet.has(name));
+  const cx = cell.x + cell.width / 2;
+  const cy = cell.y + cell.height / 2;
+  const rx = Math.max(52, cell.width * 0.38);
+  const ry = Math.max(34, cell.height * 0.34);
+  members.forEach((name, index) => {
+    if (positions.has(name)) return;
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(1, members.length);
+    positions.set(name, {
+      x: cx + Math.cos(angle) * rx,
+      y: cy + Math.sin(angle) * ry,
+      labelDx: Math.cos(angle) * 18,
+      labelDy: Math.sin(angle) * 14 + 4,
+      labelAnchor: Math.cos(angle) < -0.25 ? "end" : Math.cos(angle) > 0.25 ? "start" : "middle"
+    });
+  });
+}
+
+function layoutAccessChainPath(positions, path, cell, roots) {
+  const rootSet = new Set(roots);
+  const members = path.members.filter(name => !rootSet.has(name));
+  members.forEach((name, index) => {
+    if (positions.has(name)) return;
+    const ratio = members.length <= 1 ? 0.5 : index / (members.length - 1);
+    const wave = Math.sin(ratio * Math.PI) * cell.height * 0.18;
+    positions.set(name, {
+      x: cell.x + cell.width * (0.12 + ratio * 0.76),
+      y: cell.y + cell.height * 0.5 + (index % 2 ? -wave : wave),
+      labelDx: 0,
+      labelDy: index % 2 ? -18 : 22,
+      labelAnchor: "middle"
+    });
+  });
+}
+
+function layoutPeripheralNodes(positions, nodes, box) {
+  if (!nodes.length) return;
+  const columns = Math.max(1, Math.floor(box.width / 150));
+  nodes
+    .slice()
+    .sort((a, b) => String(a["NE Name"]).localeCompare(String(b["NE Name"])))
+    .forEach((node, index) => {
+      const col = index % columns;
+      const row = Math.floor(index / columns);
+      positions.set(node["NE Name"], {
+        x: box.x + 60 + col * 145 + (row % 2) * 18,
+        y: box.y + box.height - 34 - row * 28,
+        labelDx: 16,
+        labelDy: 4,
+        labelAnchor: "start"
+      });
+    });
+}
+
+function layoutPlainComponentInternals(positions, component) {
+  const nodes = [...component.nodes.values()].sort((a, b) => String(a["NE Name"]).localeCompare(String(b["NE Name"])));
+  const box = component.box;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const rx = Math.max(70, box.width * 0.36);
+  const ry = Math.max(48, box.height * 0.32);
+  nodes.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(1, nodes.length);
+    positions.set(node["NE Name"], {
+      x: cx + Math.cos(angle) * rx,
+      y: cy + Math.sin(angle) * ry
+    });
+  });
 }
 
 function computeStructureAwareInitialLayout(positions, width, height, layoutNodes, layoutLinks, precomputedPaths = null) {
@@ -5092,6 +5442,8 @@ function logicRingChainPaths(nodeSet) {
     paths.push({
       category,
       name: row.Name || row.Label || rowKey,
+      root1: row.Root1 || uniqueMembers[0] || "",
+      root2: row.Root2 || uniqueMembers[uniqueMembers.length - 1] || "",
       group: row.Belong_agg || row.Uplink_pair || row.Root1 && row.Root2 && `${row.Root1}***${row.Root2}` || rowKey,
       members: uniqueMembers
     });
@@ -5333,7 +5685,7 @@ function hasPositionsFor(nodes) {
 }
 
 function logicLayoutKey(nodes, links, isolatedCount) {
-  const layoutVersion = "logic-v2-ring-chain-first";
+  const layoutVersion = "logic-v3-ring-chain-component";
   const names = nodes.map(node => node["NE Name"]).sort().join("|");
   const edgeKeys = links.map(link => linkKey(link)).sort().join("|");
   const nodeSet = new Set(nodes.map(node => node["NE Name"]));
@@ -5694,6 +6046,9 @@ function resolveLogicNodeOverlap(positions, width, height, layoutNodes, layoutLi
         const b = positions.get(bName);
         let dx = b.x - a.x;
         let dy = b.y - a.y;
+        if (Math.abs(dx) < 2 && Math.abs(dy) < 48) {
+          dx = ((i + j) % 2 ? 1 : -1) * 12;
+        }
         let dist = Math.sqrt(dx * dx + dy * dy);
         if (!dist) {
           dx = ((i % 3) - 1) || 1;
@@ -5748,6 +6103,14 @@ function normalizeLogicPositions(positions, width, height, layoutNodes) {
 
 function logicLabelWidth(name) {
   return clamp(String(name || "").length * 6.5 + 42, 90, 190);
+}
+
+function logicNodeLabelAttrs(position, radius) {
+  return {
+    x: Number.isFinite(position.labelDx) ? position.labelDx : radius + 7,
+    y: Number.isFinite(position.labelDy) ? position.labelDy : 4,
+    anchor: position.labelAnchor || "start"
+  };
 }
 
 function locateRuleFromQuickInput() {
@@ -5866,9 +6229,9 @@ function focusLocatedNodes(nodes) {
     if (!points.length) {
       setMessage(el.locateMessage, t("locateMissingCoord", { devices: nodes.length }), "warning");
     } else if (points.length === 1) {
-      state.map.setView(points[0], 14);
+      state.map.setView(points[0], LOCATE_SINGLE_GIS_ZOOM);
     } else {
-      state.map.fitBounds(points, { padding: [70, 70], maxZoom: 14 });
+      state.map.fitBounds(points, { padding: [70, 70], maxZoom: LOCATE_MULTI_GIS_MAX_ZOOM });
     }
     return;
   }
@@ -5916,11 +6279,12 @@ function focusLogicOnNodes(nodes) {
     renderLogic(data);
   }
   if (names.length === 1) {
+    state.logic.zoom = LOCATE_SINGLE_LOGIC_ZOOM;
     centerLogicOn(names[0]);
     return;
   }
 
-  fitLogicToBounds(nodes, 80, 2.2);
+  fitLogicToBounds(nodes, 80, LOCATE_MULTI_LOGIC_MAX_ZOOM);
 }
 
 
