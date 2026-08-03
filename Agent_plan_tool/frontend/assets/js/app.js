@@ -31,7 +31,8 @@ const PERF = {
 };
 const MAP_TILE_ERROR_LIMIT = 8;
 const MAP_TILE_ERROR_WINDOW_MS = 15000;
-const MAP_TILE_SLOW_FALLBACK_MS = 2600;
+const MAP_TILE_SLOW_NOTICE_MS = 10000;
+const MAP_TILE_RECOVERY_MS = 12000;
 const MAP_RENDER_DEBOUNCE_MS = 180;
 const SEARCH_HISTORY_KEY = "topo_visual_tool_search_history_v1";
 const CONDITION_HISTORY_KEY = "topo_visual_tool_condition_history_v1";
@@ -535,10 +536,11 @@ const state = {
   tileErrorCount: 0,
   tileErrorTimer: null,
   tileSlowTimer: null,
+  tileRecoveryTimer: null,
   tileLoadPending: 0,
   mapRenderTimer: null,
   mapMoving: false,
-  lightBasemap: false,
+  tileDegraded: false,
   mapLayers: { nodes: [], links: [], routes: [] },
   routeHitEntries: [],
   compare: {
@@ -553,8 +555,9 @@ const state = {
       tileErrorCount: 0,
       tileErrorTimer: null,
       tileSlowTimer: null,
+      tileRecoveryTimer: null,
       tileLoadPending: 0,
-      lightBasemap: false,
+      tileDegraded: false,
       layers: [],
       selectedName: "",
       selectedLinkKey: "",
@@ -578,8 +581,9 @@ const state = {
       tileErrorCount: 0,
       tileErrorTimer: null,
       tileSlowTimer: null,
+      tileRecoveryTimer: null,
       tileLoadPending: 0,
-      lightBasemap: false,
+      tileDegraded: false,
       layers: [],
       selectedName: "",
       selectedLinkKey: "",
@@ -631,14 +635,6 @@ document.querySelectorAll("[id]").forEach(item => {
   el[item.id] = item;
 });
 
-window.topoLeafletLoaded = () => {
-  if (state.map || !window.L) return;
-  initMap();
-  if (state.compare.active) initCompareMaps();
-  renderTopologies();
-  if (state.nodes.length) fitCurrentView();
-};
-
 init();
 
 function init() {
@@ -653,6 +649,7 @@ function init() {
 }
 
 function initMap() {
+  if (state.map) return;
   if (!window.L) {
     el.viewMessage.textContent = t("leafletMissing");
     return;
@@ -677,14 +674,23 @@ function initMap() {
 
 function installOnlineTileLayer() {
   if (!state.map || !window.L) return;
-
-  state.tileLayer = createOnlineTileLayer(state.map);
-  bindTileLayerHealth(state.tileLayer, state, el.map, () => {
+  ensureOnlineTileLayer(state, state.map, el.map, () => {
     el.viewMessage.textContent = state.lang === "en"
-      ? "Online map tiles are slow or unstable. Switched to the light local basemap."
-      : "在线地图瓦片加载较慢或不稳定，已切换为本地浅色简洁底图。";
-    scheduleMapRender(0);
+      ? "Online map tiles are unstable. The current layer is retained and will retry automatically."
+      : "在线地图瓦片暂不稳定，已保留当前底图并将在后台自动重试。";
   });
+}
+
+function ensureOnlineTileLayer(target, map, container, onDegraded) {
+  if (!target || !map || !window.L) return null;
+  if (container) container.classList.remove("light-basemap");
+  if (target.tileLayer) {
+    if (!map.hasLayer(target.tileLayer)) target.tileLayer.addTo(map);
+    return target.tileLayer;
+  }
+  target.tileLayer = createOnlineTileLayer(map);
+  bindTileLayerHealth(target.tileLayer, target, container, onDegraded);
+  return target.tileLayer;
 }
 
 function createOnlineTileLayer(map) {
@@ -696,8 +702,8 @@ function createOnlineTileLayer(map) {
     updateWhenIdle: true,
     updateWhenZooming: false,
     updateInterval: 280,
-    keepBuffer: 8,
-    detectRetina: true,
+    keepBuffer: 4,
+    detectRetina: false,
     crossOrigin: true
   }).addTo(map);
 }
@@ -708,15 +714,20 @@ function bindTileLayerHealth(tileLayer, target, container, onFallback) {
   tileLayer.on("tileloadstart", () => {
     target.tileLoadPending = (target.tileLoadPending || 0) + 1;
     container.classList.add("tile-loading");
-    scheduleTileSlowFallback(target, container, onFallback);
+    scheduleTileSlowNotice(target, container, onFallback);
   });
-  tileLayer.on("tileload tileabort", () => {
+  tileLayer.on("tileload", () => {
+    target.tileLoadPending = Math.max(0, (target.tileLoadPending || 0) - 1);
+    target.tileErrorCount = Math.max(0, (target.tileErrorCount || 0) - 1);
+    if (!target.tileLoadPending) markTileLayerHealthy(target, container);
+  });
+  tileLayer.on("tileabort", () => {
     target.tileLoadPending = Math.max(0, (target.tileLoadPending || 0) - 1);
     if (!target.tileLoadPending) clearTileLoadingState(target, container);
   });
   tileLayer.on("load", () => {
     target.tileLoadPending = 0;
-    clearTileLoadingState(target, container);
+    markTileLayerHealthy(target, container);
   });
   tileLayer.on("tileerror", () => {
     target.tileLoadPending = Math.max(0, (target.tileLoadPending || 0) - 1);
@@ -724,12 +735,12 @@ function bindTileLayerHealth(tileLayer, target, container, onFallback) {
   });
 }
 
-function scheduleTileSlowFallback(target, container, onFallback) {
-  if (target.tileSlowTimer || target.lightBasemap) return;
+function scheduleTileSlowNotice(target, container, onFallback) {
+  if (target.tileSlowTimer || target.tileDegraded) return;
   target.tileSlowTimer = window.setTimeout(() => {
     target.tileSlowTimer = null;
-    if ((target.tileLoadPending || 0) > 0) enableLightBasemap(target, container, onFallback);
-  }, MAP_TILE_SLOW_FALLBACK_MS);
+    if ((target.tileLoadPending || 0) > 0) markTileLayerDegraded(target, container, onFallback);
+  }, MAP_TILE_SLOW_NOTICE_MS);
 }
 
 function clearTileLoadingState(target, container) {
@@ -746,29 +757,53 @@ function onTileError(target, container, onFallback) {
   }, MAP_TILE_ERROR_WINDOW_MS);
 
   if (target.tileErrorCount >= MAP_TILE_ERROR_LIMIT) {
-    enableLightBasemap(target, container, onFallback);
+    markTileLayerDegraded(target, container, onFallback);
   }
 }
 
-function enableLightBasemap(target = state, container = el.map, onFallback = null) {
-  if (!target || target.lightBasemap) return;
+function markTileLayerDegraded(target = state, container = el.map, onFallback = null) {
+  if (!target || target.tileDegraded) return;
 
-  target.lightBasemap = true;
-  target.tileLoadPending = 0;
+  target.tileDegraded = true;
   clearTileLoadingState(target, container);
   window.clearTimeout(target.tileErrorTimer);
   target.tileErrorTimer = null;
-  if (target.tileLayer) {
-    target.tileLayer.off("tileloadstart");
-    target.tileLayer.off("tileload");
-    target.tileLayer.off("tileabort");
-    target.tileLayer.off("load");
-    target.tileLayer.off("tileerror");
-    target.tileLayer.remove();
-    target.tileLayer = null;
+  if (container) {
+    container.classList.remove("light-basemap");
+    container.classList.add("tile-degraded");
   }
-  if (container) container.classList.add("light-basemap");
   if (typeof onFallback === "function") onFallback();
+  scheduleTileRecovery(target, container);
+}
+
+function markTileLayerHealthy(target, container) {
+  if (!target) return;
+  target.tileDegraded = false;
+  target.tileErrorCount = 0;
+  clearTileLoadingState(target, container);
+  window.clearTimeout(target.tileErrorTimer);
+  window.clearTimeout(target.tileRecoveryTimer);
+  target.tileErrorTimer = null;
+  target.tileRecoveryTimer = null;
+  if (container) {
+    container.classList.remove("light-basemap");
+    container.classList.remove("tile-degraded");
+  }
+}
+
+function scheduleTileRecovery(target, container) {
+  if (!target || target.tileRecoveryTimer) return;
+  target.tileRecoveryTimer = window.setTimeout(() => {
+    target.tileRecoveryTimer = null;
+    target.tileDegraded = false;
+    target.tileErrorCount = 0;
+    target.tileLoadPending = 0;
+    if (container) {
+      container.classList.remove("light-basemap");
+      container.classList.remove("tile-degraded");
+    }
+    if (target.tileLayer) target.tileLayer.redraw();
+  }, MAP_TILE_RECOVERY_MS);
 }
 
 function scheduleMapRender(delay = MAP_RENDER_DEBOUNCE_MS) {
@@ -995,15 +1030,13 @@ function initCompareMap(side, containerId) {
     renderer: L.canvas({ padding: 0.75 })
   }).setView([13.7563, 100.5018], 10);
   L.control.zoom({ position: "bottomright" }).addTo(ctx.map);
-  ctx.tileLayer = createOnlineTileLayer(ctx.map);
-  bindTileLayerHealth(ctx.tileLayer, ctx, document.getElementById(containerId), () => {
+  ensureOnlineTileLayer(ctx, ctx.map, document.getElementById(containerId), () => {
     setCompareMessage(
       state.lang === "en"
-        ? "Online map tiles are slow or unstable. Switched to the light local basemap."
-        : "在线地图瓦片加载较慢或不稳定，已切换为本地浅色简洁底图。",
+        ? "Online map tiles are unstable. The current layer is retained and will retry automatically."
+        : "在线地图瓦片暂不稳定，已保留当前底图并将在后台自动重试。",
       "warning"
     );
-    renderCompare();
   });
   ctx.map.on("moveend zoomend", () => syncCompareView(side));
   ctx.map.on("click", () => {
@@ -3296,7 +3329,9 @@ function switchPage(page) {
   }
 }
 
-function switchTopoView(view) {
+function switchTopoView(view, options = {}) {
+  const shouldRender = options.render !== false;
+  const shouldPublish = options.publish !== false;
   state.view = view;
   el.gisBtn.classList.toggle("active", view === "gis");
   el.logicBtn.classList.toggle("active", view === "logic");
@@ -3304,11 +3339,29 @@ function switchTopoView(view) {
   el.logicCanvas.classList.toggle("hidden", view !== "logic");
   el.details.classList.remove("show");
 
-  if (view === "gis" && state.map) {
-    setTimeout(() => state.map.invalidateSize(), 50);
+  if (view === "gis") {
+    prepareTopoViewForRender().then(() => {
+      if (shouldRender && state.view === "gis") renderTopologies();
+    });
+  } else if (shouldRender) {
+    renderTopologies();
   }
-  renderTopologies();
-  publishUiIntent("manual-view-switch");
+  if (shouldPublish) publishUiIntent("manual-view-switch");
+}
+
+function prepareTopoViewForRender() {
+  if (state.view !== "gis" || !state.map) return Promise.resolve();
+  installOnlineTileLayer();
+  return new Promise(resolve => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (state.map && state.view === "gis") {
+          state.map.invalidateSize({ animate: false, pan: false });
+        }
+        resolve();
+      });
+    });
+  });
 }
 
 async function loadUploadedFiles() {
@@ -4585,6 +4638,7 @@ function renderTopologies() {
 function renderMap(data) {
   if (!state.map) return;
   if (state.mapMoving) return;
+  installOnlineTileLayer();
 
   state.mapLayers.nodes.forEach(layer => layer.remove());
   state.mapLayers.links.forEach(layer => layer.remove());
@@ -6261,7 +6315,10 @@ function locateNode() {
   applyLocateRule(rule, true);
 }
 
-function applyLocateRule(rule, syncQuickInput = false) {
+function applyLocateRule(rule, syncQuickInput = false, options = {}) {
+  const shouldFocus = options.focus !== false;
+  const shouldRender = options.render !== false;
+  const shouldPublish = options.publish !== false;
   const group = normalizeRuleGroup(rule);
   if (!group) {
     setMessage(el.locateMessage, t("locateNoCondition"), "error");
@@ -6279,8 +6336,8 @@ function applyLocateRule(rule, syncQuickInput = false) {
 
   if (!result.names.size) {
     setMessage(el.locateMessage, t("locateMissing"), "error");
-    renderTopologies();
-    publishUiIntent("manual-locate");
+    if (shouldRender) renderTopologies();
+    if (shouldPublish) publishUiIntent("manual-locate");
     return;
   }
 
@@ -6296,7 +6353,7 @@ function applyLocateRule(rule, syncQuickInput = false) {
     setMessage(el.locateMessage, t("locatedBatch", { devices: result.names.size, links: result.linkKeys.size }), "ok");
   }
 
-  focusLocatedNodes(result.nodes);
+  if (shouldFocus) focusLocatedNodes(result.nodes);
 
   if (result.names.size === 1 && state.view === "gis" && firstNode && hasCoord(firstNode)) {
     const visibleNodes = getVisibleData().nodes;
@@ -6306,8 +6363,8 @@ function applyLocateRule(rule, syncQuickInput = false) {
   } else if (result.names.size === 1 && firstNode) {
     showDetails(firstNode);
   }
-  renderTopologies();
-  publishUiIntent("manual-locate");
+  if (shouldRender) renderTopologies();
+  if (shouldPublish) publishUiIntent("manual-locate");
 }
 
 function locateMatchesForRule(rule) {

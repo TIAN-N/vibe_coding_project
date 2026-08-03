@@ -2,6 +2,8 @@ __pycache__/
 *.py[cod]
 .venv-mcp/
 frontend/tests/*.png
+frontend/tests/output/
+backend/tests/output/
 backend/data/*-e2e.db
 backend/data/*-e2e.db-journal
 backend/data/topo_visual.db

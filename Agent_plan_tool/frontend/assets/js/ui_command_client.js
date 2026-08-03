@@ -122,10 +122,18 @@
     const revision = Number(snapshot && snapshot.revision);
     if (!Number.isFinite(revision) || revision <= controller.revision) return;
     const desired = snapshot.state || {};
+    const previousVersionId = currentVersionId();
+    const previousView = state.view;
+    const previousLocateKey = stateRuleKey(frontendGroup(state.locateRule));
+    const nextView = desired.view === "logic" ? "logic" : "gis";
+    const locateRule = frontendGroup(desired.locate);
     window.clearTimeout(controller.publishTimer);
     controller.applyingRemote = true;
     try {
       await ensureVersion(desired.version_id);
+      const versionChanged = previousVersionId !== currentVersionId();
+      const viewChanged = previousView !== nextView;
+      const locateChanged = previousLocateKey !== stateRuleKey(locateRule);
       state.filterRule = frontendGroup(desired.filter);
       state.highlightRule = frontendGroup(desired.highlight);
       state.highlightContrast = Number.isFinite(Number(desired.highlight_contrast))
@@ -148,11 +156,16 @@
       invalidateLogicLayout();
       updateRuleSummaries();
       switchPage("topo");
-      switchTopoView(desired.view === "logic" ? "logic" : "gis");
-      const locateRule = frontendGroup(desired.locate);
-      if (locateRule) applyLocateRule(locateRule);
-      else renderTopologies();
-      if (window.topoBackendAdapter) window.topoBackendAdapter.refreshPanels();
+      switchTopoView(nextView, { render: false, publish: false });
+      if (locateRule) {
+        applyLocateRule(locateRule, false, {
+          focus: versionChanged || viewChanged || locateChanged,
+          render: false,
+          publish: false
+        });
+      }
+      await prepareTopoViewForRender();
+      renderTopologies();
       const renderResult = await waitForRender();
       controller.revision = revision;
       if (snapshot.command_id) await acknowledge(snapshot.command_id, revision, true, renderResult);
@@ -288,6 +301,10 @@
   function frontendOp(op) {
     return ({ not_contains: "notContains", startswith: "starts", endswith: "ends", not_empty: "notEmpty" })[op]
       || op || "contains";
+  }
+
+  function stateRuleKey(rule) {
+    return rule ? JSON.stringify(rule) : "";
   }
 
   function syncQuickControls(kind, group) {
