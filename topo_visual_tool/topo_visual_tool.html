@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>拓扑可视工具</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-  <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"></noscript>
+  <link rel="preload" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"></noscript>
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
@@ -370,7 +370,8 @@
     </div>
   </div>
 
-  <script async src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onload="window.topoLeafletLoaded && window.topoLeafletLoaded()"></script>
+  <script defer src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js" onload="window.topoGisDepsLoaded && window.topoGisDepsLoaded()"></script>
+  <script defer src="https://unpkg.com/deck.gl@9.0.35/dist.min.js" onload="window.topoGisDepsLoaded && window.topoGisDepsLoaded()"></script>
   <script src="assets/js/app.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </body>

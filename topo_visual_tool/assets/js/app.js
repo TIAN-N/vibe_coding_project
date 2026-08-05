@@ -12,6 +12,15 @@ const DEFAULT_ROLE_STYLES = {
 };
 const DEFAULT_LINK_STYLE = { color: "#2f6f86", lineStyle: "solid", width: "medium" };
 const DEFAULT_ROUTE_PATH_STYLE = { visible: true, color: "#7a5c2e", lineStyle: "dash", width: "thick", opacity: 0.86 };
+const GIS_ENGINE = "webgl";
+const GIS_DEFAULT_CENTER = [100.5018, 13.7563];
+const GIS_DEFAULT_ZOOM = 10;
+const GIS_BASEMAP_CONFIG = {
+  tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+  tileSize: 256,
+  maxZoom: 20,
+  attribution: "&copy; OpenStreetMap"
+};
 const DEFAULT_HIGHLIGHT_CONTRAST = 0.72;
 const ROUTE_WKT_FIELD = "Route WKT";
 const ROUTE_HIT_TOLERANCE_PX = 8;
@@ -617,13 +626,46 @@ document.querySelectorAll("[id]").forEach(item => {
   el[item.id] = item;
 });
 
-window.topoLeafletLoaded = () => {
-  if (state.map || !window.L) return;
+window.topoGisDepsLoaded = () => {
+  if (state.map || !webGisReady()) return;
   initMap();
   if (state.compare.active) initCompareMaps();
   renderTopologies();
   if (state.nodes.length) fitCurrentView();
 };
+
+function webGisReady() {
+  return Boolean(window.maplibregl && window.deck);
+}
+
+function gisMissingMessage() {
+  return state.lang === "en"
+    ? "WebGL GIS libraries are not loaded. GIS map is unavailable; Logic Topo is still available."
+    : "WebGL GIS 渲染库未加载，GIS 地图不可用；可使用 Logic Topo。";
+}
+
+function createGisStyle() {
+  return {
+    version: 8,
+    sources: {
+      osm: {
+        type: "raster",
+        tiles: GIS_BASEMAP_CONFIG.tiles,
+        tileSize: GIS_BASEMAP_CONFIG.tileSize,
+        attribution: GIS_BASEMAP_CONFIG.attribution
+      }
+    },
+    layers: [
+      {
+        id: "osm",
+        type: "raster",
+        source: "osm",
+        minzoom: 0,
+        maxzoom: GIS_BASEMAP_CONFIG.maxZoom
+      }
+    ]
+  };
+}
 
 init();
 

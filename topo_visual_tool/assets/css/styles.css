@@ -711,8 +711,8 @@ input[type="file"] {
   user-select: none;
 }
 #logicCanvas:active { cursor: grabbing; }
-#map.light-basemap .leaflet-tile-pane,
-.compare-map.light-basemap .leaflet-tile-pane {
+#map .maplibregl-ctrl-bottom-left,
+.compare-map .maplibregl-ctrl-bottom-left {
   display: none;
 }
 .colocated-marker-wrap {
