@@ -550,6 +550,7 @@ const state = {
     left: {
       side: "left",
       versionId: "",
+      gisRenderer: null,
       map: null,
       tileLayer: null,
       tileErrorCount: 0,
@@ -575,6 +576,7 @@ const state = {
     right: {
       side: "right",
       versionId: "",
+      gisRenderer: null,
       map: null,
       tileLayer: null,
       tileErrorCount: 0,
@@ -706,6 +708,10 @@ class WebGisRenderer {
 
   renderMain(data) {
     this.setLayers(buildMainGisLayers(data, this.options));
+  }
+
+  renderCompare(side, version, data, diff, ctx) {
+    this.setLayers(buildCompareGisLayers(side, version, data, diff, ctx, this.options));
   }
 
   focusNodes(nodes, options = {}) {
@@ -971,6 +977,165 @@ function buildMainGisClusterRow(group, data, degreeMap, hasHighlight, dimNodeOpa
     radius,
     fillColor: hexToRgba(style.color, dim ? 0.32 : 0.96),
     borderColor: hexToRgba(selected ? "#245a6e" : neighbor ? "#2f6f86" : "#ffffff", dim ? dimNodeOpacity : 1)
+  };
+}
+
+function buildCompareGisLayers(side, version, data, diff, ctx, callbacks = {}) {
+  const highlight = compareHighlightInfo(version, data, ctx);
+  const degreeMap = getNodeDegreeMap(data.links);
+  const routeRows = ctx.showRoutes ? buildCompareGisRouteRows(side, data, diff, ctx, highlight) : [];
+  const linkRows = buildCompareGisLinkRows(side, data, diff, ctx, highlight);
+  const nodeRows = data.nodes.filter(hasCoord).map(node => buildCompareGisNodeRow(side, node, diff, ctx, degreeMap, highlight));
+  const circleRows = nodeRows.filter(row => row.shape === "circle");
+  const shapedRows = nodeRows.filter(row => row.shape !== "circle");
+  const layers = [];
+
+  if (routeRows.length) {
+    layers.push(new deck.PathLayer({
+      id: `${side}-compare-routes`,
+      data: routeRows,
+      pickable: true,
+      getPath: row => row.path,
+      getColor: row => row.color,
+      getWidth: row => row.width,
+      widthUnits: "pixels",
+      rounded: true,
+      onClick: info => callbacks.onRouteClick && info.object && callbacks.onRouteClick(info.object.link)
+    }));
+  }
+  layers.push(new deck.LineLayer({
+    id: `${side}-compare-link-halo`,
+    data: linkRows,
+    getSourcePosition: row => row.source,
+    getTargetPosition: row => row.target,
+    getColor: row => row.haloColor,
+    getWidth: row => row.haloWidth,
+    widthUnits: "pixels",
+    pickable: false
+  }));
+  layers.push(new deck.LineLayer({
+    id: `${side}-compare-links`,
+    data: linkRows,
+    pickable: true,
+    getSourcePosition: row => row.source,
+    getTargetPosition: row => row.target,
+    getColor: row => row.color,
+    getWidth: row => row.width,
+    widthUnits: "pixels",
+    onClick: info => callbacks.onLinkClick && info.object && callbacks.onLinkClick(info.object.link)
+  }));
+  layers.push(new deck.ScatterplotLayer({
+    id: `${side}-compare-node-halo`,
+    data: nodeRows,
+    getPosition: row => row.position,
+    getRadius: row => row.radius + 2,
+    radiusUnits: "pixels",
+    stroked: true,
+    filled: true,
+    getFillColor: row => row.haloFill,
+    getLineColor: row => row.borderColor,
+    getLineWidth: row => row.borderWidth,
+    lineWidthUnits: "pixels",
+    pickable: false
+  }));
+  if (circleRows.length) {
+    layers.push(new deck.ScatterplotLayer({
+      id: `${side}-compare-circle-nodes`,
+      data: circleRows,
+      pickable: true,
+      getPosition: row => row.position,
+      getRadius: row => row.radius,
+      radiusUnits: "pixels",
+      stroked: false,
+      filled: true,
+      getFillColor: row => row.fillColor,
+      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+    }));
+  }
+  if (shapedRows.length) {
+    layers.push(new deck.TextLayer({
+      id: `${side}-compare-shaped-nodes`,
+      data: shapedRows,
+      pickable: true,
+      getPosition: row => row.position,
+      getText: row => row.symbol,
+      getSize: row => row.radius * 2.35,
+      sizeUnits: "pixels",
+      getColor: row => row.fillColor,
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
+      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+    }));
+  }
+  return layers;
+}
+
+function buildCompareGisRouteRows(side, data, diff, ctx, highlight) {
+  return data.links.map(link => {
+    const points = routePointsForLink(link);
+    if (points.length <= 1) return null;
+    const key = linkKey(link);
+    const status = compareLinkStatus(side, link, diff, ctx.showDiff);
+    const sideStyle = compareResolveLinkStyle(ctx, link);
+    const selected = ctx.selectedLinkKey === key;
+    const highlighted = highlight.linkKeys.has(key);
+    const dim = highlight.active && !highlighted;
+    return {
+      kind: "route",
+      link,
+      path: points.map(point => [Number(point[1]), Number(point[0])]),
+      color: hexToRgba(selected ? "#245a6e" : status.override ? status.color : sideStyle.color, dim ? 0.16 : 0.42),
+      width: Math.max(sideStyle.weight, compareLinkWeight(ctx.width), 3.2)
+    };
+  }).filter(Boolean);
+}
+
+function buildCompareGisLinkRows(side, data, diff, ctx, highlight) {
+  return data.links.map(link => {
+    const src = data.nodeByName.get(link["Src NE Name"]);
+    const sink = data.nodeByName.get(link["Sink NE Name"]);
+    if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return null;
+    const key = linkKey(link);
+    const status = compareLinkStatus(side, link, diff, ctx.showDiff);
+    const sideStyle = compareResolveLinkStyle(ctx, link);
+    const selected = ctx.selectedLinkKey === key;
+    const highlighted = highlight.linkKeys.has(key);
+    const dim = highlight.active && !highlighted;
+    const width = selected || highlighted
+      ? Math.max(sideStyle.weight, compareLinkWeight(ctx.width)) + 1.4
+      : Math.max(sideStyle.weight, compareLinkWeight(ctx.width));
+    return {
+      kind: "link",
+      link,
+      source: [Number(src.Longitude), Number(src.Latitude)],
+      target: [Number(sink.Longitude), Number(sink.Latitude)],
+      color: hexToRgba(selected ? "#245a6e" : status.override ? status.color : sideStyle.color, dim ? 0.18 : status.opacity),
+      width,
+      haloColor: hexToRgba("#ffffff", dim ? 0.12 : 0.72),
+      haloWidth: width + 2.6
+    };
+  }).filter(Boolean);
+}
+
+function buildCompareGisNodeRow(side, node, diff, ctx, degreeMap, highlight) {
+  const name = node["NE Name"];
+  const selected = ctx.selectedName === name;
+  const highlighted = highlight.names.has(name);
+  const dim = highlight.active && !highlighted;
+  const status = compareNodeStatus(side, node, diff, ctx.showDiff);
+  const radius = compareMapNodeRadius(ctx, degreeMap.get(name) || 0, node, selected);
+  const shape = compareNodeShape(ctx, node);
+  return {
+    kind: "node",
+    node,
+    shape,
+    symbol: shapeSymbol(shape),
+    position: [Number(node.Longitude), Number(node.Latitude)],
+    radius: highlighted ? radius + 2 : radius,
+    fillColor: hexToRgba(compareNodeFill(ctx, node), dim ? 0.24 : 0.94),
+    haloFill: hexToRgba("#ffffff", dim ? 0.16 : 0.78),
+    borderColor: hexToRgba(selected ? "#245a6e" : highlighted ? "#c99a3d" : status.color, dim ? 0.34 : 1),
+    borderWidth: selected ? 3.4 : highlighted ? Math.max(status.weight, 3.4) : status.weight
   };
 }
 
@@ -1362,8 +1527,8 @@ function renderCompareVersionControls() {
 }
 
 function initCompareMaps() {
-  if (!window.L) {
-    setCompareMessage(t("leafletMissing"), "error");
+  if (!webGisReady()) {
+    setCompareMessage(gisMissingMessage(), "error");
     return;
   }
   initCompareMap("left", "compareMapLeft");
@@ -1374,30 +1539,30 @@ function initCompareMap(side, containerId) {
   const ctx = state.compare[side];
   if (ctx.map) return;
 
-  ctx.map = L.map(containerId, {
-    zoomControl: false,
-    preferCanvas: true,
-    renderer: L.canvas({ padding: 0.75 })
-  }).setView([13.7563, 100.5018], 10);
-  L.control.zoom({ position: "bottomright" }).addTo(ctx.map);
-  ctx.tileLayer = createOnlineTileLayer(ctx.map);
-  bindTileLayerHealth(ctx.tileLayer, ctx, document.getElementById(containerId), () => {
-    setCompareMessage(
-      state.lang === "en"
-        ? "Online map tiles are slow or unstable. Switched to the light local basemap."
-        : "在线地图瓦片加载较慢或不稳定，已切换为本地浅色简洁底图。",
-      "warning"
-    );
-    renderCompare();
+  const renderer = new WebGisRenderer(containerId, {
+    onReady: () => renderCompare(),
+    onNodeClick: node => {
+      ctx.selectedName = node["NE Name"];
+      ctx.selectedLinkKey = "";
+      showCompareNodeDetails(side, node);
+      renderCompare();
+    },
+    onLinkClick: link => {
+      ctx.selectedLinkKey = linkKey(link);
+      ctx.selectedName = "";
+      showCompareLinkDetails(side, link);
+      renderCompare();
+    },
+    onRouteClick: link => {
+      ctx.selectedLinkKey = linkKey(link);
+      ctx.selectedName = "";
+      showCompareLinkDetails(side, link);
+      renderCompare();
+    }
   });
-  ctx.map.on("moveend zoomend", () => syncCompareView(side));
-  ctx.map.on("click", () => {
-    ctx.selectedName = "";
-    ctx.selectedLinkKey = "";
-    const details = side === "left" ? el.compareLeftDetails : el.compareRightDetails;
-    details.classList.remove("show");
-    renderCompare();
-  });
+  ctx.gisRenderer = renderer;
+  ctx.map = renderer.map;
+  ctx.map.on("moveend", () => syncCompareView(side));
 }
 
 function syncCompareView(sourceSide) {
@@ -1407,14 +1572,20 @@ function syncCompareView(sourceSide) {
   if (!source.map || !target.map) return;
 
   state.compare.syncingView = true;
-  target.map.setView(source.map.getCenter(), source.map.getZoom(), { animate: false });
-  state.compare.syncingView = false;
+  const view = source.gisRenderer ? source.gisRenderer.getView() : null;
+  if (view && target.gisRenderer) target.gisRenderer.jumpToView(view.center, view.zoom);
+  else if (window.L) target.map.setView(source.map.getCenter(), source.map.getZoom(), { animate: false });
+  window.setTimeout(() => {
+    state.compare.syncingView = false;
+  }, 0);
 }
 
 function invalidateCompareMaps() {
   ["left", "right"].forEach(side => {
     const map = state.compare[side].map;
-    if (map) map.invalidateSize();
+    const renderer = state.compare[side].gisRenderer;
+    if (renderer) renderer.resize();
+    else if (map && map.invalidateSize) map.invalidateSize();
   });
 }
 
@@ -1735,6 +1906,15 @@ function renderCompareSide(side, version, data, diff) {
   if (!map) return;
   ensureCompareStyleState(ctx);
 
+  if (ctx.gisRenderer) {
+    el[`${prefix}Title`].textContent = version.name || t("untitledVersion");
+    el[`${prefix}Stats`].textContent = `${data.nodes.length}/${version.nodes.length} ${t("devices")} / ${data.links.length}/${version.links.length} ${t("links")}`;
+    renderCompareLegend(prefix);
+    renderCompareStyleControls(side, version);
+    ctx.gisRenderer.renderCompare(side, version, data, diff, ctx);
+    return;
+  }
+
   ctx.layers.forEach(layer => layer.remove());
   ctx.layers = [];
   el[`${prefix}Title`].textContent = version.name || t("untitledVersion");
@@ -1890,6 +2070,10 @@ function compareResolveNodeStyle(ctx, node) {
 
 function compareNodeFill(ctx, node) {
   return compareResolveNodeStyle(ctx, node).color;
+}
+
+function compareNodeShape(ctx, node) {
+  return compareResolveNodeStyle(ctx, node).shape;
 }
 
 function compareMapNodeRadius(ctx, degree, node, active) {
@@ -2337,6 +2521,10 @@ function fitCompareMaps() {
     const version = versionById(ctx.versionId);
     if (!ctx.map || !version) return;
     const data = getCompareVisibleData(version, state.compare.criteria, ctx);
+    if (ctx.gisRenderer) {
+      ctx.gisRenderer.fitData(data, { padding: [36, 36], singleZoom: 13, maxZoom: LOCATE_MULTI_GIS_MAX_ZOOM });
+      return;
+    }
     const points = data.nodes.filter(hasCoord).map(node => [Number(node.Latitude), Number(node.Longitude)]);
     if (points.length === 1) ctx.map.setView(points[0], 13);
     else if (points.length > 1) ctx.map.fitBounds(points, { padding: [36, 36] });
@@ -2352,6 +2540,10 @@ function focusCompareRuleResult(side, kind) {
   const nodes = kind === "filter"
     ? data.nodes
     : compareNodesForHighlight(version, data, ctx);
+  if (ctx.gisRenderer) {
+    ctx.gisRenderer.focusNodes(nodes, { padding: [58, 58], maxZoom: LOCATE_MULTI_GIS_MAX_ZOOM });
+    return;
+  }
   focusLeafletMapOnNodes(ctx.map, nodes, { padding: [58, 58], maxZoom: 14 });
 }
 
