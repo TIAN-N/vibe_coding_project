@@ -531,6 +531,7 @@ const state = {
     brokenLinks: 0,
     missingRingChainMembers: 0
   },
+  gisRenderer: null,
   map: null,
   tileLayer: null,
   tileErrorCount: 0,
@@ -667,6 +668,356 @@ function createGisStyle() {
   };
 }
 
+class WebGisRenderer {
+  constructor(containerId, options = {}) {
+    this.containerId = containerId;
+    this.options = options;
+    this.overlay = null;
+    this.ready = false;
+    this.pendingLayers = [];
+    this.map = new maplibregl.Map({
+      container: containerId,
+      style: createGisStyle(),
+      center: GIS_DEFAULT_CENTER,
+      zoom: GIS_DEFAULT_ZOOM,
+      maxZoom: GIS_BASEMAP_CONFIG.maxZoom,
+      attributionControl: false
+    });
+    this.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    this.map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    this.overlay = new deck.MapboxOverlay({
+      interleaved: false,
+      layers: [],
+      getTooltip: info => this.tooltip(info)
+    });
+    this.map.addControl(this.overlay);
+    this.map.on("load", () => {
+      this.ready = true;
+      this.setLayers(this.pendingLayers);
+      if (typeof this.options.onReady === "function") this.options.onReady();
+    });
+  }
+
+  setLayers(layers) {
+    this.pendingLayers = layers || [];
+    if (!this.overlay || !this.ready) return;
+    this.overlay.setProps({ layers: this.pendingLayers });
+  }
+
+  renderMain(data) {
+    this.setLayers(buildMainGisLayers(data, this.options));
+  }
+
+  focusNodes(nodes, options = {}) {
+    return focusMapLibreOnNodes(this.map, nodes, options);
+  }
+
+  fitData(data, options = {}) {
+    return this.focusNodes(data.nodes || [], options);
+  }
+
+  resize() {
+    if (this.map) this.map.resize();
+  }
+
+  jumpToView(center, zoom) {
+    if (!this.map || !center) return;
+    this.map.jumpTo({ center, zoom });
+  }
+
+  getView() {
+    if (!this.map) return null;
+    const center = this.map.getCenter();
+    return { center: [center.lng, center.lat], zoom: this.map.getZoom() };
+  }
+
+  tooltip(info) {
+    const object = info && info.object;
+    if (!object) return null;
+    if (object.kind === "node") return object.node["NE Name"] || t("unnamedDevice");
+    if (object.kind === "link" || object.kind === "route") return `${object.link["Src NE Name"]} -> ${object.link["Sink NE Name"]}`;
+    if (object.kind === "cluster") return colocatedTooltip(object.group).replace(/<br>/g, "\n").replace(/<[^>]*>/g, "");
+    return null;
+  }
+}
+
+function buildMainGisLayers(data, callbacks = {}) {
+  const hasHighlight = data.highlightNames.size > 0;
+  const dimLinkBaseOpacity = highlightDimOpacity("linkBase");
+  const dimLinkLineOpacity = highlightDimOpacity("linkLine");
+  const dimNodeFillOpacity = highlightDimOpacity("nodeFill");
+  const dimNodeOpacity = highlightDimOpacity("node");
+  const degreeMap = getNodeDegreeMap(data.links);
+  const linkRows = buildMainGisLinkRows(data, hasHighlight, dimLinkBaseOpacity, dimLinkLineOpacity);
+  const routeRows = state.routePathStyle.visible ? buildMainGisRouteRows(data, hasHighlight) : [];
+  const grouped = groupNodesByCoordinate(data.nodes);
+  const nodeRows = [];
+  const clusterRows = [];
+  grouped.forEach(group => {
+    if (group.nodes.length > 1) {
+      clusterRows.push(buildMainGisClusterRow(group, data, degreeMap, hasHighlight, dimNodeOpacity));
+    } else {
+      nodeRows.push(buildMainGisNodeRow(group.nodes[0], data, degreeMap, hasHighlight, dimNodeFillOpacity, dimNodeOpacity));
+    }
+  });
+  const circleRows = nodeRows.filter(row => row.shape === "circle");
+  const shapedRows = nodeRows.filter(row => row.shape !== "circle");
+
+  const layers = [];
+  if (routeRows.length) {
+    layers.push(new deck.PathLayer({
+      id: "main-gis-routes",
+      data: routeRows,
+      pickable: true,
+      getPath: row => row.path,
+      getColor: row => row.color,
+      getWidth: row => row.width,
+      widthUnits: "pixels",
+      opacity: 1,
+      rounded: true,
+      onClick: info => callbacks.onRouteClick && info.object && callbacks.onRouteClick(info.object.link)
+    }));
+  }
+  layers.push(new deck.LineLayer({
+    id: "main-gis-link-halo",
+    data: linkRows,
+    getSourcePosition: row => row.source,
+    getTargetPosition: row => row.target,
+    getColor: row => row.haloColor,
+    getWidth: row => row.haloWidth,
+    widthUnits: "pixels",
+    pickable: false
+  }));
+  layers.push(new deck.LineLayer({
+    id: "main-gis-links",
+    data: linkRows,
+    pickable: true,
+    getSourcePosition: row => row.source,
+    getTargetPosition: row => row.target,
+    getColor: row => row.color,
+    getWidth: row => row.width,
+    widthUnits: "pixels",
+    onClick: info => callbacks.onLinkClick && info.object && callbacks.onLinkClick(info.object.link)
+  }));
+  layers.push(new deck.ScatterplotLayer({
+    id: "main-gis-node-halo",
+    data: nodeRows,
+    getPosition: row => row.position,
+    getRadius: row => row.radius + 2.4,
+    radiusUnits: "pixels",
+    stroked: true,
+    filled: true,
+    getFillColor: row => row.haloFill,
+    getLineColor: row => row.borderColor,
+    getLineWidth: row => row.borderWidth,
+    lineWidthUnits: "pixels",
+    pickable: false
+  }));
+  if (circleRows.length) {
+    layers.push(new deck.ScatterplotLayer({
+      id: "main-gis-circle-nodes",
+      data: circleRows,
+      pickable: true,
+      getPosition: row => row.position,
+      getRadius: row => row.radius,
+      radiusUnits: "pixels",
+      stroked: false,
+      filled: true,
+      getFillColor: row => row.fillColor,
+      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+    }));
+  }
+  if (shapedRows.length) {
+    layers.push(new deck.TextLayer({
+      id: "main-gis-shaped-nodes",
+      data: shapedRows,
+      pickable: true,
+      getPosition: row => row.position,
+      getText: row => row.symbol,
+      getSize: row => row.radius * 2.35,
+      sizeUnits: "pixels",
+      getColor: row => row.fillColor,
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
+      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+    }));
+  }
+  if (clusterRows.length) {
+    layers.push(new deck.ScatterplotLayer({
+      id: "main-gis-clusters",
+      data: clusterRows,
+      pickable: true,
+      getPosition: row => row.position,
+      getRadius: row => row.radius,
+      radiusUnits: "pixels",
+      stroked: true,
+      filled: true,
+      getFillColor: row => row.fillColor,
+      getLineColor: row => row.borderColor,
+      getLineWidth: 3,
+      lineWidthUnits: "pixels",
+      onClick: info => callbacks.onClusterClick && info.object && callbacks.onClusterClick(info.object.group)
+    }));
+    layers.push(new deck.TextLayer({
+      id: "main-gis-cluster-labels",
+      data: clusterRows,
+      getPosition: row => row.position,
+      getText: row => String(row.count),
+      getSize: row => Math.max(12, row.radius * 0.8),
+      sizeUnits: "pixels",
+      getColor: [255, 255, 255, 255],
+      getTextAnchor: "middle",
+      getAlignmentBaseline: "center",
+      pickable: false
+    }));
+  }
+  return layers;
+}
+
+function buildMainGisLinkRows(data, hasHighlight, dimBaseOpacity, dimLineOpacity) {
+  return data.links.map(link => {
+    const src = data.nodeByName.get(link["Src NE Name"]);
+    const sink = data.nodeByName.get(link["Sink NE Name"]);
+    if (!src || !sink || !hasCoord(src) || !hasCoord(sink)) return null;
+    const key = linkKey(link);
+    const selectedLink = data.selectedLinkKeys.has(key);
+    const locatedLink = data.locatedLinkKeys.has(key);
+    const related = data.highlightLinkKeys.has(key) || selectedLink || locatedLink;
+    const userStyle = resolveLinkStyle(link);
+    const visualStyle = selectedLink
+      ? { ...userStyle, color: "#245a6e", weight: Math.max(userStyle.weight, 3.6), dashArray: "" }
+      : locatedLink
+        ? { ...userStyle, weight: Math.max(userStyle.weight + 1.4, 3.2) }
+        : userStyle;
+    return {
+      kind: "link",
+      link,
+      source: [Number(src.Longitude), Number(src.Latitude)],
+      target: [Number(sink.Longitude), Number(sink.Latitude)],
+      color: hexToRgba(visualStyle.color, hasHighlight && !related ? dimLineOpacity : 0.86),
+      width: visualStyle.weight,
+      haloColor: hexToRgba("#ffffff", hasHighlight && !related ? dimBaseOpacity : 0.82),
+      haloWidth: visualStyle.weight + 3
+    };
+  }).filter(Boolean);
+}
+
+function buildMainGisRouteRows(data, hasHighlight) {
+  const selectedKey = state.selectedRouteKey || state.selectedLinkKey;
+  const baseWidth = linkWeight(state.routePathStyle.width);
+  const routeOpacity = clamp(Number(state.routePathStyle.opacity) || DEFAULT_ROUTE_PATH_STYLE.opacity, 0.1, 1);
+  const dimRouteOpacity = routeOpacity * (1 - clamp(Number(state.highlightContrast) || DEFAULT_HIGHLIGHT_CONTRAST, 0, 1));
+  return data.links.map(link => {
+    const key = linkKey(link);
+    const points = routePointsForLink(link);
+    if (points.length <= 1) return null;
+    const related = data.highlightLinkKeys.has(key);
+    const selected = selectedKey && key === selectedKey;
+    const opacity = selected
+      ? 1
+      : hasHighlight && !related
+        ? dimRouteOpacity
+        : selectedKey
+          ? Math.max(0.08, routeOpacity * 0.28)
+          : routeOpacity;
+    return {
+      kind: "route",
+      link,
+      path: points.map(point => [Number(point[1]), Number(point[0])]),
+      color: hexToRgba(selected ? "#245a6e" : state.routePathStyle.color, opacity),
+      width: selected ? Math.max(baseWidth + 2, 5) : baseWidth
+    };
+  }).filter(Boolean);
+}
+
+function buildMainGisNodeRow(node, data, degreeMap, hasHighlight, dimFillOpacity, dimNodeOpacity) {
+  const name = node["NE Name"];
+  const selected = state.selectedName === name;
+  const neighbor = data.selectedNeighborNames.has(name);
+  const highlighted = data.highlightNames.has(name);
+  const located = data.locatedNames.has(name);
+  const active = selected || neighbor || located;
+  const dim = hasHighlight && !highlighted && !active;
+  const radius = mapNodeRadius(degreeMap.get(name) || 0, node, active);
+  return {
+    kind: "node",
+    node,
+    shape: nodeShape(node),
+    symbol: shapeSymbol(nodeShape(node)),
+    position: [Number(node.Longitude), Number(node.Latitude)],
+    radius,
+    fillColor: hexToRgba(nodeFill(node), dim ? dimFillOpacity : 0.95),
+    haloFill: hexToRgba("#ffffff", dim ? 0.2 : 0.84),
+    borderColor: hexToRgba(selected ? "#245a6e" : neighbor ? "#2f6f86" : located ? "#245a6e" : "#ffffff", dim ? dimNodeOpacity : 1),
+    borderWidth: active ? 3 : 2.4
+  };
+}
+
+function buildMainGisClusterRow(group, data, degreeMap, hasHighlight, dimNodeOpacity) {
+  const style = colocatedGroupStyle(group.nodes);
+  const selected = group.nodes.some(node => state.selectedName === node["NE Name"]) || state.selectedCoordinateKey === group.key;
+  const neighbor = group.nodes.some(node => data.selectedNeighborNames.has(node["NE Name"]));
+  const highlighted = group.nodes.some(node => data.highlightNames.has(node["NE Name"]));
+  const located = group.nodes.some(node => data.locatedNames.has(node["NE Name"]));
+  const active = selected || neighbor || located;
+  const dim = hasHighlight && !highlighted && !active;
+  const maxDegree = group.nodes.reduce((max, node) => Math.max(max, degreeMap.get(node["NE Name"]) || 0), 0);
+  const radius = clamp(12 + Math.sqrt(group.nodes.length) * 2 + Math.sqrt(maxDegree) * 0.5, 12, 22);
+  return {
+    kind: "cluster",
+    group,
+    count: group.nodes.length,
+    position: [group.lng, group.lat],
+    radius,
+    fillColor: hexToRgba(style.color, dim ? 0.32 : 0.96),
+    borderColor: hexToRgba(selected ? "#245a6e" : neighbor ? "#2f6f86" : "#ffffff", dim ? dimNodeOpacity : 1)
+  };
+}
+
+function focusMapLibreOnNodes(map, nodes, options = {}) {
+  if (!map || !Array.isArray(nodes)) return false;
+  const points = nodes.filter(hasCoord).map(node => [Number(node.Longitude), Number(node.Latitude)]);
+  if (!points.length) return false;
+  if (points.length === 1) {
+    map.easeTo({ center: points[0], zoom: options.singleZoom || LOCATE_SINGLE_GIS_ZOOM, duration: options.duration ?? 420 });
+    return true;
+  }
+  const bounds = points.reduce((box, point) => box.extend(point), new maplibregl.LngLatBounds(points[0], points[0]));
+  map.fitBounds(bounds, {
+    padding: normalizeMapPadding(options.padding || [70, 70]),
+    maxZoom: options.maxZoom || LOCATE_MULTI_GIS_MAX_ZOOM,
+    duration: options.duration ?? 420
+  });
+  return true;
+}
+
+function normalizeMapPadding(padding) {
+  if (Array.isArray(padding)) return { top: padding[0], bottom: padding[0], left: padding[1], right: padding[1] };
+  return padding;
+}
+
+function hexToRgba(color, opacity = 1) {
+  const hex = String(color || "#718096").replace("#", "").trim();
+  const safe = hex.length === 3
+    ? hex.split("").map(ch => ch + ch).join("")
+    : hex.padEnd(6, "0").slice(0, 6);
+  const value = Number.parseInt(safe, 16);
+  if (!Number.isFinite(value)) return [113, 128, 150, Math.round(clamp(opacity, 0, 1) * 255)];
+  return [
+    (value >> 16) & 255,
+    (value >> 8) & 255,
+    value & 255,
+    Math.round(clamp(opacity, 0, 1) * 255)
+  ];
+}
+
+function shapeSymbol(shape) {
+  if (shape === "square") return "■";
+  if (shape === "diamond") return "◆";
+  if (shape === "triangle") return "▲";
+  return "●";
+}
+
 init();
 
 function init() {
@@ -681,26 +1032,36 @@ function init() {
 }
 
 function initMap() {
-  if (!window.L) {
-    el.viewMessage.textContent = t("leafletMissing");
+  if (!webGisReady()) {
+    el.viewMessage.textContent = gisMissingMessage();
     return;
   }
 
-  state.map = L.map("map", {
-    zoomControl: true,
-    preferCanvas: true,
-    renderer: L.canvas({ padding: 0.75 })
-  }).setView([13.7563, 100.5018], 10);
-  installOnlineTileLayer();
-  state.map.on("movestart zoomstart", () => {
-    state.mapMoving = true;
-    clearRouteLayers();
+  const renderer = new WebGisRenderer("map", {
+    onReady: () => {
+      renderTopologies();
+      if (state.nodes.length) fitCurrentView();
+    },
+    onNodeClick: node => {
+      showDetails(node);
+      renderTopologies();
+    },
+    onClusterClick: group => {
+      showColocatedDetails(group);
+      renderTopologies();
+    },
+    onLinkClick: link => {
+      showLinkDetails(link);
+      renderTopologies();
+    },
+    onRouteClick: link => {
+      state.selectedRouteKey = linkKey(link);
+      showLinkDetails(link, { route: true });
+      renderTopologies();
+    }
   });
-  state.map.on("moveend zoomend", () => {
-    state.mapMoving = false;
-    scheduleMapRender();
-  });
-  state.map.on("click", onMapClick);
+  state.map = renderer.map;
+  state.gisRenderer = renderer;
 }
 
 function installOnlineTileLayer() {
@@ -4595,6 +4956,10 @@ function renderTopologies() {
 }
 
 function renderMap(data) {
+  if (state.gisRenderer) {
+    state.gisRenderer.renderMain(data);
+    return;
+  }
   if (!state.map) return;
   if (state.mapMoving) return;
 
@@ -6339,6 +6704,11 @@ function fitCurrentView() {
 }
 
 function fitMap() {
+  if (state.gisRenderer) {
+    const data = getVisibleData();
+    state.gisRenderer.fitData(data, { padding: [50, 50], singleZoom: 13, maxZoom: LOCATE_MULTI_GIS_MAX_ZOOM });
+    return;
+  }
   if (!state.map) return;
 
   const data = getVisibleData();
@@ -6352,11 +6722,15 @@ function fitMap() {
 }
 
 function focusMainRuleResult(kind) {
-  if (!state.map || state.view !== "gis") return;
+  if ((!state.gisRenderer && !state.map) || state.view !== "gis") return;
   const data = getVisibleData();
   const nodes = kind === "filter"
     ? data.nodes
     : mainNodesForHighlight(data);
+  if (state.gisRenderer) {
+    state.gisRenderer.focusNodes(nodes, { padding: [70, 70], maxZoom: LOCATE_MULTI_GIS_MAX_ZOOM });
+    return;
+  }
   focusLeafletMapOnNodes(state.map, nodes, { padding: [70, 70], maxZoom: 14 });
 }
 
