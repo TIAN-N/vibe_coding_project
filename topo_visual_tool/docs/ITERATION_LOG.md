@@ -1,5 +1,23 @@
 # 开发迭代日志
 
+## 2026-08-05 GIS WebGL 架构重构
+
+### 目标
+
+按照确认后的方案 C，将当前 GIS 前端从 Leaflet 图层重构为 MapLibre GL JS + deck.gl WebGL 渲染架构，降低大规模节点/链路导入、拖拽、缩放时业务图层重绘对在线瓦片底图的影响。
+
+### 实现内容
+
+- 阶段提交 `35e86ce`：引入 MapLibre GL JS、deck.gl 固定 CDN 入口，新增在线瓦片底图配置和 WebGL GIS 依赖探测。
+- 阶段提交 `bc3632a`：新增 `WebGisRenderer` 适配器，将主 GIS Topo 的网元、链路、Route WKT 路径切换为 deck.gl 图层渲染。
+- 阶段提交 `a3ff792`：将版本拓扑对比页左右 GIS 窗口切换为 WebGL 渲染，并保留视野同步、对比差异、过滤/高亮聚焦和详情点击能力。
+- 保留默认 OpenStreetMap 在线瓦片 CDN，继续展示真实道路/地名背景。
+- 保留既有过滤、高亮、复合条件、样式配置、样式导入、网元定位和版本对比数据模型。
+
+### 测试记录
+
+- 执行 `node --check topo_visual_tool/assets/js/app.js`，语法检查通过。
+
 ## 2026-07-24 Logic Topo 真实化 300 节点接入网样例
 
 ### 目标

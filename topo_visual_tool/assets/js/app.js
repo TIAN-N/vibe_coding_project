@@ -157,7 +157,7 @@ const I18N = {
     opLt: "小于",
     opEmpty: "为空",
     opNotEmpty: "非空",
-    leafletMissing: "Leaflet 未加载，GIS 地图不可用；可使用 Logic Topo。",
+    leafletMissing: "WebGL GIS 渲染库未加载，GIS 地图不可用；可使用 Logic Topo。",
     chooseBoth: "请同时选择网元表和链路表。",
     uploadDone: "上传数据解析完成。",
     uploadDoneWithRingChain: "上传数据解析完成，环链表已缓存：{rings} 个环，{chains} 条链。",
@@ -362,7 +362,7 @@ const I18N = {
     opLt: "Less than",
     opEmpty: "Empty",
     opNotEmpty: "Not empty",
-    leafletMissing: "Leaflet is not loaded. GIS map is unavailable; Logic Topo is still available.",
+    leafletMissing: "WebGL GIS libraries are not loaded. GIS map is unavailable; Logic Topo is still available.",
     chooseBoth: "Please choose both device and link tables.",
     uploadDone: "Uploaded data parsed.",
     uploadDoneWithRingChain: "Uploaded data parsed. Ring/chain table cached: {rings} rings, {chains} chains.",
@@ -1855,8 +1855,8 @@ function compareTokenNames(tokens, indexes) {
 
 function renderCompare(message = "", type = "") {
   if (!el.comparePage || !state.compare.active) return;
-  if (!window.L) {
-    setCompareMessage(t("leafletMissing"), "error");
+  if (!webGisReady()) {
+    setCompareMessage(gisMissingMessage(), "error");
     return;
   }
 

@@ -112,7 +112,8 @@ topo_visual_tool.html
 
 页面通过 CDN 加载以下浏览器库：
 
-- Leaflet：GIS 地图与地理图层渲染。
+- MapLibre GL JS：GIS 在线瓦片底图、地图缩放/拖拽和视野控制。
+- deck.gl：GIS 业务图层 WebGL 渲染，用于承载大规模网元、链路和 Route WKT 路径。
 - SheetJS：XLSX/XLS 文件解析。
 - OpenStreetMap 瓦片：GIS 在线底图；瓦片失败较多时自动退化为本地浅色简洁底图。
 

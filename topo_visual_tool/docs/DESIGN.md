@@ -1,5 +1,22 @@
 # 轻量级 Web 前端拓扑可视工具设计文档
 
+## 2026-08-05 GIS WebGL 架构重构
+
+本轮将 GIS Topo 和版本拓扑对比页从 Leaflet 矢量图层迁移到 MapLibre GL JS + deck.gl 架构：
+
+- MapLibre GL JS 负责真实道路/地名在线瓦片底图、地图缩放、拖拽、视野同步和控件。
+- deck.gl 负责网元、链路、Route WKT 路径等业务对象的 WebGL 图层渲染，减少大规模数据导入和拖拽时 DOM/SVG/Canvas 重建压力。
+- 默认底图继续使用 OpenStreetMap 在线瓦片 CDN，满足公司内网可访问时展示真实道路/地名背景的要求。
+- 主 GIS 与版本对比 GIS 共用 `WebGisRenderer` 适配器；过滤、高亮、网元定位、局部聚焦、样式规则和对比差异仍复用既有业务数据模型。
+- 对比页左右窗口保留独立地图实例，支持视野同步、差异高亮、局部范围对比、每侧样式设置抽屉以及过滤/高亮后的自动聚焦。
+- 旧 Leaflet 灰底降级思路不再作为主路径；底图持续性主要依赖 MapLibre 的瓦片管理和业务图层与底图分离。
+
+当前第一版实现边界：
+
+- GIS 节点形状在 WebGL 中使用圆点与文本符号近似呈现，Logic Topo 仍使用 SVG 精确形状。
+- 链路线型配置保留颜色和线宽优先生效；虚线/点线在 WebGL 图层中作为后续增强项。
+- 若后续公司安全要求禁止组件 CDN，可将 MapLibre GL JS、deck.gl 和样式文件固化到 `assets/vendor/`，底图瓦片仍按当前确认继续使用在线服务。
+
 ## 1. 目标与交付形态
 
 本工具面向本地 PC 直接打开使用，当前入口文件为 `topo_visual_tool.html`。页面样式与业务脚本分别拆分到 `assets/css/styles.css` 与 `assets/js/app.js`，便于后续增量开发。
