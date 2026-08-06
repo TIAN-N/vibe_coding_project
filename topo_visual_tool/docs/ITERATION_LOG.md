@@ -18,6 +18,22 @@
 
 - 执行 `node --check topo_visual_tool/assets/js/app.js`，语法检查通过。
 
+## 2026-08-06 WebGL 非圆形节点可见性修复
+
+### 目标
+
+修复 WebGL GIS 渲染中 ASG/PE 等非圆形节点在部分数据或浏览器字体环境下显示为透明/不可见的问题。
+
+### 实现内容
+
+- 主 GIS 和版本对比 GIS 中，所有节点统一先通过 deck.gl `ScatterplotLayer` 绘制稳定的有色实体点。
+- ASG/PE 等非圆形节点继续叠加 `TextLayer` 符号作为形状提示，但符号层不再承担唯一实体渲染职责。
+- 保留原有角色样式、节点样式规则、点击详情、过滤/高亮和定位逻辑。
+
+### 测试记录
+
+- 执行 `node --check topo_visual_tool/assets/js/app.js`，语法检查通过。
+
 ## 2026-07-24 Logic Topo 真实化 300 节点接入网样例
 
 ### 目标

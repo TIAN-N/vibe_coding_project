@@ -766,7 +766,6 @@ function buildMainGisLayers(data, callbacks = {}) {
       nodeRows.push(buildMainGisNodeRow(group.nodes[0], data, degreeMap, hasHighlight, dimNodeFillOpacity, dimNodeOpacity));
     }
   });
-  const circleRows = nodeRows.filter(row => row.shape === "circle");
   const shapedRows = nodeRows.filter(row => row.shape !== "circle");
 
   const layers = [];
@@ -819,33 +818,30 @@ function buildMainGisLayers(data, callbacks = {}) {
     lineWidthUnits: "pixels",
     pickable: false
   }));
-  if (circleRows.length) {
-    layers.push(new deck.ScatterplotLayer({
-      id: "main-gis-circle-nodes",
-      data: circleRows,
-      pickable: true,
-      getPosition: row => row.position,
-      getRadius: row => row.radius,
-      radiusUnits: "pixels",
-      stroked: false,
-      filled: true,
-      getFillColor: row => row.fillColor,
-      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
-    }));
-  }
+  layers.push(new deck.ScatterplotLayer({
+    id: "main-gis-node-fill",
+    data: nodeRows,
+    pickable: true,
+    getPosition: row => row.position,
+    getRadius: row => row.radius,
+    radiusUnits: "pixels",
+    stroked: false,
+    filled: true,
+    getFillColor: row => row.fillColor,
+    onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+  }));
   if (shapedRows.length) {
     layers.push(new deck.TextLayer({
       id: "main-gis-shaped-nodes",
       data: shapedRows,
-      pickable: true,
+      pickable: false,
       getPosition: row => row.position,
       getText: row => row.symbol,
-      getSize: row => row.radius * 2.35,
+      getSize: row => row.radius * 1.2,
       sizeUnits: "pixels",
-      getColor: row => row.fillColor,
+      getColor: row => row.symbolColor,
       getTextAnchor: "middle",
-      getAlignmentBaseline: "center",
-      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+      getAlignmentBaseline: "center"
     }));
   }
   if (clusterRows.length) {
@@ -953,6 +949,7 @@ function buildMainGisNodeRow(node, data, degreeMap, hasHighlight, dimFillOpacity
     position: [Number(node.Longitude), Number(node.Latitude)],
     radius,
     fillColor: hexToRgba(nodeFill(node), dim ? dimFillOpacity : 0.95),
+    symbolColor: hexToRgba("#ffffff", dim ? 0.5 : 0.88),
     haloFill: hexToRgba("#ffffff", dim ? 0.2 : 0.84),
     borderColor: hexToRgba(selected ? "#245a6e" : neighbor ? "#2f6f86" : located ? "#245a6e" : "#ffffff", dim ? dimNodeOpacity : 1),
     borderWidth: active ? 3 : 2.4
@@ -986,7 +983,6 @@ function buildCompareGisLayers(side, version, data, diff, ctx, callbacks = {}) {
   const routeRows = ctx.showRoutes ? buildCompareGisRouteRows(side, data, diff, ctx, highlight) : [];
   const linkRows = buildCompareGisLinkRows(side, data, diff, ctx, highlight);
   const nodeRows = data.nodes.filter(hasCoord).map(node => buildCompareGisNodeRow(side, node, diff, ctx, degreeMap, highlight));
-  const circleRows = nodeRows.filter(row => row.shape === "circle");
   const shapedRows = nodeRows.filter(row => row.shape !== "circle");
   const layers = [];
 
@@ -1038,33 +1034,30 @@ function buildCompareGisLayers(side, version, data, diff, ctx, callbacks = {}) {
     lineWidthUnits: "pixels",
     pickable: false
   }));
-  if (circleRows.length) {
-    layers.push(new deck.ScatterplotLayer({
-      id: `${side}-compare-circle-nodes`,
-      data: circleRows,
-      pickable: true,
-      getPosition: row => row.position,
-      getRadius: row => row.radius,
-      radiusUnits: "pixels",
-      stroked: false,
-      filled: true,
-      getFillColor: row => row.fillColor,
-      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
-    }));
-  }
+  layers.push(new deck.ScatterplotLayer({
+    id: `${side}-compare-node-fill`,
+    data: nodeRows,
+    pickable: true,
+    getPosition: row => row.position,
+    getRadius: row => row.radius,
+    radiusUnits: "pixels",
+    stroked: false,
+    filled: true,
+    getFillColor: row => row.fillColor,
+    onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+  }));
   if (shapedRows.length) {
     layers.push(new deck.TextLayer({
       id: `${side}-compare-shaped-nodes`,
       data: shapedRows,
-      pickable: true,
+      pickable: false,
       getPosition: row => row.position,
       getText: row => row.symbol,
-      getSize: row => row.radius * 2.35,
+      getSize: row => row.radius * 1.2,
       sizeUnits: "pixels",
-      getColor: row => row.fillColor,
+      getColor: row => row.symbolColor,
       getTextAnchor: "middle",
-      getAlignmentBaseline: "center",
-      onClick: info => callbacks.onNodeClick && info.object && callbacks.onNodeClick(info.object.node)
+      getAlignmentBaseline: "center"
     }));
   }
   return layers;
@@ -1133,6 +1126,7 @@ function buildCompareGisNodeRow(side, node, diff, ctx, degreeMap, highlight) {
     position: [Number(node.Longitude), Number(node.Latitude)],
     radius: highlighted ? radius + 2 : radius,
     fillColor: hexToRgba(compareNodeFill(ctx, node), dim ? 0.24 : 0.94),
+    symbolColor: hexToRgba("#ffffff", dim ? 0.5 : 0.88),
     haloFill: hexToRgba("#ffffff", dim ? 0.16 : 0.78),
     borderColor: hexToRgba(selected ? "#245a6e" : highlighted ? "#c99a3d" : status.color, dim ? 0.34 : 1),
     borderWidth: selected ? 3.4 : highlighted ? Math.max(status.weight, 3.4) : status.weight
